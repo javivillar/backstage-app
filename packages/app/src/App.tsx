@@ -32,6 +32,8 @@ import {
   OAuthRequestDialog,
   SignInPage,
 } from '@backstage/core-components';
+import { useApi, configApiRef } from '@backstage/core-plugin-api';
+import { keycloakOIDCAuthApiRef } from './apis';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
 import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
@@ -47,7 +49,21 @@ const app = createApp({
   themes: [cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme],
   components: {
     SignInPage: props => {
-      return <SignInPage {...props} providers={['guest']} />;
+      const configApi = useApi(configApiRef);
+      if (configApi.getString('auth.environment') === 'local') {
+        return <SignInPage {...props} auto providers={['guest']} />;
+      }
+      return (
+        <SignInPage
+          {...props}
+          provider={{
+            id: 'keycloak-oidc',
+            title: 'Keycloak',
+            message: 'Sign in using Keycloak',
+            apiRef: keycloakOIDCAuthApiRef,
+          }}
+        />
+      );
     },
   },
   bindRoutes({ bind }) {
