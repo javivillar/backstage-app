@@ -137,3 +137,4 @@ export default app.createRoot(
     </AppRouter>
   </>,
 );
+// ci: trigger build after enabling Actions on the fork
