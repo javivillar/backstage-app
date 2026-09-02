@@ -50,13 +50,25 @@ export const authModuleKeycloakOIDCProvider = createBackendModule({
                 namespace: DEFAULT_NAMESPACE,
               });
 
+              const groups =
+                (info.result.fullProfile.userinfo.groups as string[]) || [];
+              // Propagate Keycloak groups as ownership entity refs so backend
+              // code (scaffolder actions, permission policies) can check
+              // group membership via the userInfo service — without this,
+              // `groups` only exists as an opaque custom claim nobody reads.
+              const groupRefs = groups.map(g =>
+                stringifyEntityRef({
+                  kind: 'Group',
+                  name: g,
+                  namespace: DEFAULT_NAMESPACE,
+                }),
+              );
+
               return ctx.issueToken({
                 claims: {
                   sub: userRef,
-                  ent: [userRef],
-                  groups:
-                    (info.result.fullProfile.userinfo.groups as JsonArray) ||
-                    [],
+                  ent: [userRef, ...groupRefs],
+                  groups: groups as JsonArray,
                 },
               });
             },
