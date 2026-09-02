@@ -3,7 +3,7 @@ import { Config } from '@backstage/config';
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { LoggerService } from '@backstage/backend-plugin-api';
 
-const ADMIN_GROUP_REF = 'group:default/cnoe-admin';
+const ADMIN_GROUP_REF = 'group:default/backstage-admin';
 
 interface MinimalActionContext {
   logger: LoggerService;
@@ -19,7 +19,7 @@ async function requireAdminGroup(
   if (!info.ownershipEntityRefs.includes(ADMIN_GROUP_REF)) {
     throw new Error(
       `Forbidden: ${info.userEntityRef} is not a member of ${ADMIN_GROUP_REF} — ` +
-        'Keycloak identity-management actions are restricted to cnoe-admin.',
+        'Keycloak identity-management actions are restricted to backstage-admin.',
     );
   }
 }
@@ -112,7 +112,7 @@ export function createKeycloakUserAction(options: {
   }>({
     id: 'keycloak:create-user',
     description:
-      'Creates a user in the Keycloak realm (RefresquitoTime) and optionally joins it to groups. Restricted to cnoe-admin.',
+      'Creates a user in the Keycloak realm (RefresquitoTime) and optionally joins it to groups. Restricted to backstage-admin.',
     schema: {
       input: {
         type: 'object',
@@ -229,7 +229,7 @@ export function createKeycloakGroupAction(options: {
   }>({
     id: 'keycloak:create-group',
     description:
-      'Creates a group (optionally as a subgroup) in the Keycloak realm (RefresquitoTime). Restricted to cnoe-admin.',
+      'Creates a group (optionally as a subgroup) in the Keycloak realm (RefresquitoTime). Restricted to backstage-admin.',
     schema: {
       input: {
         type: 'object',
@@ -301,7 +301,7 @@ export function createKeycloakClientAction(options: {
   }>({
     id: 'keycloak:create-client',
     description:
-      'Creates an OIDC client in the Keycloak realm (RefresquitoTime). Restricted to cnoe-admin. ' +
+      'Creates an OIDC client in the Keycloak realm (RefresquitoTime). Restricted to backstage-admin. ' +
       'For confidential clients, the generated secret is returned in the task output — treat it as sensitive.',
     schema: {
       input: {
