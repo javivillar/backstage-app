@@ -1,7 +1,11 @@
 import { createBackend } from '@backstage/backend-defaults';
-import { authModuleKeycloakOIDCProvider } from './plugins/auth';
 import { cnoeScaffolderActions } from './modules/scaffolder';
-import { catalogKeycloakModule } from './modules/catalog-keycloak-module';
+import {
+  authModuleKeycloakOIDCProvider,
+  catalogKeycloakModule,
+  keycloakManagerPlugin,
+  keycloakScaffolderModule,
+} from '@internal/backstage-plugin-keycloak-backend';
 
 const backend = createBackend();
 
@@ -33,6 +37,10 @@ backend.add(import('@backstage/plugin-scaffolder-backend-module-gitlab'));
 
 // CNOE custom scaffolder actions (gitea publish, argocd, k8s-apply, sanitize, verify)
 backend.add(cnoeScaffolderActions);
+
+// Keycloak self-service scaffolder actions (create/update/delete users,
+// groups, clients) — see plugins/keycloak-backend.
+backend.add(keycloakScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -92,7 +100,7 @@ if (process.env.KEYCLOAK_URL) {
 // frontend page (owner-scoped browse of what the keycloak:create-*
 // scaffolder actions provisioned). Plain httpRouter plugin, no catalog
 // processing involved.
-backend.add(import('./plugins/keycloak-manager'));
+backend.add(keycloakManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {

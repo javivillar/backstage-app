@@ -5,7 +5,7 @@ import {
   ADMIN_GROUP_REF,
   ownerFromAttributes,
   ownerFromClientAttributes,
-} from '../modules/actions/keycloak-actions';
+} from './actions';
 
 interface KcUser {
   username: string;
@@ -37,7 +37,7 @@ interface KcClient {
  * Read-only -- mutations still go through those existing actions, so
  * ownership enforcement stays in one place.
  */
-export default createBackendPlugin({
+export const keycloakManagerPlugin = createBackendPlugin({
   pluginId: 'keycloak-manager',
   register(env) {
     env.registerInit({

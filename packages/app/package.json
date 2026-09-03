@@ -50,6 +50,7 @@
     "@backstage/ui": "^0.13.2",
     "@internal/plugin-apache-spark": "^0.1.0",
     "@internal/plugin-argo-workflows": "^0.1.0",
+    "@internal/plugin-keycloak": "^0.1.0",
     "@internal/plugin-terraform": "^0.1.0",
     "@mui/icons-material": "^5.0.0",
     "@mui/material": "^9.0.0",

@@ -1,6 +1,6 @@
 import { createBackendModule, coreServices } from '@backstage/backend-plugin-api';
 import { catalogProcessingExtensionPoint } from '@backstage/plugin-catalog-node/alpha';
-import { KeycloakEntityProvider } from './catalog-providers/keycloak-entity-provider';
+import { KeycloakEntityProvider } from './entityProvider';
 
 /**
  * Catalog module that syncs Keycloak realm users/groups into the catalog,

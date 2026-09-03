@@ -9,17 +9,6 @@ import { createArgoCDApp } from './actions/argocd';
 import { createKubernetesApply } from './actions/k8s-apply';
 import { createSanitizeResource } from './actions/sanitize';
 import { createVerifyDependency } from './actions/verify';
-import {
-  createKeycloakUserAction,
-  createKeycloakGroupAction,
-  createKeycloakClientAction,
-  createKeycloakUpdateUserAction,
-  createKeycloakDeleteUserAction,
-  createKeycloakUpdateGroupAction,
-  createKeycloakDeleteGroupAction,
-  createKeycloakUpdateClientAction,
-  createKeycloakDeleteClientAction,
-} from './actions/keycloak-actions';
 
 export const cnoeScaffolderActions = createBackendModule({
   pluginId: 'scaffolder',
@@ -30,9 +19,8 @@ export const cnoeScaffolderActions = createBackendModule({
         scaffolder: scaffolderActionsExtensionPoint,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
-        userInfo: coreServices.userInfo,
       },
-      async init({ scaffolder, config, logger, userInfo }) {
+      async init({ scaffolder, config, logger }) {
         const integrations = ScmIntegrations.fromConfig(config);
 
         scaffolder.addActions(
@@ -42,15 +30,6 @@ export const cnoeScaffolderActions = createBackendModule({
           createKubernetesApply(config, 'kube:apply'),
           createSanitizeResource(),
           createVerifyDependency(),
-          createKeycloakUserAction({ config, userInfo }),
-          createKeycloakGroupAction({ config, userInfo }),
-          createKeycloakClientAction({ config, userInfo }),
-          createKeycloakUpdateUserAction({ config, userInfo }),
-          createKeycloakDeleteUserAction({ config, userInfo }),
-          createKeycloakUpdateGroupAction({ config, userInfo }),
-          createKeycloakDeleteGroupAction({ config, userInfo }),
-          createKeycloakUpdateClientAction({ config, userInfo }),
-          createKeycloakDeleteClientAction({ config, userInfo }),
         );
       },
     });

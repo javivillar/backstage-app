@@ -33,7 +33,7 @@ import {
   SignInPage,
 } from '@backstage/core-components';
 import { useApi, configApiRef } from '@backstage/core-plugin-api';
-import { keycloakOIDCAuthApiRef } from './apis';
+import { keycloakOIDCAuthApiRef, KeycloakManagerPage } from '@internal/plugin-keycloak';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
 import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
@@ -43,7 +43,6 @@ import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
-import { KeycloakManagerPage } from './components/keycloak-manager/KeycloakManagerPage';
 
 const app = createApp({
   apis,

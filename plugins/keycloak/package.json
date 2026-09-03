@@ -1,0 +1,44 @@
+{
+  "name": "@internal/plugin-keycloak",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "license": "Apache-2.0",
+  "private": true,
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "backstage": {
+    "role": "frontend-plugin"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "lint": "backstage-cli package lint",
+    "test": "backstage-cli package test",
+    "clean": "backstage-cli package clean",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "dependencies": {
+    "@backstage/core-app-api": "^1.19.6",
+    "@backstage/core-components": "^0.18.8",
+    "@backstage/core-plugin-api": "^1.12.4",
+    "@mui/icons-material": "^5.0.0",
+    "@mui/material": "^9.0.0"
+  },
+  "peerDependencies": {
+    "react": "^17.0.0 || ^18.0.0",
+    "react-dom": "^17.0.0 || ^18.0.0",
+    "react-router-dom": "^6.3.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
