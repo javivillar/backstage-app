@@ -26,7 +26,7 @@ async function requireAdminGroup(
 
 let cachedToken: { value: string; expiresAt: number } | undefined;
 
-async function getAdminToken(config: Config): Promise<string> {
+export async function getAdminToken(config: Config): Promise<string> {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 5000) {
     return cachedToken.value;
@@ -60,7 +60,7 @@ async function getAdminToken(config: Config): Promise<string> {
   return body.access_token;
 }
 
-async function kcAdminFetch(
+export async function kcAdminFetch(
   config: Config,
   path: string,
   init: RequestInit = {},
