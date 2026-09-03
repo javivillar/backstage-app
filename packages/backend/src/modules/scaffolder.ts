@@ -13,6 +13,12 @@ import {
   createKeycloakUserAction,
   createKeycloakGroupAction,
   createKeycloakClientAction,
+  createKeycloakUpdateUserAction,
+  createKeycloakDeleteUserAction,
+  createKeycloakUpdateGroupAction,
+  createKeycloakDeleteGroupAction,
+  createKeycloakUpdateClientAction,
+  createKeycloakDeleteClientAction,
 } from './actions/keycloak-actions';
 
 export const cnoeScaffolderActions = createBackendModule({
@@ -39,6 +45,12 @@ export const cnoeScaffolderActions = createBackendModule({
           createKeycloakUserAction({ config, userInfo }),
           createKeycloakGroupAction({ config, userInfo }),
           createKeycloakClientAction({ config, userInfo }),
+          createKeycloakUpdateUserAction({ config, userInfo }),
+          createKeycloakDeleteUserAction({ config, userInfo }),
+          createKeycloakUpdateGroupAction({ config, userInfo }),
+          createKeycloakDeleteGroupAction({ config, userInfo }),
+          createKeycloakUpdateClientAction({ config, userInfo }),
+          createKeycloakDeleteClientAction({ config, userInfo }),
         );
       },
     });
