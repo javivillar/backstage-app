@@ -105,8 +105,16 @@ const routes = (
         <ReportIssue />
       </TechDocsAddons>
     </Route>
-    <Route path="/create" element={<CustomScaffolderPage />} />
-    <Route path="/create/*" element={<ScaffolderPage />} />
+    <Route
+      path="/create"
+      element={
+        <ScaffolderPage
+          components={{
+            EXPERIMENTAL_TemplateListPageComponent: CustomScaffolderPage,
+          }}
+        />
+      }
+    />
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
     <Route
       path="/tech-radar"
