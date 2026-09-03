@@ -54,8 +54,14 @@ if (process.env.GIT_HOSTNAME) {
 }
 
 // Sync Keycloak users/groups into the catalog (Phase 2 of Keycloak identity
-// management — browse what the create-* scaffolder templates provisioned)
-backend.add(catalogKeycloakModule);
+// management — browse what the create-* scaffolder templates provisioned).
+// DISABLED BY DEFAULT (2026-09-03): broke the catalog plugin in production
+// (503 on /catalog and /create) in a way that couldn't be diagnosed live
+// (RKE2 apiserver<->kubelet tunnel down on 3/6 nodes, no log access). Opt in
+// only once the actual failure has been reproduced with logs.
+if (process.env.KEYCLOAK_CATALOG_SYNC === 'true') {
+  backend.add(catalogKeycloakModule);
+}
 
 // Permission
 backend.add(import('@backstage/plugin-permission-backend'));
