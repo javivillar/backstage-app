@@ -14,6 +14,13 @@ import {
   OidcAuthResult,
 } from '@backstage/plugin-auth-backend-module-oidc-provider';
 
+// Backstage entity names must match ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ (max 63
+// chars) — sanitize defensively since neither a Keycloak username nor a
+// group name is guaranteed to already satisfy that.
+function toEntityName(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 63);
+}
+
 export const authModuleKeycloakOIDCProvider = createBackendModule({
   pluginId: 'auth',
   moduleId: 'keycloak-oidc',
@@ -38,15 +45,24 @@ export const authModuleKeycloakOIDCProvider = createBackendModule({
             }),
             async signInResolver(info, ctx) {
               const { profile } = info;
-              if (!profile.displayName) {
+              // preferred_username (Keycloak's actual username) over the
+              // `name` claim (firstName + ' ' + lastName by Keycloak's
+              // default mapper) — `name` almost always contains a space,
+              // which is not a valid Backstage entity name and made
+              // stringifyEntityRef throw for every user with a normal
+              // first+last name, surfacing to the user as a bare
+              // "access denied" on login (found + fixed 2026-09-03).
+              const preferredUsername = info.result.fullProfile.userinfo
+                .preferred_username as string | undefined;
+              const identifier = preferredUsername ?? profile.displayName;
+              if (!identifier) {
                 throw new Error(
-                  'Login failed, user profile does not contain a valid name',
+                  'Login failed: OIDC profile has neither preferred_username nor a display name',
                 );
               }
-              // should use users from catalog
               const userRef = stringifyEntityRef({
                 kind: 'User',
-                name: info.profile.displayName!,
+                name: toEntityName(identifier),
                 namespace: DEFAULT_NAMESPACE,
               });
 
@@ -59,7 +75,7 @@ export const authModuleKeycloakOIDCProvider = createBackendModule({
               const groupRefs = groups.map(g =>
                 stringifyEntityRef({
                   kind: 'Group',
-                  name: g,
+                  name: toEntityName(g),
                   namespace: DEFAULT_NAMESPACE,
                 }),
               );
