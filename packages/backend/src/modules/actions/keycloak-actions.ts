@@ -3,7 +3,7 @@ import { Config } from '@backstage/config';
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { LoggerService } from '@backstage/backend-plugin-api';
 
-const ADMIN_GROUP_REF = 'group:default/backstage-admin';
+export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
 
 // Set on every user/group/client this module creates, so update/delete
 // actions can tell whether the caller is the original creator. Values are
@@ -142,11 +142,11 @@ async function findGroupByName(
 
 // User/group attributes are string ARRAYS; client attributes are plain
 // strings — two accessors so neither reads the other's shape by mistake.
-function ownerFromAttributes(attributes?: Record<string, string[]>): string | undefined {
+export function ownerFromAttributes(attributes?: Record<string, string[]>): string | undefined {
   return attributes?.[OWNER_ATTR]?.[0];
 }
 
-function ownerFromClientAttributes(attributes?: Record<string, string>): string | undefined {
+export function ownerFromClientAttributes(attributes?: Record<string, string>): string | undefined {
   return attributes?.[OWNER_ATTR];
 }
 
