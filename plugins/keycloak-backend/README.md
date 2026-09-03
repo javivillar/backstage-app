@@ -5,6 +5,12 @@ signed-in Backstage user can create/update/delete their own Keycloak users,
 groups and OIDC clients on the `RefresquitoTime` realm, with per-creator
 ownership enforcement (a `backstage-admin` member can override anyone's).
 
+For the full security model (login gate, ownership authz, test accounts,
+how to test cross-user isolation) see the **Backstage section of
+[`AUTHZ.md`](https://github.com/javivillar/refresquito-services/blob/main/AUTHZ.md)**
+in `refresquito-services` — this README covers the code, that doc covers
+the auth/authz story end to end.
+
 Extracted 2026-09-03 from `packages/backend/src/plugins/{auth,keycloak-manager}.ts`
 and `packages/backend/src/modules/{actions/keycloak-actions,catalog-keycloak-module,
 catalog-providers/keycloak-entity-provider}.ts` — pure move, no behavior change.
