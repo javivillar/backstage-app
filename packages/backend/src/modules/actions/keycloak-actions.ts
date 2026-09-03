@@ -5,23 +5,66 @@ import { LoggerService } from '@backstage/backend-plugin-api';
 
 const ADMIN_GROUP_REF = 'group:default/backstage-admin';
 
+// Set on every user/group/client this module creates, so update/delete
+// actions can tell whether the caller is the original creator. Values are
+// Backstage entity refs (e.g. 'user:default/jvillar').
+const OWNER_ATTR = 'backstage_owner';
+
 interface MinimalActionContext {
   logger: LoggerService;
   getInitiatorCredentials(): Promise<BackstageCredentials>;
 }
 
+interface CallerInfo {
+  entityRef: string;
+  isAdmin: boolean;
+}
+
+async function getCallerInfo(
+  ctx: MinimalActionContext,
+  userInfo: UserInfoService,
+): Promise<CallerInfo> {
+  const credentials = await ctx.getInitiatorCredentials();
+  const info = await userInfo.getUserInfo(credentials);
+  return {
+    entityRef: info.userEntityRef,
+    isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+  };
+}
+
+// Restricts an action to backstage-admin members. Returns the caller's own
+// entity ref so create actions can stamp it as the new object's owner.
 async function requireAdminGroup(
   ctx: MinimalActionContext,
   userInfo: UserInfoService,
-): Promise<void> {
-  const credentials = await ctx.getInitiatorCredentials();
-  const info = await userInfo.getUserInfo(credentials);
-  if (!info.ownershipEntityRefs.includes(ADMIN_GROUP_REF)) {
+): Promise<string> {
+  const caller = await getCallerInfo(ctx, userInfo);
+  if (!caller.isAdmin) {
     throw new Error(
-      `Forbidden: ${info.userEntityRef} is not a member of ${ADMIN_GROUP_REF} — ` +
+      `Forbidden: ${caller.entityRef} is not a member of ${ADMIN_GROUP_REF} — ` +
         'Keycloak identity-management actions are restricted to backstage-admin.',
     );
   }
+  return caller.entityRef;
+}
+
+// Restricts an update/delete action to the object's recorded creator (via
+// OWNER_ATTR) or a backstage-admin member. Objects created before ownership
+// tracking existed (ownerRef undefined) are admin-only.
+async function requireOwnerOrAdmin(
+  ctx: MinimalActionContext,
+  userInfo: UserInfoService,
+  ownerRef: string | undefined,
+): Promise<void> {
+  const caller = await getCallerInfo(ctx, userInfo);
+  if (caller.isAdmin) return;
+  if (ownerRef && caller.entityRef === ownerRef) return;
+  throw new Error(
+    `Forbidden: ${caller.entityRef} may not modify this Keycloak object ` +
+      `(recorded owner: ${
+        ownerRef ?? 'none — created before ownership tracking, admin-only'
+      }). Only the creator or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+  );
 }
 
 let cachedToken: { value: string; expiresAt: number } | undefined;
@@ -95,6 +138,70 @@ async function findGroupByName(
   return found.find(g => g.name === name);
 }
 
+// User/group attributes are string ARRAYS; client attributes are plain
+// strings — two accessors so neither reads the other's shape by mistake.
+function ownerFromAttributes(attributes?: Record<string, string[]>): string | undefined {
+  return attributes?.[OWNER_ATTR]?.[0];
+}
+
+function ownerFromClientAttributes(attributes?: Record<string, string>): string | undefined {
+  return attributes?.[OWNER_ATTR];
+}
+
+async function findUserByUsername(
+  config: Config,
+  username: string,
+): Promise<{ id: string; username: string } | undefined> {
+  const res = await kcAdminFetch(
+    config,
+    `/users?username=${encodeURIComponent(username)}&exact=true`,
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to search Keycloak users: ${res.status} ${await res.text()}`);
+  }
+  const found = (await res.json()) as Array<{ id: string; username: string }>;
+  return found.find(u => u.username === username);
+}
+
+async function getUserFull(config: Config, id: string): Promise<Record<string, unknown>> {
+  const res = await kcAdminFetch(config, `/users/${id}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load Keycloak user ${id}: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function getGroupFull(config: Config, id: string): Promise<Record<string, unknown>> {
+  const res = await kcAdminFetch(config, `/groups/${id}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load Keycloak group ${id}: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+async function findClientByClientId(
+  config: Config,
+  clientId: string,
+): Promise<{ id: string; clientId: string } | undefined> {
+  const res = await kcAdminFetch(
+    config,
+    `/clients?clientId=${encodeURIComponent(clientId)}`,
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to search Keycloak clients: ${res.status} ${await res.text()}`);
+  }
+  const found = (await res.json()) as Array<{ id: string; clientId: string }>;
+  return found.find(c => c.clientId === clientId);
+}
+
+async function getClientFull(config: Config, id: string): Promise<Record<string, unknown>> {
+  const res = await kcAdminFetch(config, `/clients/${id}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load Keycloak client ${id}: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
 export function createKeycloakUserAction(options: {
   config: Config;
   userInfo: UserInfoService;
@@ -149,7 +256,7 @@ export function createKeycloakUserAction(options: {
       },
     },
     async handler(ctx) {
-      await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAdminGroup(ctx, userInfo);
 
       const {
         username,
@@ -170,7 +277,7 @@ export function createKeycloakUserAction(options: {
           lastName,
           enabled: true,
           emailVerified: true,
-          attributes: { Nationality: [nationality] },
+          attributes: { Nationality: [nationality], [OWNER_ATTR]: [ownerRef] },
         }),
       });
       if (createRes.status !== 201) {
@@ -252,7 +359,7 @@ export function createKeycloakGroupAction(options: {
       },
     },
     async handler(ctx) {
-      await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAdminGroup(ctx, userInfo);
 
       const { name, parentGroupName } = ctx.input;
 
@@ -267,7 +374,7 @@ export function createKeycloakGroupAction(options: {
 
       const createRes = await kcAdminFetch(config, path, {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, attributes: { [OWNER_ATTR]: [ownerRef] } }),
       });
       if (createRes.status !== 201) {
         throw new Error(
@@ -345,7 +452,7 @@ export function createKeycloakClientAction(options: {
       },
     },
     async handler(ctx) {
-      await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAdminGroup(ctx, userInfo);
 
       const {
         clientId,
@@ -370,6 +477,8 @@ export function createKeycloakClientAction(options: {
           redirectUris,
           webOrigins,
           enabled: true,
+          // Client attributes are single strings, not arrays (unlike user/group).
+          attributes: { [OWNER_ATTR]: ownerRef },
         }),
       });
       if (createRes.status !== 201) {
@@ -397,6 +506,356 @@ export function createKeycloakClientAction(options: {
       }
 
       ctx.logger.info(`Created Keycloak client ${clientId} (${internalId})`);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Update/delete actions (Phase 3: owner-scoped CRUD). Restricted to the
+// object's recorded creator (OWNER_ATTR, stamped by the create-* actions
+// above) or a backstage-admin member — see requireOwnerOrAdmin.
+// ---------------------------------------------------------------------------
+
+export function createKeycloakUpdateUserAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{
+    username: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    groups?: string[];
+  }>({
+    id: 'keycloak:update-user',
+    description:
+      'Updates an existing Keycloak user (email/name/group membership). Only the ' +
+      'user that created it, or backstage-admin, may run this.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['username'],
+        properties: {
+          username: { title: 'Username', description: 'Identifies the user to update.', type: 'string' },
+          email: { title: 'Email', type: 'string' },
+          firstName: { title: 'First name', type: 'string' },
+          lastName: { title: 'Last name', type: 'string' },
+          groups: {
+            title: 'Groups',
+            description: 'Replaces the user\'s group membership with exactly this list.',
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { username, email, firstName, lastName, groups } = ctx.input;
+
+      const found = await findUserByUsername(config, username);
+      if (!found) {
+        throw new Error(`Keycloak user "${username}" not found`);
+      }
+      const current = await getUserFull(config, found.id);
+      const ownerRef = ownerFromAttributes(
+        current.attributes as Record<string, string[]> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const updateRes = await kcAdminFetch(config, `/users/${found.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...current,
+          email: email ?? current.email,
+          firstName: firstName ?? current.firstName,
+          lastName: lastName ?? current.lastName,
+        }),
+      });
+      if (!updateRes.ok) {
+        throw new Error(
+          `Failed to update Keycloak user: ${updateRes.status} ${await updateRes.text()}`,
+        );
+      }
+
+      if (groups) {
+        const currentGroupsRes = await kcAdminFetch(config, `/users/${found.id}/groups`);
+        const currentGroups = currentGroupsRes.ok
+          ? ((await currentGroupsRes.json()) as Array<{ id: string; name: string }>)
+          : [];
+        const currentNames = new Set(currentGroups.map(g => g.name));
+        const desiredNames = new Set(groups);
+
+        for (const groupName of groups) {
+          if (currentNames.has(groupName)) continue;
+          const group = await findGroupByName(config, groupName);
+          if (!group) {
+            ctx.logger.warn(`Group "${groupName}" not found in Keycloak — skipping`);
+            continue;
+          }
+          await kcAdminFetch(config, `/users/${found.id}/groups/${group.id}`, { method: 'PUT' });
+        }
+        for (const group of currentGroups) {
+          if (desiredNames.has(group.name)) continue;
+          await kcAdminFetch(config, `/users/${found.id}/groups/${group.id}`, {
+            method: 'DELETE',
+          });
+        }
+      }
+
+      ctx.logger.info(`Updated Keycloak user ${username}`);
+    },
+  });
+}
+
+export function createKeycloakDeleteUserAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{ username: string }>({
+    id: 'keycloak:delete-user',
+    description:
+      'Deletes a Keycloak user. Only the user that created it, or backstage-admin, may run this.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['username'],
+        properties: {
+          username: { title: 'Username', type: 'string' },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { username } = ctx.input;
+
+      const found = await findUserByUsername(config, username);
+      if (!found) {
+        throw new Error(`Keycloak user "${username}" not found`);
+      }
+      const current = await getUserFull(config, found.id);
+      const ownerRef = ownerFromAttributes(
+        current.attributes as Record<string, string[]> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const deleteRes = await kcAdminFetch(config, `/users/${found.id}`, { method: 'DELETE' });
+      if (!deleteRes.ok) {
+        throw new Error(
+          `Failed to delete Keycloak user: ${deleteRes.status} ${await deleteRes.text()}`,
+        );
+      }
+
+      ctx.logger.info(`Deleted Keycloak user ${username}`);
+    },
+  });
+}
+
+export function createKeycloakUpdateGroupAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{ name: string; newName?: string }>({
+    id: 'keycloak:update-group',
+    description:
+      'Renames a Keycloak group. Only the user that created it, or backstage-admin, may run this.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { title: 'Group name', description: 'Identifies the group to update.', type: 'string' },
+          newName: { title: 'New name', type: 'string' },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { name, newName } = ctx.input;
+
+      const found = await findGroupByName(config, name);
+      if (!found) {
+        throw new Error(`Keycloak group "${name}" not found`);
+      }
+      const current = await getGroupFull(config, found.id);
+      const ownerRef = ownerFromAttributes(
+        current.attributes as Record<string, string[]> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const updateRes = await kcAdminFetch(config, `/groups/${found.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...current, name: newName ?? current.name }),
+      });
+      if (!updateRes.ok) {
+        throw new Error(
+          `Failed to update Keycloak group: ${updateRes.status} ${await updateRes.text()}`,
+        );
+      }
+
+      ctx.logger.info(`Updated Keycloak group ${name}`);
+    },
+  });
+}
+
+export function createKeycloakDeleteGroupAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{ name: string }>({
+    id: 'keycloak:delete-group',
+    description:
+      'Deletes a Keycloak group. Only the user that created it, or backstage-admin, may run this.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { title: 'Group name', type: 'string' },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { name } = ctx.input;
+
+      const found = await findGroupByName(config, name);
+      if (!found) {
+        throw new Error(`Keycloak group "${name}" not found`);
+      }
+      const current = await getGroupFull(config, found.id);
+      const ownerRef = ownerFromAttributes(
+        current.attributes as Record<string, string[]> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const deleteRes = await kcAdminFetch(config, `/groups/${found.id}`, { method: 'DELETE' });
+      if (!deleteRes.ok) {
+        throw new Error(
+          `Failed to delete Keycloak group: ${deleteRes.status} ${await deleteRes.text()}`,
+        );
+      }
+
+      ctx.logger.info(`Deleted Keycloak group ${name}`);
+    },
+  });
+}
+
+export function createKeycloakUpdateClientAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{
+    clientId: string;
+    name?: string;
+    description?: string;
+    redirectUris?: string[];
+    webOrigins?: string[];
+    serviceAccountsEnabled?: boolean;
+  }>({
+    id: 'keycloak:update-client',
+    description:
+      'Updates an existing Keycloak OIDC client. Only the user that created it, or ' +
+      'backstage-admin, may run this. clientId/publicClient cannot be changed here.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['clientId'],
+        properties: {
+          clientId: { title: 'Client ID', description: 'Identifies the client to update.', type: 'string' },
+          name: { title: 'Display name', type: 'string' },
+          description: { title: 'Description', type: 'string' },
+          redirectUris: { title: 'Redirect URIs', type: 'array', items: { type: 'string' } },
+          webOrigins: { title: 'Web origins', type: 'array', items: { type: 'string' } },
+          serviceAccountsEnabled: {
+            title: 'Enable service account (client credentials grant)',
+            type: 'boolean',
+          },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { clientId, name, description, redirectUris, webOrigins, serviceAccountsEnabled } =
+        ctx.input;
+
+      const found = await findClientByClientId(config, clientId);
+      if (!found) {
+        throw new Error(`Keycloak client "${clientId}" not found`);
+      }
+      const current = await getClientFull(config, found.id);
+      const ownerRef = ownerFromClientAttributes(
+        current.attributes as Record<string, string> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const updateRes = await kcAdminFetch(config, `/clients/${found.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...current,
+          name: name ?? current.name,
+          description: description ?? current.description,
+          redirectUris: redirectUris ?? current.redirectUris,
+          webOrigins: webOrigins ?? current.webOrigins,
+          serviceAccountsEnabled: serviceAccountsEnabled ?? current.serviceAccountsEnabled,
+        }),
+      });
+      if (!updateRes.ok) {
+        throw new Error(
+          `Failed to update Keycloak client: ${updateRes.status} ${await updateRes.text()}`,
+        );
+      }
+
+      ctx.logger.info(`Updated Keycloak client ${clientId}`);
+    },
+  });
+}
+
+export function createKeycloakDeleteClientAction(options: {
+  config: Config;
+  userInfo: UserInfoService;
+}) {
+  const { config, userInfo } = options;
+
+  return createTemplateAction<{ clientId: string }>({
+    id: 'keycloak:delete-client',
+    description:
+      'Deletes a Keycloak OIDC client. Only the user that created it, or backstage-admin, may run this.',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['clientId'],
+        properties: {
+          clientId: { title: 'Client ID', type: 'string' },
+        },
+      },
+    },
+    async handler(ctx) {
+      const { clientId } = ctx.input;
+
+      const found = await findClientByClientId(config, clientId);
+      if (!found) {
+        throw new Error(`Keycloak client "${clientId}" not found`);
+      }
+      const current = await getClientFull(config, found.id);
+      const ownerRef = ownerFromClientAttributes(
+        current.attributes as Record<string, string> | undefined,
+      );
+      await requireOwnerOrAdmin(ctx, userInfo, ownerRef);
+
+      const deleteRes = await kcAdminFetch(config, `/clients/${found.id}`, { method: 'DELETE' });
+      if (!deleteRes.ok) {
+        throw new Error(
+          `Failed to delete Keycloak client: ${deleteRes.status} ${await deleteRes.text()}`,
+        );
+      }
+
+      ctx.logger.info(`Deleted Keycloak client ${clientId}`);
     },
   });
 }
