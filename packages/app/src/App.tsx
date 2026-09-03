@@ -43,6 +43,7 @@ import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
+import { KeycloakManagerPage } from './components/keycloak-manager/KeycloakManagerPage';
 
 const app = createApp({
   apis,
@@ -116,6 +117,7 @@ const routes = (
       }
     />
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
+    <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route
       path="/tech-radar"
       element={<TechRadarPage width={1500} height={800} />}
