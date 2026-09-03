@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { Content, Page, Header } from '@backstage/core-components';
+import type { TemplateListPageProps } from '@backstage/plugin-scaffolder/alpha';
 import {
   EntityListProvider,
   EntityLifecyclePicker,
@@ -248,7 +249,7 @@ const TemplateGrid = () => {
   );
 };
 
-export const CustomScaffolderPage = () => {
+export const CustomScaffolderPage = (_props: TemplateListPageProps) => {
   return (
     <Page themeId="tool">
       <Header title="Create a new component" subtitle="Create new software components using standard templates in your organization" />
