@@ -2,6 +2,10 @@
 
 This repository contains code for the [Backstage](https://backstage.io) images used by the CNOE stacks.
 
+> **This is a fork.** For what's custom on top of upstream CNOE (the Keycloak
+> self-service plugins) and how to safely pull in a newer upstream version,
+> see [FORK.md](./FORK.md).
+
 ## Container Images
 
 Container images are pushed to the GitHub Container Registry and available [here](https://github.com/cnoe-io/backstage-app/pkgs/container/backstage-app).
