@@ -88,6 +88,12 @@ if (process.env.KEYCLOAK_URL) {
   backend.add(authModuleKeycloakOIDCProvider);
 }
 
+// Keycloak manager — read-only list endpoints backing the /keycloak-manager
+// frontend page (owner-scoped browse of what the keycloak:create-*
+// scaffolder actions provisioned). Plain httpRouter plugin, no catalog
+// processing involved.
+backend.add(import('./plugins/keycloak-manager'));
+
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
   backend.add(import('@internal/backstage-plugin-terraform-backend'));
