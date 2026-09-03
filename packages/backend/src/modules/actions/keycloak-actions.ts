@@ -32,19 +32,21 @@ async function getCallerInfo(
   };
 }
 
-// Restricts an action to backstage-admin members. Returns the caller's own
-// entity ref so create actions can stamp it as the new object's owner.
-async function requireAdminGroup(
+// Returns the caller's own entity ref so create actions can stamp it as the
+// new object's owner (OWNER_ATTR).
+//
+// Any signed-in user may create — Keycloak identity self-service isn't
+// admin-gated (that's the whole point of owner-scoped CRUD: user A creates
+// their own users/groups/clients, user B can't touch them, see
+// requireOwnerOrAdmin below). Getting the caller info still matters even
+// with no restriction: it's what supplies OWNER_ATTR, and it fails closed
+// if credentials can't be resolved at all (e.g. an unauthenticated caller
+// somehow reaching the backend directly).
+async function requireAuthenticated(
   ctx: MinimalActionContext,
   userInfo: UserInfoService,
 ): Promise<string> {
   const caller = await getCallerInfo(ctx, userInfo);
-  if (!caller.isAdmin) {
-    throw new Error(
-      `Forbidden: ${caller.entityRef} is not a member of ${ADMIN_GROUP_REF} — ` +
-        'Keycloak identity-management actions are restricted to backstage-admin.',
-    );
-  }
   return caller.entityRef;
 }
 
@@ -219,7 +221,8 @@ export function createKeycloakUserAction(options: {
   }>({
     id: 'keycloak:create-user',
     description:
-      'Creates a user in the Keycloak realm (RefresquitoTime) and optionally joins it to groups. Restricted to backstage-admin.',
+      'Creates a user in the Keycloak realm (RefresquitoTime) and optionally joins it to groups. ' +
+      'Open to any signed-in user; you become the owner and only you (or backstage-admin) can edit/delete it later.',
     schema: {
       input: {
         type: 'object',
@@ -256,7 +259,7 @@ export function createKeycloakUserAction(options: {
       },
     },
     async handler(ctx) {
-      const ownerRef = await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAuthenticated(ctx, userInfo);
 
       const {
         username,
@@ -336,7 +339,8 @@ export function createKeycloakGroupAction(options: {
   }>({
     id: 'keycloak:create-group',
     description:
-      'Creates a group (optionally as a subgroup) in the Keycloak realm (RefresquitoTime). Restricted to backstage-admin.',
+      'Creates a group (optionally as a subgroup) in the Keycloak realm (RefresquitoTime). ' +
+      'Open to any signed-in user; you become the owner and only you (or backstage-admin) can edit/delete it later.',
     schema: {
       input: {
         type: 'object',
@@ -359,7 +363,7 @@ export function createKeycloakGroupAction(options: {
       },
     },
     async handler(ctx) {
-      const ownerRef = await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAuthenticated(ctx, userInfo);
 
       const { name, parentGroupName } = ctx.input;
 
@@ -408,7 +412,8 @@ export function createKeycloakClientAction(options: {
   }>({
     id: 'keycloak:create-client',
     description:
-      'Creates an OIDC client in the Keycloak realm (RefresquitoTime). Restricted to backstage-admin. ' +
+      'Creates an OIDC client in the Keycloak realm (RefresquitoTime). ' +
+      'Open to any signed-in user; you become the owner and only you (or backstage-admin) can edit/delete it later. ' +
       'For confidential clients, the generated secret is returned in the task output — treat it as sensitive.',
     schema: {
       input: {
@@ -452,7 +457,7 @@ export function createKeycloakClientAction(options: {
       },
     },
     async handler(ctx) {
-      const ownerRef = await requireAdminGroup(ctx, userInfo);
+      const ownerRef = await requireAuthenticated(ctx, userInfo);
 
       const {
         clientId,
