@@ -8,7 +8,7 @@ import {
   LoggerService,
   SchedulerServiceTaskRunner,
 } from '@backstage/backend-plugin-api';
-import { getAdminToken, kcAdminFetch } from '../actions/keycloak-actions';
+import { getAdminToken, kcAdminFetch } from './actions';
 
 interface KcUser {
   id: string;
