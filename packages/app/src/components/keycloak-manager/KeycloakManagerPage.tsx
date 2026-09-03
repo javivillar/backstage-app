@@ -14,6 +14,7 @@ import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import AddIcon from '@mui/icons-material/Add';
 
 type Kind = 'users' | 'groups' | 'clients';
 
@@ -80,6 +81,10 @@ export const KeycloakManagerPage = () => {
     );
   };
 
+  const goToCreate = () => {
+    navigate(`/create/templates/default/keycloak-create-${templateNoun}`);
+  };
+
   return (
     <Page themeId="tool">
       <Header
@@ -87,11 +92,16 @@ export const KeycloakManagerPage = () => {
         subtitle="Browse and manage the Keycloak identity objects you've created"
       />
       <Content>
-        <Tabs value={tab} onChange={(_e, v: Kind) => setTab(v)}>
-          <Tab label="Users" value="users" />
-          <Tab label="Groups" value="groups" />
-          <Tab label="Clients" value="clients" />
-        </Tabs>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Tabs value={tab} onChange={(_e, v: Kind) => setTab(v)}>
+            <Tab label="Users" value="users" />
+            <Tab label="Groups" value="groups" />
+            <Tab label="Clients" value="clients" />
+          </Tabs>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={goToCreate}>
+            New {templateNoun}
+          </Button>
+        </Box>
         <Box sx={{ mt: 2 }}>
           {loading && <CircularProgress size={24} />}
           {error && <Typography color="error">Error: {error}</Typography>}
@@ -107,7 +117,7 @@ export const KeycloakManagerPage = () => {
                 <Typography color="textSecondary" sx={{ py: 4 }}>
                   {isAdmin
                     ? `No ${label.toLowerCase()} found.`
-                    : `You haven't created any ${label.toLowerCase()} yet — use Create to make one.`}
+                    : `You haven't created any ${label.toLowerCase()} yet — use "New ${templateNoun}" above.`}
                 </Typography>
               ) : (
                 <Table>
