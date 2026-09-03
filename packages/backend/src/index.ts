@@ -1,6 +1,7 @@
 import { createBackend } from '@backstage/backend-defaults';
 import { authModuleKeycloakOIDCProvider } from './plugins/auth';
 import { cnoeScaffolderActions } from './modules/scaffolder';
+import { catalogKeycloakModule } from './modules/catalog-keycloak-module';
 
 const backend = createBackend();
 
@@ -51,6 +52,10 @@ backend.add(import('@backstage/plugin-catalog-backend'));
 if (process.env.GIT_HOSTNAME) {
   backend.add(import('@backstage/plugin-catalog-backend-module-gitlab'));
 }
+
+// Sync Keycloak users/groups into the catalog (Phase 2 of Keycloak identity
+// management — browse what the create-* scaffolder templates provisioned)
+backend.add(catalogKeycloakModule);
 
 // Permission
 backend.add(import('@backstage/plugin-permission-backend'));
