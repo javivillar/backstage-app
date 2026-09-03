@@ -33,7 +33,7 @@ interface KcClient {
  * Backend for the /keycloak-manager frontend page: lists the Keycloak
  * users/groups/clients the caller owns (or everything, if they're a
  * backstage-admin member), so there's somewhere to browse what the
- * keycloak:create-*/update-*/delete-* scaffolder actions have provisioned.
+ * keycloak:create-, update-, delete- scaffolder actions have provisioned.
  * Read-only -- mutations still go through those existing actions, so
  * ownership enforcement stays in one place.
  */
