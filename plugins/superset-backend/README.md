@@ -29,18 +29,33 @@ of inline in `packages/backend`.
   issued with (`ensureCsrf`) — Flask-WTF validates the header against the
   cookie, not just the bearer token, which is a real gotcha if you've only
   ever scripted Keycloak's admin API (bearer-token-only, no CSRF).
-- **`ownership.ts`** — `callerInfo`/`requireOwnerOrAdmin`, structurally the
-  same shape as `keycloak-backend`'s `getCallerInfo`/`requireOwnerOrAdmin`,
-  but checking Superset's own native `owners` field instead of a bolted-on
-  attribute (Superset already has ownership — Keycloak doesn't). **Why this
-  check exists at all despite Superset's native support**: Backstage talks
-  to Superset through one shared service account, not per-user SSO
-  impersonation, so Superset's own owner-based visibility never sees the
-  real caller — enforcement has to happen in Backstage, same as Keycloak.
-  Also has `listSupersetObjects`, which pushes the owner filter into
-  Superset's own Rison `q` query (`related/owners` + `filters` params)
-  instead of fetching everything and filtering in Node — Superset's REST API
-  supports server-side filtering, Keycloak's Admin API mostly doesn't.
+- **`ownership.ts`** — TWO different mechanisms, because Superset itself
+  isn't consistent here (verified live, not assumed):
+  - Chart/Dataset/Dashboard genuinely have a native `owners` many-to-many
+    relation. `requireOwnerOrAdmin` checks it — comparing by numeric
+    Superset user id, since `owners[]` items are `{id, first_name,
+    last_name}` with **no `username` field at all**. Backstage still has to
+    enforce this itself despite it being native: Backstage talks to
+    Superset through one shared service account, not per-user SSO, so
+    Superset's own owner-based visibility never sees the real caller.
+  - **Database (connection) has NO ownership concept in this Superset
+    version at all** — verified via raw SQL, no owner join table exists for
+    `dbs`. The REST API accepts an `owners` field on create/update without
+    erroring, but silently drops it. `requireConnectionOwnerOrAdmin` instead
+    checks a `backstage_owner` (Backstage username) key bolted onto
+    Database's own `extra` JSON column — same philosophy as
+    `keycloak-backend`'s `OWNER_ATTR`, applied to the one Superset resource
+    that needs it. Gotcha: Database's single-object GET excludes `extra`
+    (and `owners`) from its response entirely, but the LIST endpoint
+    includes `extra` — the opposite of chart/dataset/dashboard, where the
+    single GET has `owners` and the LIST doesn't. `connectionOwnerFromExtra`
+    reads it from there.
+  - `listSupersetObjects` pushes the owner filter into Superset's own Rison
+    `q` query for chart/dataset/dashboard (server-side). For `database`,
+    that same filter shape 400s (`Filter column: owners not allowed to
+    filter` — yet another Database-specific inconsistency, unrelated to the
+    missing relation), so it fetches the plain list and filters in Node by
+    parsing each item's `extra`.
 - **`superset-actions.ts`** — 6 scaffolder actions:
   `superset:create-connection` / `update-connection`,
   `superset:create-dataset` / `update-dataset` (full CRUD — these are
