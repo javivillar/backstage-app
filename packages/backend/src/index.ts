@@ -6,6 +6,10 @@ import {
   keycloakManagerPlugin,
   keycloakScaffolderModule,
 } from '@internal/backstage-plugin-keycloak-backend';
+import {
+  supersetManagerPlugin,
+  supersetScaffolderModule,
+} from '@internal/backstage-plugin-superset-backend';
 
 const backend = createBackend();
 
@@ -41,6 +45,10 @@ backend.add(cnoeScaffolderActions);
 // Keycloak self-service scaffolder actions (create/update/delete users,
 // groups, clients) — see plugins/keycloak-backend.
 backend.add(keycloakScaffolderModule);
+
+// Superset self-service scaffolder actions (connection/dataset CRUD, chart/
+// dashboard provisioning) — see plugins/superset-backend.
+backend.add(supersetScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -101,6 +109,11 @@ if (process.env.KEYCLOAK_URL) {
 // scaffolder actions provisioned). Plain httpRouter plugin, no catalog
 // processing involved.
 backend.add(keycloakManagerPlugin);
+
+// Superset manager — list/delete endpoints backing the /superset-manager
+// frontend page (owner-scoped browse of connections/datasets/charts/
+// dashboards). Same shape as keycloak-manager.
+backend.add(supersetManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
