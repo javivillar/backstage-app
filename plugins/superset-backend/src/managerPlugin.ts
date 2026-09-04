@@ -5,7 +5,9 @@ import {
   ADMIN_GROUP_REF,
   CallerInfo,
   callerSupersetOwnerId,
+  connectionOwnerFromExtra,
   listSupersetObjects,
+  requireConnectionOwnerOrAdmin,
   requireOwnerOrAdmin,
   SupersetResource,
 } from './ownership';
@@ -67,12 +69,14 @@ export const supersetManagerPlugin = createBackendPlugin({
             try {
               const caller = await callerContext(req);
               const items = await listSupersetObjects(config, resource, caller);
-              // Superset's LIST endpoints don't return the `owners` relation
-              // (verified live — only the single-object GET does), so for
-              // the admin-only Owner column, fetch each item's full detail.
-              // Bounded to admin callers viewing their own small manager
-              // page, not a public/high-traffic listing.
-              if (caller.isAdmin) {
+              // dataset/chart/dashboard LIST endpoints don't return the
+              // native `owners` relation (verified live — only the
+              // single-object GET does), so for the admin-only Owner
+              // column, fetch each item's full detail. NOT needed for
+              // `database`: its ownership (`extra.backstage_owner`) is
+              // already present on the list item, and its detail GET
+              // doesn't expose `extra` at all anyway (verified live).
+              if (caller.isAdmin && resource !== 'database') {
                 await Promise.all(
                   items.map(async item => {
                     const detail = await supersetAdminFetch(config, `/api/v1/${resource}/${item.id}`);
@@ -95,7 +99,7 @@ export const supersetManagerPlugin = createBackendPlugin({
           id: d.id,
           name: d.database_name,
           backend: d.backend,
-          owners: ownerNames(d.owners as SupersetOwner[] | undefined),
+          owners: [connectionOwnerFromExtra(d.extra)].filter((x): x is string => Boolean(x)),
         }));
 
         listRoute('/datasets', 'dataset', d => ({
@@ -126,14 +130,27 @@ export const supersetManagerPlugin = createBackendPlugin({
             try {
               const caller = await callerContext(req);
               const id = Number(req.params.id);
-              const getRes = await supersetAdminFetch(config, `/api/v1/${resource}/${id}`);
-              if (!getRes.ok) {
-                res.status(404).json({ error: `Superset ${resource} ${id} not found` });
-                return;
+
+              if (resource === 'database') {
+                // No detail GET for extra (see above) — look it up via the
+                // list instead, which already carries it.
+                const all = await listSupersetObjects(config, 'database', { ...caller, isAdmin: true });
+                const found = all.find(item => item.id === id);
+                if (!found) {
+                  res.status(404).json({ error: `Superset connection ${id} not found` });
+                  return;
+                }
+                requireConnectionOwnerOrAdmin(caller, connectionOwnerFromExtra(found.extra));
+              } else {
+                const getRes = await supersetAdminFetch(config, `/api/v1/${resource}/${id}`);
+                if (!getRes.ok) {
+                  res.status(404).json({ error: `Superset ${resource} ${id} not found` });
+                  return;
+                }
+                const current = (await getRes.json()) as { result: { owners?: SupersetOwner[] } };
+                const callerId = await callerSupersetOwnerId(config, caller);
+                requireOwnerOrAdmin(caller, callerId, current.result.owners);
               }
-              const current = (await getRes.json()) as { result: { owners?: SupersetOwner[] } };
-              const callerId = await callerSupersetOwnerId(config, caller);
-              requireOwnerOrAdmin(caller, callerId, current.result.owners);
 
               const delRes = await supersetAdminFetch(config, `/api/v1/${resource}/${id}`, { method: 'DELETE' });
               if (!delRes.ok) {

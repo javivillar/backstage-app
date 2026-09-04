@@ -50,35 +50,62 @@ export async function callerSupersetOwnerId(
 }
 
 /**
- * Superset already tracks `owners` natively on Chart/Dashboard/Dataset/
- * Database (unlike Keycloak, which has no ownership concept at all — see
- * plugins/keycloak-backend's OWNER_ATTR). But Backstage talks to Superset
+ * Superset tracks `owners` natively on Chart/Dashboard/Dataset — but NOT on
+ * Database (connections): verified live (raw SQL) that this Superset
+ * version's `dbs` table has no owner join table at all. The REST API
+ * accepts an `owners` field in create/update payloads without erroring, but
+ * silently drops it — nothing is persisted. So Database ownership uses the
+ * SAME bolted-on-attribute philosophy as Keycloak's OWNER_ATTR (see
+ * plugins/keycloak-backend): a `backstage_owner` key (the Backstage
+ * username, a plain string) embedded in Database's own `extra` JSON column
+ * — which Superset DOES persist reliably (verified via raw SQL) and expose,
+ * but only on the LIST endpoint, not the single-object GET (verified live:
+ * detail GET's show_columns excludes both `extra` and `owners` for
+ * Database, while the list's list_columns includes `extra`).
+ *
+ * For Chart/Dashboard/Dataset, Backstage still has to enforce ownership
+ * itself despite it being native to Superset: Backstage talks to Superset
  * through one shared service account, not per-user SSO, so Superset's own
- * ownership-based visibility never sees the real caller — Backstage has to
- * enforce it itself, same philosophy as requireOwnerOrAdmin in
- * keycloak-backend, just checking Superset's native `owners` field instead
- * of a bolted-on attribute.
+ * ownership-based visibility never sees the real caller.
  */
 export type SupersetResource = 'database' | 'dataset' | 'chart' | 'dashboard';
 
+export function connectionOwnerFromExtra(extra: unknown): string | undefined {
+  if (typeof extra !== 'string' || !extra) return undefined;
+  try {
+    const parsed = JSON.parse(extra) as { backstage_owner?: string };
+    return parsed.backstage_owner;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * List a Superset resource scoped to the caller's own objects, or
- * everything for a backstage-admin member — pushes the owner filter into
- * Superset's own Rison `q` query rather than fetching-all-and-filtering,
- * EXCEPT for `database`: verified live that Superset's DatabaseRestApi
- * rejects filtering on `owners` ("Filter column: owners not allowed to
- * filter", 400) even though chart/dataset/dashboard all accept the exact
- * same filter shape — an inconsistency in Superset itself, not something
- * fixable from the client side. Falls back to fetch-all + per-item detail
- * GET (owners isn't in the list response for ANY of these 4 resources,
- * verified live) + filter in Node. Fine at this scale (an internal dev
- * platform's own connection count, not customer data).
+ * everything for a backstage-admin member.
+ *
+ * dataset/chart/dashboard: pushes the owner filter into Superset's own
+ * Rison `q` query (native `owners` relation, server-side filter).
+ *
+ * database: no native owner relation to filter on server-side at all (see
+ * above) — fetches the plain list (which includes `extra`) and filters in
+ * Node by parsing each item's `backstage_owner`.
  */
 export async function listSupersetObjects(
   config: Config,
   resource: SupersetResource,
   caller: CallerInfo,
 ): Promise<Record<string, unknown>[]> {
+  if (resource === 'database') {
+    const res = await supersetAdminFetch(config, '/api/v1/database/');
+    if (!res.ok) {
+      throw new Error(`Failed to list Superset connections: ${res.status} ${await res.text()}`);
+    }
+    const all = ((await res.json()) as { result: Record<string, unknown>[] }).result;
+    if (caller.isAdmin) return all;
+    return all.filter(item => connectionOwnerFromExtra(item.extra) === caller.username);
+  }
+
   if (caller.isAdmin) {
     const res = await supersetAdminFetch(config, `/api/v1/${resource}/`);
     if (!res.ok) {
@@ -88,29 +115,11 @@ export async function listSupersetObjects(
   }
 
   const ownerId = await callerSupersetOwnerId(config, caller);
-
-  if (resource !== 'database') {
-    const res = await supersetAdminFetch(config, `/api/v1/${resource}/?q=${ownersFilterQuery(ownerId)}`);
-    if (!res.ok) {
-      throw new Error(`Failed to list Superset ${resource}s: ${res.status} ${await res.text()}`);
-    }
-    return ((await res.json()) as { result: Record<string, unknown>[] }).result;
-  }
-
-  const res = await supersetAdminFetch(config, `/api/v1/${resource}/`);
+  const res = await supersetAdminFetch(config, `/api/v1/${resource}/?q=${ownersFilterQuery(ownerId)}`);
   if (!res.ok) {
     throw new Error(`Failed to list Superset ${resource}s: ${res.status} ${await res.text()}`);
   }
-  const all = ((await res.json()) as { result: Record<string, unknown>[] }).result;
-  const owned = await Promise.all(
-    all.map(async item => {
-      const detail = await supersetAdminFetch(config, `/api/v1/${resource}/${item.id}`);
-      if (!detail.ok) return undefined;
-      const body = (await detail.json()) as { result: { owners?: Array<{ id?: number }> } };
-      return body.result.owners?.some(o => o.id === ownerId) ? item : undefined;
-    }),
-  );
-  return owned.filter((x): x is Record<string, unknown> => x !== undefined);
+  return ((await res.json()) as { result: Record<string, unknown>[] }).result;
 }
 
 // Superset's single-object GET returns `owners` as { id, first_name,
@@ -118,6 +127,7 @@ export async function listSupersetObjects(
 // be compared by numeric Superset user id, not username. Callers must
 // already have resolved the caller's own Superset id (callerSupersetOwnerId)
 // before calling this, since that itself requires an API round-trip.
+// NOT used for `database` — see requireConnectionOwnerOrAdmin instead.
 export function requireOwnerOrAdmin(
   caller: CallerInfo,
   callerSupersetId: number,
@@ -129,5 +139,14 @@ export function requireOwnerOrAdmin(
   throw new Error(
     `Forbidden: ${caller.entityRef} may not modify this Superset object ` +
       `(owners: ${ownerNames || 'none'}). Only an owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+  );
+}
+
+export function requireConnectionOwnerOrAdmin(caller: CallerInfo, ownerUsername: string | undefined): void {
+  if (caller.isAdmin) return;
+  if (ownerUsername && ownerUsername === caller.username) return;
+  throw new Error(
+    `Forbidden: ${caller.entityRef} may not modify this Superset connection ` +
+      `(owner: ${ownerUsername ?? 'none'}). Only the owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
   );
 }
