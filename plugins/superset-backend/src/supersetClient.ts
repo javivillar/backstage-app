@@ -117,24 +117,33 @@ export async function findSupersetUserId(
   config: Config,
   username: string,
 ): Promise<number | undefined> {
-  // No `q` filter: real accounts (auto-provisioned via Keycloak SSO login,
-  // AUTH_USER_REGISTRATION=True) get their real first/last name from the
-  // OIDC profile, e.g. "Backstage TestA" for username "backstage-test-a" —
-  // "text" (first_name + last_name) does NOT contain the username, so a
-  // server-side text filter on it can't find these accounts (verified live:
-  // returns zero results). Match on `extra.email` instead, which follows a
-  // stable realm convention: always `<username>@refresquito.com`. The user
-  // count here is small (real employees, not customer-scale data), so
-  // fetching the unfiltered list is cheap.
+  // Superset exposes no proper "look up user by username" API (verified:
+  // no /api/v1/security/users, no username field on `related/owners` —
+  // checked the full OpenAPI spec). Two different account styles need two
+  // different heuristics over `related/owners`, and neither alone is
+  // reliable — verified live, both ways, the hard way:
+  //  - Accounts auto-provisioned via real Keycloak SSO login
+  //    (AUTH_USER_REGISTRATION=True) get first/last name from the OIDC
+  //    profile, e.g. "Backstage TestA" for username "backstage-test-a" —
+  //    `text` doesn't contain the username at all, but `extra.email`
+  //    follows the realm's stable convention `<username>@refresquito.com`.
+  //  - Accounts created by hand before that convention existed (e.g. the
+  //    reused orphan `superset-admin`, real email `pp3@gmail.com`) break
+  //    the email heuristic, but their `text` literally starts with the
+  //    username (first_name was set to the username at creation time).
+  // Try both; the user count here is small (real employees, not
+  // customer-scale data), so fetching the unfiltered list is cheap.
   const res = await supersetAdminFetch(config, '/api/v1/dataset/related/owners');
   if (!res.ok) {
     throw new Error(`Failed to look up Superset user "${username}": ${res.status} ${await res.text()}`);
   }
   const body = (await res.json()) as {
-    result: Array<{ value: number; extra?: { email?: string } }>;
+    result: Array<{ value: number; text?: string; extra?: { email?: string } }>;
   };
   const email = `${username}@refresquito.com`;
-  const match = body.result.find(r => r.extra?.email === email);
+  const match =
+    body.result.find(r => r.extra?.email === email) ??
+    body.result.find(r => r.text?.split(' ')[0] === username);
   return match?.value;
 }
 
