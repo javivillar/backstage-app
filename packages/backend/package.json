@@ -45,6 +45,7 @@
     "@backstage/plugin-techdocs-backend": "^2.1.6",
     "@backstage/types": "^1.2.2",
     "@internal/backstage-plugin-keycloak-backend": "^0.1.0",
+    "@internal/backstage-plugin-superset-backend": "^0.1.0",
     "@internal/backstage-plugin-terraform-backend": "^0.1.0",
     "@kubernetes/client-node": "~0.20.0",
     "@roadiehq/backstage-plugin-argo-cd-backend": "^4.7.1",
