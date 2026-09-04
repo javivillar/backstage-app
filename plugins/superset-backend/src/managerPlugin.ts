@@ -66,7 +66,7 @@ export const supersetManagerPlugin = createBackendPlugin({
           router.get(path, async (req, res) => {
             try {
               const caller = await callerContext(req);
-              const items = await listSupersetObjects<Record<string, unknown>>(config, resource, caller);
+              const items = await listSupersetObjects(config, resource, caller);
               // Superset's LIST endpoints don't return the `owners` relation
               // (verified live — only the single-object GET does), so for
               // the admin-only Owner column, fetch each item's full detail.

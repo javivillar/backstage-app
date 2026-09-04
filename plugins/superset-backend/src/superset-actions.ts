@@ -33,12 +33,10 @@ async function findOwnedByName(
   name: string,
   caller: CallerInfo,
 ): Promise<{ id: number; owners?: SupersetOwner[] }> {
-  const items = await listSupersetObjects<{ id: number; owners?: SupersetOwner[] } & Record<string, unknown>>(
-    config,
-    resource,
-    caller,
-  );
-  const match = items.find(i => i[nameField] === name);
+  const items = await listSupersetObjects(config, resource, caller);
+  const match = items.find(i => i[nameField] === name) as
+    | ({ id: number; owners?: SupersetOwner[] } & Record<string, unknown>)
+    | undefined;
   if (!match) {
     throw new Error(
       `Superset ${resource} "${name}" not found among ${caller.isAdmin ? 'all' : 'your'} ${resource}s ` +

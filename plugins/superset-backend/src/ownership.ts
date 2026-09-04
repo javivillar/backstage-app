@@ -64,24 +64,53 @@ export type SupersetResource = 'database' | 'dataset' | 'chart' | 'dashboard';
 /**
  * List a Superset resource scoped to the caller's own objects, or
  * everything for a backstage-admin member — pushes the owner filter into
- * Superset's own Rison `q` query rather than fetching-all-and-filtering.
+ * Superset's own Rison `q` query rather than fetching-all-and-filtering,
+ * EXCEPT for `database`: verified live that Superset's DatabaseRestApi
+ * rejects filtering on `owners` ("Filter column: owners not allowed to
+ * filter", 400) even though chart/dataset/dashboard all accept the exact
+ * same filter shape — an inconsistency in Superset itself, not something
+ * fixable from the client side. Falls back to fetch-all + per-item detail
+ * GET (owners isn't in the list response for ANY of these 4 resources,
+ * verified live) + filter in Node. Fine at this scale (an internal dev
+ * platform's own connection count, not customer data).
  */
-export async function listSupersetObjects<T = Record<string, unknown>>(
+export async function listSupersetObjects(
   config: Config,
   resource: SupersetResource,
   caller: CallerInfo,
-): Promise<T[]> {
-  let query = '';
-  if (!caller.isAdmin) {
-    const ownerId = await callerSupersetOwnerId(config, caller);
-    query = `?q=${ownersFilterQuery(ownerId)}`;
+): Promise<Record<string, unknown>[]> {
+  if (caller.isAdmin) {
+    const res = await supersetAdminFetch(config, `/api/v1/${resource}/`);
+    if (!res.ok) {
+      throw new Error(`Failed to list Superset ${resource}s: ${res.status} ${await res.text()}`);
+    }
+    return ((await res.json()) as { result: Record<string, unknown>[] }).result;
   }
-  const res = await supersetAdminFetch(config, `/api/v1/${resource}/${query}`);
+
+  const ownerId = await callerSupersetOwnerId(config, caller);
+
+  if (resource !== 'database') {
+    const res = await supersetAdminFetch(config, `/api/v1/${resource}/?q=${ownersFilterQuery(ownerId)}`);
+    if (!res.ok) {
+      throw new Error(`Failed to list Superset ${resource}s: ${res.status} ${await res.text()}`);
+    }
+    return ((await res.json()) as { result: Record<string, unknown>[] }).result;
+  }
+
+  const res = await supersetAdminFetch(config, `/api/v1/${resource}/`);
   if (!res.ok) {
     throw new Error(`Failed to list Superset ${resource}s: ${res.status} ${await res.text()}`);
   }
-  const body = (await res.json()) as { result: T[] };
-  return body.result;
+  const all = ((await res.json()) as { result: Record<string, unknown>[] }).result;
+  const owned = await Promise.all(
+    all.map(async item => {
+      const detail = await supersetAdminFetch(config, `/api/v1/${resource}/${item.id}`);
+      if (!detail.ok) return undefined;
+      const body = (await detail.json()) as { result: { owners?: Array<{ id?: number }> } };
+      return body.result.owners?.some(o => o.id === ownerId) ? item : undefined;
+    }),
+  );
+  return owned.filter((x): x is Record<string, unknown> => x !== undefined);
 }
 
 // Superset's single-object GET returns `owners` as { id, first_name,
