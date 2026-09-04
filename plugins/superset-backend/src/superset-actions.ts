@@ -6,7 +6,9 @@ import {
   CallerInfo,
   callerInfo,
   callerSupersetOwnerId,
+  connectionOwnerFromExtra,
   listSupersetObjects,
+  requireConnectionOwnerOrAdmin,
   requireOwnerOrAdmin,
 } from './ownership';
 
@@ -32,10 +34,10 @@ async function findOwnedByName(
   nameField: 'database_name' | 'table_name',
   name: string,
   caller: CallerInfo,
-): Promise<{ id: number; owners?: SupersetOwner[] }> {
+): Promise<{ id: number; owners?: SupersetOwner[]; extra?: unknown }> {
   const items = await listSupersetObjects(config, resource, caller);
   const match = items.find(i => i[nameField] === name) as
-    | ({ id: number; owners?: SupersetOwner[] } & Record<string, unknown>)
+    | ({ id: number; owners?: SupersetOwner[]; extra?: unknown } & Record<string, unknown>)
     | undefined;
   if (!match) {
     throw new Error(
@@ -111,7 +113,16 @@ const connectionInputSchema = {
   },
 };
 
-function buildConnectionPayload(input: ConnectionInput, ownerId: number) {
+// Database (connection) objects have no native `owners` relation in this
+// Superset version (verified live — no owner join table exists at all;
+// the API silently drops an `owners` field on create/update). Ownership is
+// tracked the same way Keycloak's OWNER_ATTR does it: a `backstage_owner`
+// key merged into Superset's own `extra` JSON column, which DOES persist
+// reliably. Merges with (doesn't clobber) whatever the user put in the
+// advanced Extra field.
+function buildConnectionPayload(input: ConnectionInput, ownerUsername: string) {
+  const extra = JSON.parse(parseExtraJson(input.extraJson, 'Advanced (Extra, raw JSON)')) as Record<string, unknown>;
+  extra.backstage_owner = ownerUsername;
   const payload: Record<string, unknown> = {
     database_name: input.databaseName,
     sqlalchemy_uri: input.sqlalchemyUri,
@@ -122,8 +133,7 @@ function buildConnectionPayload(input: ConnectionInput, ownerId: number) {
     allow_file_upload: input.allowFileUpload ?? false,
     expose_in_sqllab: input.exposeInSqllab ?? true,
     impersonate_user: input.impersonateUser ?? false,
-    extra: parseExtraJson(input.extraJson, 'Advanced (Extra, raw JSON)'),
-    owners: [ownerId],
+    extra: JSON.stringify(extra),
   };
   if (input.cacheTimeout !== undefined) payload.cache_timeout = input.cacheTimeout;
   if (input.sshTunnelServerAddress) {
@@ -148,10 +158,9 @@ export function createSupersetConnectionAction(options: { config: Config; userIn
     schema: { input: connectionInputSchema, output: { type: 'object', properties: { id: { type: 'number' }, databaseName: { type: 'string' } } } },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
-      const ownerId = await callerSupersetOwnerId(config, caller);
       const res = await supersetAdminFetch(config, '/api/v1/database/', {
         method: 'POST',
-        body: JSON.stringify(buildConnectionPayload(ctx.input, ownerId)),
+        body: JSON.stringify(buildConnectionPayload(ctx.input, caller.username)),
       });
       if (!res.ok) {
         throw new Error(`Failed to create Superset connection: ${res.status} ${await res.text()}`);
@@ -186,14 +195,15 @@ export function createSupersetUpdateConnectionAction(options: { config: Config; 
     },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
-      const ownerId = await callerSupersetOwnerId(config, caller);
+      // findOwnedByName's underlying list already carries `extra` for
+      // database items (see listSupersetObjects) — no separate detail GET
+      // needed (and none possible: the detail GET excludes `extra`).
       const found = await findOwnedByName(config, 'database', 'database_name', ctx.input.currentDatabaseName, caller);
-      const current = await getById(config, 'database', found.id);
-      requireOwnerOrAdmin(caller, ownerId, current.owners as SupersetOwner[] | undefined);
+      requireConnectionOwnerOrAdmin(caller, connectionOwnerFromExtra(found.extra));
 
       const res = await supersetAdminFetch(config, `/api/v1/database/${found.id}`, {
         method: 'PUT',
-        body: JSON.stringify(buildConnectionPayload(ctx.input, ownerId)),
+        body: JSON.stringify(buildConnectionPayload(ctx.input, connectionOwnerFromExtra(found.extra) ?? caller.username)),
       });
       if (!res.ok) {
         throw new Error(`Failed to update Superset connection: ${res.status} ${await res.text()}`);
