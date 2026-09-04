@@ -12,7 +12,8 @@ import {
 
 interface SupersetOwner {
   id?: number;
-  username?: string;
+  first_name?: string;
+  last_name?: string;
 }
 
 function parseExtraJson(raw: string | undefined, label: string): string {
@@ -187,11 +188,11 @@ export function createSupersetUpdateConnectionAction(options: { config: Config; 
     },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
+      const ownerId = await callerSupersetOwnerId(config, caller);
       const found = await findOwnedByName(config, 'database', 'database_name', ctx.input.currentDatabaseName, caller);
       const current = await getById(config, 'database', found.id);
-      requireOwnerOrAdmin(caller, current.owners as SupersetOwner[] | undefined);
+      requireOwnerOrAdmin(caller, ownerId, current.owners as SupersetOwner[] | undefined);
 
-      const ownerId = await callerSupersetOwnerId(config, caller);
       const res = await supersetAdminFetch(config, `/api/v1/database/${found.id}`, {
         method: 'PUT',
         body: JSON.stringify(buildConnectionPayload(ctx.input, ownerId)),
@@ -296,12 +297,12 @@ export function createSupersetUpdateDatasetAction(options: { config: Config; use
     },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
+      const ownerId = await callerSupersetOwnerId(config, caller);
       const found = await findOwnedByName(config, 'dataset', 'table_name', ctx.input.currentTableName, caller);
       const current = await getById(config, 'dataset', found.id);
-      requireOwnerOrAdmin(caller, current.owners as SupersetOwner[] | undefined);
+      requireOwnerOrAdmin(caller, ownerId, current.owners as SupersetOwner[] | undefined);
 
       const connection = await findOwnedByName(config, 'database', 'database_name', ctx.input.connectionName, caller);
-      const ownerId = await callerSupersetOwnerId(config, caller);
       const payload: Record<string, unknown> = {
         database_id: connection.id,
         table_name: ctx.input.tableName,

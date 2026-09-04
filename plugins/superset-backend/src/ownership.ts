@@ -84,15 +84,21 @@ export async function listSupersetObjects<T = Record<string, unknown>>(
   return body.result;
 }
 
+// Superset's single-object GET returns `owners` as { id, first_name,
+// last_name } — NO `username` field (verified live) — so ownership has to
+// be compared by numeric Superset user id, not username. Callers must
+// already have resolved the caller's own Superset id (callerSupersetOwnerId)
+// before calling this, since that itself requires an API round-trip.
 export function requireOwnerOrAdmin(
   caller: CallerInfo,
-  owners: Array<{ username?: string }> | undefined,
+  callerSupersetId: number,
+  owners: Array<{ id?: number; first_name?: string; last_name?: string }> | undefined,
 ): void {
   if (caller.isAdmin) return;
-  if (owners?.some(o => o.username === caller.username)) return;
+  if (owners?.some(o => o.id === callerSupersetId)) return;
+  const ownerNames = owners?.map(o => [o.first_name, o.last_name].filter(Boolean).join(' ')).join(', ');
   throw new Error(
     `Forbidden: ${caller.entityRef} may not modify this Superset object ` +
-      `(owners: ${owners?.map(o => o.username).join(', ') || 'none'}). Only an owner or a ` +
-      `member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+      `(owners: ${ownerNames || 'none'}). Only an owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
   );
 }
