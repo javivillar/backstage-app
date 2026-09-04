@@ -1,17 +1,23 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { Request, Router } from 'express';
 import { supersetAdminFetch } from './supersetClient';
-import { ADMIN_GROUP_REF, CallerInfo, listSupersetObjects, requireOwnerOrAdmin } from './ownership';
+import {
+  ADMIN_GROUP_REF,
+  CallerInfo,
+  callerSupersetOwnerId,
+  listSupersetObjects,
+  requireOwnerOrAdmin,
+  SupersetResource,
+} from './ownership';
 
 interface SupersetOwner {
   id?: number;
-  username?: string;
   first_name?: string;
   last_name?: string;
 }
 
 function ownerNames(owners: SupersetOwner[] | undefined): string[] {
-  return (owners ?? []).map(o => o.username ?? [o.first_name, o.last_name].filter(Boolean).join(' '));
+  return (owners ?? []).map(o => [o.first_name, o.last_name].filter(Boolean).join(' '));
 }
 
 /**
@@ -54,13 +60,29 @@ export const supersetManagerPlugin = createBackendPlugin({
 
         function listRoute(
           path: string,
-          resource: 'database' | 'dataset' | 'chart' | 'dashboard',
+          resource: SupersetResource,
           mapItem: (item: Record<string, unknown>) => Record<string, unknown>,
         ) {
           router.get(path, async (req, res) => {
             try {
               const caller = await callerContext(req);
               const items = await listSupersetObjects<Record<string, unknown>>(config, resource, caller);
+              // Superset's LIST endpoints don't return the `owners` relation
+              // (verified live — only the single-object GET does), so for
+              // the admin-only Owner column, fetch each item's full detail.
+              // Bounded to admin callers viewing their own small manager
+              // page, not a public/high-traffic listing.
+              if (caller.isAdmin) {
+                await Promise.all(
+                  items.map(async item => {
+                    const detail = await supersetAdminFetch(config, `/api/v1/${resource}/${item.id}`);
+                    if (detail.ok) {
+                      const body = (await detail.json()) as { result: { owners?: unknown } };
+                      item.owners = body.result.owners;
+                    }
+                  }),
+                );
+              }
               res.json({ items: items.map(mapItem), isAdmin: caller.isAdmin });
             } catch (e) {
               logger.error(`superset-manager ${path} failed`, e as Error);
@@ -110,7 +132,8 @@ export const supersetManagerPlugin = createBackendPlugin({
                 return;
               }
               const current = (await getRes.json()) as { result: { owners?: SupersetOwner[] } };
-              requireOwnerOrAdmin(caller, current.result.owners);
+              const callerId = await callerSupersetOwnerId(config, caller);
+              requireOwnerOrAdmin(caller, callerId, current.result.owners);
 
               const delRes = await supersetAdminFetch(config, `/api/v1/${resource}/${id}`, { method: 'DELETE' });
               if (!delRes.ok) {
