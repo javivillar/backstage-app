@@ -1,7 +1,7 @@
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { Config } from '@backstage/config';
 import { UserInfoService } from '@backstage/backend-plugin-api';
-import { camundaFetch, camundaPublicUrl } from './camundaClient';
+import { camundaFetch, camundaPublicUrl, deleteAllProcessDefinitionVersions } from './camundaClient';
 import { callerInfo, grantOwnership, requireOwnerOrAdmin } from './ownership';
 
 function slugify(input: string): string {
@@ -234,14 +234,7 @@ export function createCamundaDeleteProcessAction(options: { config: Config; user
       const caller = await callerInfo(ctx, userInfo);
       await requireOwnerOrAdmin(config, caller, ctx.input.processKey);
 
-      const res = await camundaFetch(
-        config,
-        `/process-definition/key/${encodeURIComponent(ctx.input.processKey)}?cascade=true`,
-        { method: 'DELETE' },
-      );
-      if (!res.ok && res.status !== 204) {
-        throw new Error(`Failed to delete Camunda process "${ctx.input.processKey}": ${res.status} ${await res.text()}`);
-      }
+      await deleteAllProcessDefinitionVersions(config, ctx.input.processKey);
       ctx.logger.info(`Deleted Camunda process ${ctx.input.processKey} for ${caller.entityRef}`);
     },
   });
