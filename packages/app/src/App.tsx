@@ -35,6 +35,7 @@ import {
 import { useApi, configApiRef } from '@backstage/core-plugin-api';
 import { keycloakOIDCAuthApiRef, KeycloakManagerPage } from '@internal/plugin-keycloak';
 import { SupersetManagerPage } from '@internal/plugin-superset';
+import { CamundaManagerPage } from '@internal/plugin-camunda';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
 import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
@@ -119,6 +120,7 @@ const routes = (
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
     <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route path="/superset-manager" element={<SupersetManagerPage />} />
+    <Route path="/camunda-manager" element={<CamundaManagerPage />} />
     <Route
       path="/tech-radar"
       element={<TechRadarPage width={1500} height={800} />}

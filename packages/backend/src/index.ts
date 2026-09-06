@@ -10,6 +10,10 @@ import {
   supersetManagerPlugin,
   supersetScaffolderModule,
 } from '@internal/backstage-plugin-superset-backend';
+import {
+  camundaManagerPlugin,
+  camundaScaffolderModule,
+} from '@internal/backstage-plugin-camunda-backend';
 
 const backend = createBackend();
 
@@ -49,6 +53,11 @@ backend.add(keycloakScaffolderModule);
 // Superset self-service scaffolder actions (connection/dataset CRUD, chart/
 // dashboard provisioning) — see plugins/superset-backend.
 backend.add(supersetScaffolderModule);
+
+// Camunda self-service scaffolder actions (provision/update/delete a
+// process definition, pre-wired with per-developer isolation) — see
+// plugins/camunda-backend.
+backend.add(camundaScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -114,6 +123,11 @@ backend.add(keycloakManagerPlugin);
 // frontend page (owner-scoped browse of connections/datasets/charts/
 // dashboards). Same shape as keycloak-manager.
 backend.add(supersetManagerPlugin);
+
+// Camunda manager — list/delete endpoints backing the /camunda-manager
+// frontend page (owner-scoped browse of provisioned process definitions).
+// Same shape as keycloak-manager/superset-manager.
+backend.add(camundaManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
