@@ -10,6 +10,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import GroupIcon from '@mui/icons-material/People';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -91,6 +92,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         <SidebarItem icon={CreateComponentIcon} to="create" text="Create..." />
         <SidebarItem icon={VpnKeyIcon} to="keycloak-manager" text="Keycloak Manager" />
         <SidebarItem icon={BarChartIcon} to="superset-manager" text="Superset Manager" />
+        <SidebarItem icon={AccountTreeIcon} to="camunda-manager" text="Camunda Manager" />
         <SidebarDivider />
         <span
           style={{
