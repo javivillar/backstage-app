@@ -14,6 +14,10 @@ import {
   camundaManagerPlugin,
   camundaScaffolderModule,
 } from '@internal/backstage-plugin-camunda-backend';
+import {
+  seaweedfsManagerPlugin,
+  seaweedfsScaffolderModule,
+} from '@internal/backstage-plugin-seaweedfs-backend';
 
 const backend = createBackend();
 
@@ -58,6 +62,11 @@ backend.add(supersetScaffolderModule);
 // process definition, pre-wired with per-developer isolation) — see
 // plugins/camunda-backend.
 backend.add(camundaScaffolderModule);
+
+// SeaweedFS self-service scaffolder actions (bucket/table-bucket/group/
+// policy CRUD, pre-wired with per-developer isolation) — see
+// plugins/seaweedfs-backend.
+backend.add(seaweedfsScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -128,6 +137,12 @@ backend.add(supersetManagerPlugin);
 // frontend page (owner-scoped browse of provisioned process definitions).
 // Same shape as keycloak-manager/superset-manager.
 backend.add(camundaManagerPlugin);
+
+// SeaweedFS manager — list/delete endpoints backing the /seaweedfs-manager
+// frontend page (owner-scoped browse of buckets/table buckets/groups/
+// policies), plus the group-edit policy-attach/detach routes. Same shape as
+// the other managers.
+backend.add(seaweedfsManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
