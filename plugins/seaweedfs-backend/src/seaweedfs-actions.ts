@@ -1,13 +1,15 @@
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { Config } from '@backstage/config';
-import { DatabaseService, UserInfoService } from '@backstage/backend-plugin-api';
+import { AuthService, DiscoveryService, UserInfoService } from '@backstage/backend-plugin-api';
 import { seaweedfsAdminFetch, seaweedfsPublicUrl } from './seaweedfsClient';
-import { CallerInfo, callerInfo, ensureOwnershipTable, forgetOwnership, ownerOf, recordOwnership } from './ownership';
+import { CallerInfo, callerInfo } from './ownership';
+import { forgetOwnershipRemote, ownerOfRemote, recordOwnershipRemote } from './ownershipClient';
 
 interface ActionOptions {
   config: Config;
   userInfo: UserInfoService;
-  database: DatabaseService;
+  auth: AuthService;
+  discovery: DiscoveryService;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +254,7 @@ export function createSeaweedfsDeleteTableBucketAction(options: ActionOptions) {
 // ---------------------------------------------------------------------------
 
 export function createSeaweedfsGroupAction(options: ActionOptions) {
-  const { config, userInfo, database } = options;
+  const { config, userInfo, auth, discovery } = options;
   return createTemplateAction<{ name: string }>({
     id: 'seaweedfs:create-group',
     description:
@@ -271,8 +273,7 @@ export function createSeaweedfsGroupAction(options: ActionOptions) {
       if (!res.ok) {
         throw new Error(`Failed to create SeaweedFS group: ${res.status} ${await res.text()}`);
       }
-      const knex = await ensureOwnershipTable(database);
-      await recordOwnership(knex, 'group', ctx.input.name, caller.username);
+      await recordOwnershipRemote({ auth, discovery }, 'group', ctx.input.name, caller.username);
       ctx.logger.info(`Created SeaweedFS group ${ctx.input.name}, owner ${caller.username}`);
       ctx.output('name', ctx.input.name);
     },
@@ -280,7 +281,7 @@ export function createSeaweedfsGroupAction(options: ActionOptions) {
 }
 
 export function createSeaweedfsDeleteGroupAction(options: ActionOptions) {
-  const { config, userInfo, database } = options;
+  const { config, userInfo, auth, discovery } = options;
   return createTemplateAction<{ name: string }>({
     id: 'seaweedfs:delete-group',
     description: 'Deletes a SeaweedFS group. Only the owner or backstage-admin may run this.',
@@ -289,8 +290,7 @@ export function createSeaweedfsDeleteGroupAction(options: ActionOptions) {
     },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
-      const knex = await ensureOwnershipTable(database);
-      const owner = await ownerOf(knex, 'group', ctx.input.name);
+      const owner = await ownerOfRemote({ auth, discovery }, 'group', ctx.input.name);
       if (!caller.isAdmin && owner !== caller.username) {
         throw new Error(
           `Forbidden: ${caller.entityRef} may not delete group "${ctx.input.name}" (owner: ${owner || 'none'}).`,
@@ -302,14 +302,14 @@ export function createSeaweedfsDeleteGroupAction(options: ActionOptions) {
       if (!res.ok) {
         throw new Error(`Failed to delete SeaweedFS group: ${res.status} ${await res.text()}`);
       }
-      await forgetOwnership(knex, 'group', ctx.input.name);
+      await forgetOwnershipRemote({ auth, discovery }, 'group', ctx.input.name);
       ctx.logger.info(`Deleted SeaweedFS group ${ctx.input.name}`);
     },
   });
 }
 
 export function createSeaweedfsPolicyAction(options: ActionOptions) {
-  const { config, userInfo, database } = options;
+  const { config, userInfo, auth, discovery } = options;
   return createTemplateAction<{ name: string; documentJson: string }>({
     id: 'seaweedfs:create-policy',
     description:
@@ -347,8 +347,7 @@ export function createSeaweedfsPolicyAction(options: ActionOptions) {
       if (!res.ok) {
         throw new Error(`Failed to create SeaweedFS policy: ${res.status} ${await res.text()}`);
       }
-      const knex = await ensureOwnershipTable(database);
-      await recordOwnership(knex, 'policy', ctx.input.name, caller.username);
+      await recordOwnershipRemote({ auth, discovery }, 'policy', ctx.input.name, caller.username);
       ctx.logger.info(`Created SeaweedFS policy ${ctx.input.name}, owner ${caller.username}`);
       ctx.output('name', ctx.input.name);
     },
@@ -356,7 +355,7 @@ export function createSeaweedfsPolicyAction(options: ActionOptions) {
 }
 
 export function createSeaweedfsDeletePolicyAction(options: ActionOptions) {
-  const { config, userInfo, database } = options;
+  const { config, userInfo, auth, discovery } = options;
   return createTemplateAction<{ name: string }>({
     id: 'seaweedfs:delete-policy',
     description: 'Deletes a SeaweedFS policy. Only the owner or backstage-admin may run this.',
@@ -365,8 +364,7 @@ export function createSeaweedfsDeletePolicyAction(options: ActionOptions) {
     },
     async handler(ctx) {
       const caller = await callerInfo(ctx, userInfo);
-      const knex = await ensureOwnershipTable(database);
-      const owner = await ownerOf(knex, 'policy', ctx.input.name);
+      const owner = await ownerOfRemote({ auth, discovery }, 'policy', ctx.input.name);
       if (!caller.isAdmin && owner !== caller.username) {
         throw new Error(
           `Forbidden: ${caller.entityRef} may not delete policy "${ctx.input.name}" (owner: ${owner || 'none'}).`,
@@ -378,7 +376,7 @@ export function createSeaweedfsDeletePolicyAction(options: ActionOptions) {
       if (!res.ok) {
         throw new Error(`Failed to delete SeaweedFS policy: ${res.status} ${await res.text()}`);
       }
-      await forgetOwnership(knex, 'policy', ctx.input.name);
+      await forgetOwnershipRemote({ auth, discovery }, 'policy', ctx.input.name);
       ctx.logger.info(`Deleted SeaweedFS policy ${ctx.input.name}`);
     },
   });
