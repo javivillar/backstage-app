@@ -1,7 +1,17 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
+import { NotAllowedError } from '@backstage/errors';
 import express, { Request, Router } from 'express';
 import { seaweedfsAdminFetch } from './seaweedfsClient';
-import { ADMIN_GROUP_REF, CallerInfo, ensureOwnershipTable, forgetOwnership, ownerOf, ownershipMap } from './ownership';
+import {
+  ADMIN_GROUP_REF,
+  CallerInfo,
+  OwnedResourceKind,
+  ensureOwnershipTable,
+  forgetOwnership,
+  ownerOf,
+  ownershipMap,
+  recordOwnership,
+} from './ownership';
 
 /**
  * Backend for the /seaweedfs-manager frontend page: lists the SeaweedFS
@@ -250,6 +260,65 @@ export const seaweedfsManagerPlugin = createBackendPlugin({
           } catch (e) {
             logger.error('seaweedfs-manager DELETE /policies failed', e as Error);
             res.status(forbidden(e as Error) ? 403 : 500).json({ error: (e as Error).message });
+          }
+        });
+
+        // --- Internal, service-to-service only: ownership storage for the
+        // seaweedfs:create-/delete-group/policy scaffolder actions. Those
+        // actions run inside the 'scaffolder' plugin module (a hard
+        // requirement of scaffolderActionsExtensionPoint), so their own
+        // coreServices.database resolves to a DIFFERENT database
+        // (backstage_plugin_scaffolder) than the one this plugin's routes
+        // above read from (backstage_plugin_seaweedfs-manager) — writing
+        // ownership directly from there was silently landing in the wrong
+        // database, making every group/policy invisible forever. Routed
+        // through here instead, so there's only one writer. `allow:
+        // ['service']` rejects a real end-user token outright — otherwise
+        // any signed-in user could set ownership of any group/policy to
+        // themselves.
+
+        router.post('/internal/ownership', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['service'] });
+            const { kind, name, owner } = req.body ?? {};
+            if (!kind || !name || !owner) {
+              res.status(400).json({ error: 'kind, name and owner are required' });
+              return;
+            }
+            const knex = await ensureOwnershipTable(database);
+            await recordOwnership(knex, kind as OwnedResourceKind, name, owner);
+            res.status(204).send();
+          } catch (e) {
+            logger.error('seaweedfs-manager POST /internal/ownership failed', e as Error);
+            res.status(e instanceof NotAllowedError ? 403 : 500).json({ error: (e as Error).message });
+          }
+        });
+
+        router.get('/internal/ownership/:kind/:name', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['service'] });
+            const knex = await ensureOwnershipTable(database);
+            const owner = await ownerOf(knex, req.params.kind as OwnedResourceKind, req.params.name);
+            if (!owner) {
+              res.status(404).send();
+              return;
+            }
+            res.json({ owner });
+          } catch (e) {
+            logger.error('seaweedfs-manager GET /internal/ownership failed', e as Error);
+            res.status(e instanceof NotAllowedError ? 403 : 500).json({ error: (e as Error).message });
+          }
+        });
+
+        router.delete('/internal/ownership/:kind/:name', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['service'] });
+            const knex = await ensureOwnershipTable(database);
+            await forgetOwnership(knex, req.params.kind as OwnedResourceKind, req.params.name);
+            res.status(204).send();
+          } catch (e) {
+            logger.error('seaweedfs-manager DELETE /internal/ownership failed', e as Error);
+            res.status(e instanceof NotAllowedError ? 403 : 500).json({ error: (e as Error).message });
           }
         });
 
