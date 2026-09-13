@@ -20,18 +20,19 @@ export const seaweedfsScaffolderModule = createBackendModule({
         scaffolder: scaffolderActionsExtensionPoint,
         config: coreServices.rootConfig,
         userInfo: coreServices.userInfo,
-        database: coreServices.database,
+        auth: coreServices.auth,
+        discovery: coreServices.discovery,
       },
-      async init({ scaffolder, config, userInfo, database }) {
+      async init({ scaffolder, config, userInfo, auth, discovery }) {
         scaffolder.addActions(
-          createSeaweedfsBucketAction({ config, userInfo, database }),
-          createSeaweedfsDeleteBucketAction({ config, userInfo, database }),
-          createSeaweedfsTableBucketAction({ config, userInfo, database }),
-          createSeaweedfsDeleteTableBucketAction({ config, userInfo, database }),
-          createSeaweedfsGroupAction({ config, userInfo, database }),
-          createSeaweedfsDeleteGroupAction({ config, userInfo, database }),
-          createSeaweedfsPolicyAction({ config, userInfo, database }),
-          createSeaweedfsDeletePolicyAction({ config, userInfo, database }),
+          createSeaweedfsBucketAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsDeleteBucketAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsTableBucketAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsDeleteTableBucketAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsGroupAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsDeleteGroupAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsPolicyAction({ config, userInfo, auth, discovery }),
+          createSeaweedfsDeletePolicyAction({ config, userInfo, auth, discovery }),
         );
       },
     });
