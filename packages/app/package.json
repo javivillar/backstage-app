@@ -54,6 +54,7 @@
     "@internal/plugin-superset": "^0.1.0",
     "@internal/plugin-camunda": "^0.1.0",
     "@internal/plugin-seaweedfs": "^0.1.0",
+    "@internal/plugin-alfresco": "^0.1.0",
     "@internal/plugin-terraform": "^0.1.0",
     "@mui/icons-material": "^5.0.0",
     "@mui/material": "^9.0.0",
