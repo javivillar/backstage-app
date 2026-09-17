@@ -18,6 +18,10 @@ import {
   seaweedfsManagerPlugin,
   seaweedfsScaffolderModule,
 } from '@internal/backstage-plugin-seaweedfs-backend';
+import {
+  alfrescoManagerPlugin,
+  alfrescoScaffolderModule,
+} from '@internal/backstage-plugin-alfresco-backend';
 
 const backend = createBackend();
 
@@ -67,6 +71,11 @@ backend.add(camundaScaffolderModule);
 // policy CRUD, pre-wired with per-developer isolation) — see
 // plugins/seaweedfs-backend.
 backend.add(seaweedfsScaffolderModule);
+
+// Alfresco self-service scaffolder actions (Site create/delete, pre-wired
+// so the caller lands as the site's native SiteManager) — see
+// plugins/alfresco-backend.
+backend.add(alfrescoScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -143,6 +152,13 @@ backend.add(camundaManagerPlugin);
 // policies), plus the group-edit policy-attach/detach routes. Same shape as
 // the other managers.
 backend.add(seaweedfsManagerPlugin);
+
+// Alfresco manager — list/delete endpoints backing the /alfresco-manager
+// frontend page (Sites the caller manages), plus the per-site
+// members/roles routes. Authorization is checked live against Alfresco's
+// own native SiteManager role instead of a stored ownership table — see
+// plugins/alfresco-backend/src/alfrescoAuthz.ts.
+backend.add(alfrescoManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {

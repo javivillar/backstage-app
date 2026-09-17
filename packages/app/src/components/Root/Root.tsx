@@ -12,6 +12,7 @@ import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import StorageIcon from '@mui/icons-material/Storage';
+import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -95,6 +96,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         <SidebarItem icon={BarChartIcon} to="superset-manager" text="Superset Manager" />
         <SidebarItem icon={AccountTreeIcon} to="camunda-manager" text="Camunda Manager" />
         <SidebarItem icon={StorageIcon} to="seaweedfs-manager" text="SeaweedFS Manager" />
+        <SidebarItem icon={FolderSharedIcon} to="alfresco-manager" text="Alfresco Manager" />
         <SidebarDivider />
         <span
           style={{
