@@ -30,6 +30,16 @@ interface ProjectRow {
   role?: string;
   canManage: boolean;
   canManageMembers: boolean;
+  canReadFlows: boolean;
+  canWriteFlows: boolean;
+  url: string;
+}
+
+interface FlowRow {
+  id: string;
+  displayName: string;
+  folder?: string;
+  status: string;
   url: string;
 }
 
@@ -169,6 +179,187 @@ function MembersDialog({
   );
 }
 
+function FlowsDialog({ project, onClose }: { project: ProjectRow | null; onClose: () => void }) {
+  const discoveryApi = useApi(discoveryApiRef);
+  const fetchApi = useApi(fetchApiRef);
+  const [flows, setFlows] = useState<FlowRow[]>([]);
+  const [name, setName] = useState('');
+  const [folder, setFolder] = useState('');
+  const [renaming, setRenaming] = useState<FlowRow | null>(null);
+  const [newName, setNewName] = useState('');
+  const [deleting, setDeleting] = useState<FlowRow | null>(null);
+  const [error, setError] = useState<string | undefined>();
+
+  const call = useCallback(
+    async (path: string, init?: RequestInit) => {
+      const baseUrl = await discoveryApi.getBaseUrl('activepieces-manager');
+      return fetchApi.fetch(`${baseUrl}/projects/${encodeURIComponent(project?.id ?? '')}/flows${path}`, init);
+    },
+    [discoveryApi, fetchApi, project],
+  );
+
+  const load = useCallback(async () => {
+    if (!project) return;
+    setError(undefined);
+    try {
+      const res = await call('');
+      if (!res.ok) throw new Error(await errorText(res));
+      setFlows(((await res.json()) as { items: FlowRow[] }).items);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [project, call]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (!project) return null;
+
+  const json = (body: unknown): RequestInit => ({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const create = async () => {
+    const res = await call('', json({ displayName: name.trim(), folder: folder.trim() }));
+    if (!res.ok) {
+      setError(await errorText(res));
+      return;
+    }
+    setName('');
+    setFolder('');
+    load();
+  };
+
+  const rename = async () => {
+    if (!renaming) return;
+    const res = await call(`/${encodeURIComponent(renaming.id)}`, json({ displayName: newName.trim() }));
+    setRenaming(null);
+    if (!res.ok) {
+      setError(await errorText(res));
+      return;
+    }
+    load();
+  };
+
+  const remove = async () => {
+    if (!deleting) return;
+    const res = await call(`/${encodeURIComponent(deleting.id)}`, { method: 'DELETE' });
+    setDeleting(null);
+    if (!res.ok && res.status !== 204) {
+      setError(await errorText(res));
+      return;
+    }
+    load();
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>Flows of "{project.displayName}"</DialogTitle>
+      <DialogContent>
+        {error && <Typography color="error">Error: {error}</Typography>}
+        {project.canWriteFlows && (
+          <>
+            <Typography variant="subtitle2" sx={{ mt: 1 }}>
+              New flow{' '}
+              <Typography component="span" variant="caption" color="textSecondary">
+                (created empty and disabled — you build and publish it in Activepieces)
+              </Typography>
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', my: 1 }}>
+              <TextField size="small" label="Flow name" value={name} onChange={e => setName(e.target.value)} />
+              <TextField
+                size="small"
+                label="Folder (optional)"
+                value={folder}
+                onChange={e => setFolder(e.target.value)}
+              />
+              <Button variant="contained" size="small" disabled={!name.trim()} onClick={create}>
+                Create
+              </Button>
+            </Box>
+          </>
+        )}
+        {flows.length === 0 ? (
+          <Typography color="textSecondary" sx={{ py: 2 }}>
+            No flows yet.
+          </Typography>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Flow</TableCell>
+                <TableCell>Folder</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {flows.map(row => (
+                <TableRow key={row.id}>
+                  <TableCell>{row.displayName}</TableCell>
+                  <TableCell>{row.folder ?? '—'}</TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell align="right">
+                    <Button size="small" href={row.url} target="_blank" rel="noopener">
+                      Open
+                    </Button>
+                    {project.canWriteFlows && (
+                      <>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            setNewName(row.displayName);
+                            setRenaming(row);
+                          }}
+                        >
+                          Rename
+                        </Button>
+                        <Button size="small" color="error" onClick={() => setDeleting(row)}>
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+      <Dialog open={renaming !== null} onClose={() => setRenaming(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename flow</DialogTitle>
+        <DialogContent>
+          <TextField fullWidth sx={{ mt: 1 }} label="Flow name" value={newName} onChange={e => setNewName(e.target.value)} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenaming(null)}>Cancel</Button>
+          <Button variant="contained" disabled={!newName.trim()} onClick={rename}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={deleting !== null} onClose={() => setDeleting(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete flow</DialogTitle>
+        <DialogContent>
+          <Typography>Delete "{deleting?.displayName}"? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={remove}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Dialog>
+  );
+}
+
 function RenameDialog({
   project,
   onClose,
@@ -226,6 +417,7 @@ export const ActivepiecesManagerPage = () => {
   const [error, setError] = useState<string | undefined>();
   const [membersProject, setMembersProject] = useState<ProjectRow | null>(null);
   const [renameProject, setRenameProject] = useState<ProjectRow | null>(null);
+  const [flowsProject, setFlowsProject] = useState<ProjectRow | null>(null);
   const discoveryApi = useApi(discoveryApiRef);
   const fetchApi = useApi(fetchApiRef);
   const navigate = useNavigate();
@@ -319,6 +511,11 @@ export const ActivepiecesManagerPage = () => {
                               Rename
                             </Button>
                           )}
+                          {row.canReadFlows && (
+                            <Button size="small" onClick={() => setFlowsProject(row)}>
+                              Flows
+                            </Button>
+                          )}
                           {row.canManageMembers && (
                             <Button size="small" onClick={() => setMembersProject(row)}>
                               Manage members
@@ -340,6 +537,7 @@ export const ActivepiecesManagerPage = () => {
         </Box>
       </Content>
       <MembersDialog open={membersProject !== null} project={membersProject} onClose={() => setMembersProject(null)} />
+      <FlowsDialog project={flowsProject} onClose={() => setFlowsProject(null)} />
       <RenameDialog
         project={renameProject}
         onClose={() => setRenameProject(null)}

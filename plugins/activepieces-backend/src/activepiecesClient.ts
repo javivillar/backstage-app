@@ -78,3 +78,7 @@ export function activepiecesPublicUrl(config: Config): string {
 export function projectUrl(config: Config, projectId: string): string {
   return `${activepiecesPublicUrl(config)}/projects/${projectId}/flows`;
 }
+
+export function flowUrl(config: Config, projectId: string, flowId: string): string {
+  return `${activepiecesPublicUrl(config)}/projects/${projectId}/flows/${flowId}`;
+}
