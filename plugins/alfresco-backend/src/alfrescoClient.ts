@@ -22,7 +22,7 @@ function authHeader(config: Config): string {
   const ac = alfrescoConfig(config);
   const username = ac.getString('username');
   const password = ac.getString('password');
-  return 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
+  return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
 }
 
 const API_PREFIX = '/alfresco/api/-default-/public/alfresco/versions/1';
