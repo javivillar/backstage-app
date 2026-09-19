@@ -44,6 +44,45 @@ interface MinimalActionContext {
   getInitiatorCredentials(): Promise<BackstageCredentials>;
 }
 
+interface ApUser {
+  id: string;
+  email: string;
+}
+
+export async function findUserByEmail(config: Config, email: string): Promise<ApUser | undefined> {
+  const users = await apListAll<ApUser>(config, '/v1/users');
+  return users.find(u => u.email.toLowerCase() === email.toLowerCase());
+}
+
+/** The Backstage username recorded in `backstage:<username>/<slug>`. */
+export function ownerOf(project: Pick<ApProject, 'externalId'>): string | undefined {
+  return project.externalId?.startsWith(EXTERNAL_ID_PREFIX)
+    ? project.externalId.slice(EXTERNAL_ID_PREFIX.length).split('/')[0]
+    : undefined;
+}
+
+/**
+ * The creator of a project is made its Admin at creation, but Activepieces
+ * only materialises that membership at the person's FIRST login (sign-up is
+ * invitation-only and the account does not exist before). Until then there
+ * is no member row to read a role from, so the project's recorded creator is
+ * recognised as its owner.
+ *
+ * Deliberately narrow: it applies ONLY while the creator has no Activepieces
+ * account at all. Once the account exists the live member row is the sole
+ * authority again -- so someone who was later removed on purpose does not
+ * regain rights through this path.
+ */
+export async function isPendingOwner(
+  config: Config,
+  caller: CallerInfo,
+  project: Pick<ApProject, 'externalId'>,
+  callerEmail: string,
+): Promise<boolean> {
+  if (ownerOf(project) !== caller.username) return false;
+  return (await findUserByEmail(config, callerEmail)) === undefined;
+}
+
 export function usernameFromEntityRef(entityRef: string): string {
   return entityRef.split('/').pop() ?? entityRef;
 }
@@ -91,12 +130,6 @@ export async function listManagedProjects(config: Config): Promise<ApProject[]> 
   return all.filter(isManaged);
 }
 
-async function callerMember(config: Config, caller: CallerInfo, projectId: string): Promise<ApMember | undefined> {
-  const { email } = await getKeycloakPerson(config, caller.username);
-  const members = await listMembers(config, projectId);
-  return members.find(m => m.user.email.toLowerCase() === email.toLowerCase());
-}
-
 /**
  * The single authorization gate for everything that touches a project.
  * DENY BY DEFAULT: passes only for (a) a `backstage-admin` member, or
@@ -131,8 +164,14 @@ export async function requireProjectPermission(
   if (!isManaged(project)) throw denied;
   if (caller.isAdmin) return project;
 
-  const mine = await callerMember(config, caller, projectId);
-  if (mine?.projectRole.permissions.includes(permission)) return project;
+  const { email } = await getKeycloakPerson(config, caller.username);
+  const members = await listMembers(config, projectId);
+  const mine = members.find(m => m.user.email.toLowerCase() === email.toLowerCase());
+  if (mine) {
+    if (mine.projectRole.permissions.includes(permission)) return project;
+    throw denied;
+  }
+  if (await isPendingOwner(config, caller, project, email)) return project;
   throw denied;
 }
 

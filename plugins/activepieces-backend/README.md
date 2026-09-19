@@ -55,6 +55,15 @@ be a raw 500 upstream, so it is checked first; a failed creation rolls the
 project back; the last member able to manage members cannot be removed or
 demoted.
 
+## Creator with no Activepieces account yet (owner-pending)
+
+A creator's Admin membership only materialises at their first Activepieces
+login, so right after creating a project there is no member row to read a role
+from. `isPendingOwner()` recognises the project's recorded creator
+(`externalId`) as its owner **only while that person has no Activepieces
+account at all**; once the account exists the live member row is again the only
+authority, so someone removed on purpose does not regain rights this way.
+
 ## Identity gotcha: users with no Activepieces account yet
 
 Activepieces sign-up is invitation-only. For a member with no account the
