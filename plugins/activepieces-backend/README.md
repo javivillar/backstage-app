@@ -71,3 +71,22 @@ invitation comes back `PENDING` with a link; the plugin accepts it with its own
 token so the user's first Keycloak login is let through, and the membership
 materialises **at that first login** — until then the manager page shows them
 as "invited". A user that already has an account is added immediately.
+
+## Flows (create / rename / delete)
+
+Backstage creates **empty, disabled** flows only; they are modelled and
+published in Activepieces. Actions `activepieces:create-flow`,
+`activepieces:rename-flow`, `activepieces:delete-flow` and the matching
+`/api/activepieces-manager/projects/:id/flows[/:flowId]` routes (used by the
+"Flows" dialog of `/activepieces-manager`).
+
+Authorization is the caller's own Activepieces role, read live: `READ_FLOW` to
+list, `WRITE_FLOW` to create/rename/delete (Viewer reads, Editor and Admin
+write); `backstage-admin` overrides. Flows inside one project follow the
+project's roles -- there is no per-flow ACL in Activepieces.
+
+**Cross-project guard (`requireFlowInProject`).** The platform API key is not
+scoped to a project: verified live, `GET /v1/flows/:id?projectId=<other>` still
+answers 200. So rename/delete first check the caller's permission in the
+project they name AND that the flow's `projectId` is that project; a flow of
+another project and a flow that does not exist give the same `Forbidden`.

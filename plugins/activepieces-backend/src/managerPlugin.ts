@@ -1,6 +1,6 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Router } from 'express';
-import { apFetch, apJson, apListAll, activepiecesPublicUrl, projectUrl } from './activepiecesClient';
+import { apFetch, apJson, apListAll, activepiecesPublicUrl, flowUrl, projectUrl } from './activepiecesClient';
 import {
   ADMIN_GROUP_REF,
   ApMember,
@@ -16,6 +16,17 @@ import {
   usernameFromEntityRef,
 } from './activepiecesAuthz';
 import { addOrSetMember, listRoles, removeMember } from './activepiecesProjects';
+import {
+  PERM_READ_FLOW,
+  PERM_WRITE_FLOW,
+  createFlow,
+  deleteFlow,
+  flowName,
+  folderNames,
+  listFlows,
+  renameFlow,
+  requireFlowInProject,
+} from './activepiecesFlows';
 import { ensureAccessGroup, getKeycloakPerson } from './keycloakLookup';
 
 /**
@@ -79,6 +90,8 @@ export const activepiecesManagerPlugin = createBackendPlugin({
                 canManage: caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT),
                 canManageMembers:
                   caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT_MEMBER),
+                canReadFlows: caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_READ_FLOW),
+                canWriteFlows: caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_WRITE_FLOW),
                 url: projectUrl(config, project.id),
               });
             }
@@ -116,6 +129,78 @@ export const activepiecesManagerPlugin = createBackendPlugin({
             res.status(204).send();
           } catch (e) {
             fail(res, 'DELETE /projects/:id', e as Error);
+          }
+        });
+
+        // --- Flows -------------------------------------------------------
+        // Backstage only creates/renames/deletes EMPTY flows; they are modelled
+        // and published in Activepieces. Access follows the caller's own
+        // Activepieces role in the project (READ_FLOW / WRITE_FLOW).
+
+        router.get('/projects/:id/flows', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            await requireProjectPermission(config, caller, req.params.id, PERM_READ_FLOW);
+            const [flows, folders] = await Promise.all([
+              listFlows(config, req.params.id),
+              folderNames(config, req.params.id),
+            ]);
+            res.json({
+              items: flows.map(f => ({
+                id: f.id,
+                displayName: flowName(f),
+                folder: f.folderId ? folders.get(f.folderId) : undefined,
+                status: f.status,
+                updated: f.updated,
+                url: flowUrl(config, req.params.id, f.id),
+              })),
+            });
+          } catch (e) {
+            fail(res, 'GET /projects/:id/flows', e as Error);
+          }
+        });
+
+        router.post('/projects/:id/flows', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            await requireProjectPermission(config, caller, req.params.id, PERM_WRITE_FLOW);
+            const name = String(req.body?.displayName ?? '').trim();
+            if (!name) {
+              res.status(400).json({ error: 'displayName is required' });
+              return;
+            }
+            const folder = String(req.body?.folder ?? '').trim() || undefined;
+            const flow = await createFlow(config, req.params.id, name, folder);
+            res.status(201).json({ id: flow.id, url: flowUrl(config, req.params.id, flow.id) });
+          } catch (e) {
+            fail(res, 'POST /projects/:id/flows', e as Error);
+          }
+        });
+
+        router.post('/projects/:id/flows/:flowId', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            await requireFlowInProject(config, caller, req.params.id, req.params.flowId, PERM_WRITE_FLOW);
+            const name = String(req.body?.displayName ?? '').trim();
+            if (!name) {
+              res.status(400).json({ error: 'displayName is required' });
+              return;
+            }
+            await renameFlow(config, req.params.id, req.params.flowId, name);
+            res.status(204).send();
+          } catch (e) {
+            fail(res, 'POST /projects/:id/flows/:flowId', e as Error);
+          }
+        });
+
+        router.delete('/projects/:id/flows/:flowId', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            await requireFlowInProject(config, caller, req.params.id, req.params.flowId, PERM_WRITE_FLOW);
+            await deleteFlow(config, req.params.id, req.params.flowId);
+            res.status(204).send();
+          } catch (e) {
+            fail(res, 'DELETE /projects/:id/flows/:flowId', e as Error);
           }
         });
 

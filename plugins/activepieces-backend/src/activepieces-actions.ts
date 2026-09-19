@@ -1,7 +1,7 @@
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { Config } from '@backstage/config';
 import { UserInfoService } from '@backstage/backend-plugin-api';
-import { apFetch, apJson, projectUrl } from './activepiecesClient';
+import { apFetch, apJson, flowUrl, projectUrl } from './activepiecesClient';
 import {
   PERM_WRITE_PROJECT,
   PERM_WRITE_PROJECT_MEMBER,
@@ -10,6 +10,13 @@ import {
   requireProjectPermission,
 } from './activepiecesAuthz';
 import { addOrSetMember, createManagedProject, removeMember } from './activepiecesProjects';
+import {
+  PERM_WRITE_FLOW,
+  createFlow,
+  deleteFlow,
+  renameFlow,
+  requireFlowInProject,
+} from './activepiecesFlows';
 import { ensureAccessGroup, getKeycloakPerson } from './keycloakLookup';
 
 interface ActionOptions {
@@ -141,6 +148,86 @@ export function removeActivepiecesMemberAction({ config, userInfo }: ActionOptio
       const target = members.find(m => m.user.email.toLowerCase() === person.email.toLowerCase());
       if (!target) throw new Error(`${ctx.input.username} is not a member of this project`);
       await removeMember(config, ctx.input.projectId, target.id);
+    },
+  });
+}
+
+interface CreateFlowInput {
+  projectId: string;
+  name: string;
+  folder?: string;
+}
+
+export function createActivepiecesFlowAction({ config, userInfo }: ActionOptions) {
+  return createTemplateAction<CreateFlowInput>({
+    id: 'activepieces:create-flow',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['projectId', 'name'],
+        properties: { projectId: { type: 'string' }, name: { type: 'string' }, folder: { type: 'string' } },
+      },
+      output: {
+        type: 'object',
+        properties: { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' } },
+      },
+    },
+    async handler(ctx) {
+      const caller = await callerInfo(ctx, userInfo);
+      await requireProjectPermission(config, caller, ctx.input.projectId, PERM_WRITE_FLOW);
+      const name = ctx.input.name.trim();
+      if (!name) throw new Error('The flow name is required');
+      const flow = await createFlow(config, ctx.input.projectId, name, ctx.input.folder?.trim() || undefined);
+      ctx.output('id', flow.id);
+      ctx.output('name', name);
+      ctx.output('url', flowUrl(config, ctx.input.projectId, flow.id));
+    },
+  });
+}
+
+interface RenameFlowInput {
+  projectId: string;
+  flowId: string;
+  name: string;
+}
+
+export function renameActivepiecesFlowAction({ config, userInfo }: ActionOptions) {
+  return createTemplateAction<RenameFlowInput>({
+    id: 'activepieces:rename-flow',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['projectId', 'flowId', 'name'],
+        properties: { projectId: { type: 'string' }, flowId: { type: 'string' }, name: { type: 'string' } },
+      },
+    },
+    async handler(ctx) {
+      const caller = await callerInfo(ctx, userInfo);
+      await requireFlowInProject(config, caller, ctx.input.projectId, ctx.input.flowId, PERM_WRITE_FLOW);
+      await renameFlow(config, ctx.input.projectId, ctx.input.flowId, ctx.input.name.trim());
+    },
+  });
+}
+
+interface DeleteFlowInput {
+  projectId: string;
+  flowId: string;
+}
+
+export function deleteActivepiecesFlowAction({ config, userInfo }: ActionOptions) {
+  return createTemplateAction<DeleteFlowInput>({
+    id: 'activepieces:delete-flow',
+    schema: {
+      input: {
+        type: 'object',
+        required: ['projectId', 'flowId'],
+        properties: { projectId: { type: 'string' }, flowId: { type: 'string' } },
+      },
+    },
+    async handler(ctx) {
+      const caller = await callerInfo(ctx, userInfo);
+      await requireFlowInProject(config, caller, ctx.input.projectId, ctx.input.flowId, PERM_WRITE_FLOW);
+      await deleteFlow(config, ctx.input.projectId, ctx.input.flowId);
     },
   });
 }
