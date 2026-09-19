@@ -7,7 +7,9 @@ import {
   CallerInfo,
   PERM_WRITE_PROJECT,
   PERM_WRITE_PROJECT_MEMBER,
+  findUserByEmail,
   isForbidden,
+  ownerOf,
   listManagedProjects,
   listMembers,
   requireProjectPermission,
@@ -60,19 +62,23 @@ export const activepiecesManagerPlugin = createBackendPlugin({
           try {
             const caller = await callerContext(req);
             const myEmail = (await getKeycloakPerson(config, caller.username)).email.toLowerCase();
+            // Creator with no Activepieces account yet: see isPendingOwner().
+            const hasAccount = (await findUserByEmail(config, myEmail)) !== undefined;
             const items = [];
             for (const project of await listManagedProjects(config)) {
               const members = await listMembers(config, project.id);
               const mine = members.find(m => m.user.email.toLowerCase() === myEmail);
-              if (!mine && !caller.isAdmin) continue;
+              const pendingOwner = !mine && !hasAccount && ownerOf(project) === caller.username;
+              if (!mine && !pendingOwner && !caller.isAdmin) continue;
               items.push({
                 id: project.id,
                 displayName: project.displayName,
-                owner: project.externalId?.replace(/^backstage:/, '').split('/')[0],
+                owner: ownerOf(project),
                 created: project.created,
-                role: mine?.projectRole.name,
-                canManage: caller.isAdmin || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT),
-                canManageMembers: caller.isAdmin || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT_MEMBER),
+                role: mine?.projectRole.name ?? (pendingOwner ? 'Admin (until first Activepieces login)' : undefined),
+                canManage: caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT),
+                canManageMembers:
+                  caller.isAdmin || pendingOwner || !!mine?.projectRole.permissions.includes(PERM_WRITE_PROJECT_MEMBER),
                 url: projectUrl(config, project.id),
               });
             }

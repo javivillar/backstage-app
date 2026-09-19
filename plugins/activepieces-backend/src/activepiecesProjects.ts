@@ -14,11 +14,6 @@ import { ensureAccessGroup, getKeycloakPerson } from './keycloakLookup';
 
 export const DEFAULT_CREATOR_ROLE = 'Admin';
 
-interface ApUser {
-  id: string;
-  email: string;
-}
-
 interface ApInvitation {
   id: string;
   status: 'PENDING' | 'ACCEPTED';
@@ -41,11 +36,6 @@ async function getRole(config: Config, role: string): Promise<ApRole> {
     throw new Error(`Unknown project role "${role}". Available roles: ${roles.map(r => r.name).join(', ')}`);
   }
   return found;
-}
-
-export async function findUserByEmail(config: Config, email: string): Promise<ApUser | undefined> {
-  const users = await apListAll<ApUser>(config, '/v1/users');
-  return users.find(u => u.email.toLowerCase() === email.toLowerCase());
 }
 
 /**
