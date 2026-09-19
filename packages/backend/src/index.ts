@@ -19,6 +19,10 @@ import {
   seaweedfsScaffolderModule,
 } from '@internal/backstage-plugin-seaweedfs-backend';
 import {
+  activepiecesManagerPlugin,
+  activepiecesScaffolderModule,
+} from '@internal/backstage-plugin-activepieces-backend';
+import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
 } from '@internal/backstage-plugin-alfresco-backend';
@@ -76,6 +80,10 @@ backend.add(seaweedfsScaffolderModule);
 // so the caller lands as the site's native SiteManager) — see
 // plugins/alfresco-backend.
 backend.add(alfrescoScaffolderModule);
+
+// Activepieces self-service scaffolder actions (project create/rename/delete
+// + member/role management) — see plugins/activepieces-backend.
+backend.add(activepiecesScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
@@ -159,6 +167,13 @@ backend.add(seaweedfsManagerPlugin);
 // own native SiteManager role instead of a stored ownership table — see
 // plugins/alfresco-backend/src/alfrescoAuthz.ts.
 backend.add(alfrescoManagerPlugin);
+
+// Activepieces manager — list/rename/delete/members endpoints backing the
+// /activepieces-manager frontend page. Every route is authorized live
+// against the caller's own Activepieces project role (deny by default;
+// the API key used underneath is platform-wide) — see
+// plugins/activepieces-backend/src/activepiecesAuthz.ts.
+backend.add(activepiecesManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {

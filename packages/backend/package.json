@@ -48,6 +48,7 @@
     "@internal/backstage-plugin-superset-backend": "^0.1.0",
     "@internal/backstage-plugin-camunda-backend": "^0.1.0",
     "@internal/backstage-plugin-seaweedfs-backend": "^0.1.0",
+    "@internal/backstage-plugin-activepieces-backend": "^0.1.0",
     "@internal/backstage-plugin-alfresco-backend": "^0.1.0",
     "@internal/backstage-plugin-terraform-backend": "^0.1.0",
     "@kubernetes/client-node": "~0.20.0",

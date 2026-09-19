@@ -38,6 +38,7 @@ import { SupersetManagerPage } from '@internal/plugin-superset';
 import { CamundaManagerPage } from '@internal/plugin-camunda';
 import { SeaweedfsManagerPage } from '@internal/plugin-seaweedfs';
 import { AlfrescoManagerPage } from '@internal/plugin-alfresco';
+import { ActivepiecesManagerPage } from '@internal/plugin-activepieces';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
 import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
@@ -125,6 +126,7 @@ const routes = (
     <Route path="/camunda-manager" element={<CamundaManagerPage />} />
     <Route path="/seaweedfs-manager" element={<SeaweedfsManagerPage />} />
     <Route path="/alfresco-manager" element={<AlfrescoManagerPage />} />
+    <Route path="/activepieces-manager" element={<ActivepiecesManagerPage />} />
     <Route
       path="/tech-radar"
       element={<TechRadarPage width={1500} height={800} />}
