@@ -14,7 +14,7 @@ import CheckCircle from '@mui/icons-material/CheckCircle';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import { datahubUrns } from '../annotations';
-import { TYPE_LABEL, useAssetSummary } from '../api';
+import { TYPE_LABEL, useAssetSummary, useImpact } from '../api';
 import { ClassificationChip, OwnerChips, ScoreBar } from './parts';
 
 /** Why the card is empty: 403 = not in a datahub-* group, 503 = integration not configured, ... */
@@ -76,6 +76,67 @@ export function EntityDatahubCard() {
   );
 }
 
+/**
+ * "If I change this, who is affected?" -- downstream lineage from DataHub, with the owners to notify.
+ * Shown for datasets (the only kind whose lineage matters for a schema change).
+ */
+function ImpactSection({ urn }: { urn: string }) {
+  const { loading, error, data } = useImpact(urn, urn.startsWith('urn:li:dataset:'));
+  if (!urn.startsWith('urn:li:dataset:')) return null;
+  if (loading) return <Progress />;
+  if (error) return <ErrorNote message={`Impact unavailable: ${error}`} />;
+  if (!data) return null;
+  if (data.total === 0) {
+    return <Typography variant="body2">Impact: nothing downstream depends on this dataset (per DataHub lineage).</Typography>;
+  }
+  return (
+    <Box sx={{ display: 'grid', gap: 1.5 }}>
+      <Typography variant="subtitle2">Impact of changing this dataset</Typography>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Chip color="warning" label={`${data.total} downstream asset${data.total === 1 ? '' : 's'}`} />
+        {Object.entries(data.byType).map(([t, n]) => (
+          <Chip key={t} size="small" variant="outlined" label={`${n} ${t}`} />
+        ))}
+        {data.critical > 0 && <Chip size="small" color="error" label={`${data.critical} dq-critical`} />}
+        <Chip size="small" variant="outlined" label={`${data.directConsumers} direct, up to ${data.maxDegree} hops`} />
+      </Box>
+      {data.owners.length > 0 && (
+        <Typography variant="body2">
+          <b>Tell them first:</b> {data.owners.map(o => o.split(':').pop()).join(', ')}
+        </Typography>
+      )}
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Affected asset</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>Hops</TableCell>
+            <TableCell>Owners</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.items.map(i => (
+            <TableRow key={i.urn}>
+              <TableCell>
+                {i.name}
+                {i.critical && <Chip size="small" color="error" label="dq-critical" sx={{ ml: 1 }} />}
+              </TableCell>
+              <TableCell>{i.type}</TableCell>
+              <TableCell>{i.degree}</TableCell>
+              <TableCell>{i.owners.map(o => o.split(':').pop()).join(', ') || '—'}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {data.truncated && (
+        <Typography variant="caption" color="text.secondary">
+          Showing {data.items.length} of {data.total}; the list is capped, the counts above cover the first {data.fetched}.
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function GovernanceCard({ urn }: { urn: string }) {
   const { loading, error, data } = useAssetSummary(urn);
   if (loading) return <Progress />;
@@ -129,6 +190,8 @@ function GovernanceCard({ urn }: { urn: string }) {
           ))}
         </Box>
         <OwnerChips owners={data.owners} />
+        <Divider />
+        <ImpactSection urn={data.urn} />
         <Box>
           <Button size="small" variant="outlined" href={data.url} target="_blank" rel="noopener" endIcon={<OpenInNew fontSize="small" />}>
             Edit in DataHub

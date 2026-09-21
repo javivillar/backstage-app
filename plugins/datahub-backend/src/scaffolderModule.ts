@@ -1,6 +1,12 @@
 import { coreServices, createBackendModule } from '@backstage/backend-plugin-api';
 import { scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
-import { deprecateAssetAction, registerAssetAction, registerDataProductAction } from './datahub-actions';
+import {
+  checkImpactAction,
+  deprecateAssetAction,
+  registerAssetAction,
+  registerDataProductAction,
+  requestVocabularyAction,
+} from './datahub-actions';
 
 /** The DataHub write path (F2). Inert unless `datahub.writes.enabled: true` (see datahubAuthz.assertWritesEnabled). */
 export const datahubScaffolderModule = createBackendModule({
@@ -15,7 +21,13 @@ export const datahubScaffolderModule = createBackendModule({
       },
       async init({ scaffolder, config, userInfo }) {
         const options = { config, userInfo };
-        scaffolder.addActions(registerDataProductAction(options), registerAssetAction(options), deprecateAssetAction(options));
+        scaffolder.addActions(
+          registerDataProductAction(options),
+          registerAssetAction(options),
+          deprecateAssetAction(options),
+          checkImpactAction(options),
+          requestVocabularyAction(options),
+        );
       },
     });
   },
