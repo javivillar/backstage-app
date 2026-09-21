@@ -1,0 +1,1 @@
+export { datahubManagerPlugin } from './managerPlugin';
