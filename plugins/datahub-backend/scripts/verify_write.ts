@@ -227,14 +227,17 @@ async function readBack(): Promise<void> {
       d.dataProduct?.institutionalMemory?.elements?.length > 0,
     d.dataProduct?.properties,
   );
-  const found = await datahubQuery<any>(
-    settings,
-    `{ searchAcrossEntities(input:{query:"f2-verify",types:[DATA_PRODUCT],count:5}){ searchResults{ entity{ urn } } } }`,
-  );
-  check(
-    'appears in search',
-    found.searchAcrossEntities.searchResults.some((r: any) => r.entity.urn === product('f2-verify')),
-  );
+  // The search index is updated asynchronously (Kafka -> consumer -> OpenSearch): poll up to ~60 s.
+  let inSearch = false;
+  for (let i = 0; i < 20 && !inSearch; i++) {
+    const found = await datahubQuery<any>(
+      settings,
+      `{ searchAcrossEntities(input:{query:"f2-verify",types:[DATA_PRODUCT],count:5}){ searchResults{ entity{ urn } } } }`,
+    );
+    inSearch = found.searchAcrossEntities.searchResults.some((r: any) => r.entity.urn === product('f2-verify'));
+    if (!inSearch) await new Promise(r => setTimeout(r, 3000));
+  }
+  check('appears in search (index is asynchronous)', inSearch);
   /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 

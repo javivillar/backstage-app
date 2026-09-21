@@ -5,6 +5,7 @@ import { Caller, Forbidden, callerFrom, requireDatahubAccess } from './datahubAu
 import { RawEntity, Summary, isMissing, summarize } from './governance';
 import { Q_DATASET, Q_DATA_FLOW, Q_DATA_PRODUCT, Q_SEARCH } from './queries';
 import { loadVocabulary } from './vocabulary';
+import { isSoftDeleted } from './datahubRest';
 import { ASSET_TYPES, AssetType, assetTypeOf } from './urn';
 
 /**
@@ -88,7 +89,9 @@ export const datahubManagerPlugin = createBackendPlugin({
           const { doc, key } = QUERY_BY_TYPE[type];
           const data = await datahubQuery<Record<string, RawEntity | null>>(settings, doc, { urn });
           const raw = data[key];
-          if (!raw || isMissing(raw)) throw new HttpError(`No such ${type} in DataHub: ${urn}`, 404);
+          if (!raw || isMissing(raw) || (await isSoftDeleted(settings, type, urn))) {
+            throw new HttpError(`No such ${type} in DataHub: ${urn}`, 404);
+          }
           return summarize(type, raw, settings.publicUrl, settings.governedThreshold);
         }
 
