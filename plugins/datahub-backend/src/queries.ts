@@ -55,3 +55,24 @@ export const Q_VOCAB_PROPERTIES = vocab(
   'STRUCTURED_PROPERTY',
   '... on StructuredPropertyEntity { urn definition { qualifiedName displayName allowedValues { value { ... on StringValue { stringValue } ... on NumberValue { numberValue } } } } }',
 );
+
+// --- F2 preflight (still read-only): does the asset exist, is it ours, who owns the product? ---
+const EXISTS = (field: string) => `query($urn: String!) { ${field}(urn: $urn) { exists properties { customProperties { key value } } } }`;
+export const Q_EXISTS: Record<'dataset' | 'dataFlow' | 'dataJob' | 'dataProduct', string> = {
+  dataset: EXISTS('dataset'),
+  dataFlow: EXISTS('dataFlow'),
+  dataJob: EXISTS('dataJob'),
+  dataProduct: EXISTS('dataProduct'),
+};
+export const Q_PRODUCT_CORE = `
+  query($urn: String!) {
+    dataProduct(urn: $urn) {
+      exists
+      properties { name description customProperties { key value } }
+      domain { domain { urn } }
+      ownership { owners { ownershipType { urn } owner { ... on CorpUser { urn } ... on CorpGroup { urn } } } }
+      glossaryTerms { terms { term { urn } } }
+      tags { tags { tag { urn } } }
+    }
+  }
+`;

@@ -60,3 +60,16 @@ export async function getUserGroupNames(config: Config, username: string): Promi
   groupCache.set(username, { groups, expiresAt: Date.now() + GROUP_TTL_MS });
   return groups;
 }
+
+const emailCache = new Map<string, { email: string; expiresAt: number }>();
+
+/** The user's email (DataHub identifies people by it, design §3). Throws if the user has none. */
+export async function getUserEmail(config: Config, username: string): Promise<string> {
+  const hit = emailCache.get(username);
+  if (hit && hit.expiresAt > Date.now()) return hit.email;
+  const users = await kcGet<Array<{ email?: string }>>(config, `/users?username=${encodeURIComponent(username)}&exact=true`);
+  const email = users[0]?.email;
+  if (!email) throw new Error(`Keycloak user "${username}" has no email, which DataHub needs to identify them`);
+  emailCache.set(username, { email, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return email;
+}
