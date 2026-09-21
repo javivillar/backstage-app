@@ -1,6 +1,6 @@
 import { CLASSIFICATION_ORDER, DataBrief, Vocabulary, normalizeBrief, productUrn, validateBrief } from './brief';
 import { DatahubError, DatahubSettings, datahubQuery } from './datahubClient';
-import { deleteEntity, getAspect, upsertProposal } from './datahubWriter';
+import { getAspect, softDeleteEntity, upsertProposal } from './datahubWriter';
 import { PlanContext, PlannedType, Proposal, buildPlan } from './plan';
 import { Q_EXISTS, Q_PRODUCT_CORE } from './queries';
 import { loadVocabulary } from './vocabulary';
@@ -23,6 +23,8 @@ export interface RegisterOptions {
   callerEmail: string;
   /** Validate and plan, write nothing. */
   dryRun?: boolean;
+  /** How long to wait before checking whether a timed-out write landed anyway (default 5000 ms). */
+  settleMs?: number;
   /**
    * Called ONCE with the owners of the product if it already exists (undefined if it is new);
    * throws to refuse. This is where the per-user authorization plugs in.
@@ -58,6 +60,33 @@ async function inspect(s: DatahubSettings, type: PlannedType, urn: string): Prom
   if (!e || e.exists === false) return { exists: false, managed: false };
   return { exists: true, managed: customProp(e.properties?.customProperties, 'managedBy') === 'backstage' };
 }
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Undoes what THIS run created. `attempted` is every proposal that was written OK plus, if a write
+ * failed, that one too: after a timeout DataHub may have applied it anyway (seen live), so it is
+ * checked and soft-deleted if it is there. Pre-existing (updated) assets are never touched.
+ */
+async function undo(s: DatahubSettings, attempted: Proposal[], created: string[], outcomeUnknown: boolean, settleMs = 5000): Promise<string[]> {
+  if (outcomeUnknown) await sleep(settleMs); // let an in-flight write land before looking
+  const failed: string[] = [];
+  for (const p of [...attempted].reverse()) {
+    if (!created.includes(p.urn)) continue;
+    try {
+      if (!(await inspect(s, p.entityType, p.urn)).exists) continue;
+      await softDeleteEntity(s, p.entityType, p.urn);
+    } catch {
+      failed.push(p.urn);
+    }
+  }
+  return failed;
+}
+
+const rollbackTail = (failed: string[]): string =>
+  failed.length
+    ? ` Rollback could NOT hide: ${failed.join(', ')} (ask a steward).`
+    : ' Everything this run created was soft-deleted (hidden; a steward can remove it for good).';
 
 /** Defaults the launcher expects: they are the technical owner; a steward is filled in from Confidential up (§12.3). */
 export function applyDefaults(brief: DataBrief, s: Pick<DatahubSettings, 'defaultSteward'>, callerEmail: string): DataBrief {
@@ -103,24 +132,17 @@ export async function registerBrief(s: DatahubSettings, rawBrief: DataBrief, opt
   if (opts.dryRun) return { runId: opts.ctx.runId, dryRun: true, productUrn: pUrn, created, updated, warnings: validation.warnings };
 
   const done: Proposal[] = [];
+  let inFlight: Proposal | undefined;
   try {
     for (const p of plan) {
+      inFlight = p;
       await upsertProposal(s, p);
       done.push(p);
+      inFlight = undefined;
     }
   } catch (e) {
-    // Undo only what THIS run created (updates of already-managed assets cannot be reverted).
-    const failed: string[] = [];
-    for (const p of [...done].reverse()) {
-      if (!created.includes(p.urn)) continue;
-      try {
-        await deleteEntity(s, p.entityType, p.urn);
-      } catch {
-        failed.push(p.urn);
-      }
-    }
-    const tail = failed.length ? ` Rollback could NOT remove: ${failed.join(', ')}.` : ' Everything this run created was removed.';
-    throw new DatahubError(`${(e as Error).message}${tail}`, e instanceof DatahubError ? e.status : 502);
+    const failed = await undo(s, inFlight ? [...done, inFlight] : done, created, !!inFlight, opts.settleMs);
+    throw new DatahubError(`${(e as Error).message}${rollbackTail(failed)}`, e instanceof DatahubError ? e.status : 502);
   }
   return { runId: opts.ctx.runId, dryRun: false, productUrn: pUrn, created, updated, warnings: validation.warnings };
 }
@@ -213,24 +235,18 @@ export async function extendProduct(
   const union = [...have, ...newAssets.filter(a => a.entityType !== 'dataJob').map(a => ({ destinationUrn: a.urn })).filter(a => !have.some(h => h.destinationUrn === a.destinationUrn))];
 
   const done: Proposal[] = [];
+  let inFlight: Proposal | undefined;
   try {
     for (const a of newAssets) {
+      inFlight = a;
       await upsertProposal(s, a);
       done.push(a);
+      inFlight = undefined;
     }
     await upsertProposal(s, { entityType: 'dataProduct', urn: pUrn, aspects: { dataProductProperties: { ...(current ?? { name: brief.name }), assets: union } } });
   } catch (e) {
-    const failed: string[] = [];
-    for (const a of [...done].reverse()) {
-      if (!created.includes(a.urn)) continue;
-      try {
-        await deleteEntity(s, a.entityType, a.urn);
-      } catch {
-        failed.push(a.urn);
-      }
-    }
-    const tail = failed.length ? ` Rollback could NOT remove: ${failed.join(', ')}.` : ' Everything this run created was removed.';
-    throw new DatahubError(`${(e as Error).message}${tail}`, e instanceof DatahubError ? e.status : 502);
+    const failed = await undo(s, inFlight ? [...done, inFlight] : done, created, !!inFlight, opts.settleMs);
+    throw new DatahubError(`${(e as Error).message}${rollbackTail(failed)}`, e instanceof DatahubError ? e.status : 502);
   }
   return { runId: opts.ctx.runId, dryRun: false, productUrn: pUrn, created, updated, warnings: validation.warnings };
 }
