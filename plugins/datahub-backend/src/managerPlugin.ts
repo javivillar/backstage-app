@@ -3,16 +3,8 @@ import express, { Request, Response, Router } from 'express';
 import { DatahubError, DatahubSettings, datahubQuery, datahubSettings } from './datahubClient';
 import { Caller, Forbidden, callerFrom, requireDatahubAccess } from './datahubAuthz';
 import { RawEntity, Summary, isMissing, summarize } from './governance';
-import {
-  Q_DATASET,
-  Q_DATA_FLOW,
-  Q_DATA_PRODUCT,
-  Q_SEARCH,
-  Q_VOCAB_DOMAINS,
-  Q_VOCAB_PROPERTIES,
-  Q_VOCAB_TAGS,
-  Q_VOCAB_TERMS,
-} from './queries';
+import { Q_DATASET, Q_DATA_FLOW, Q_DATA_PRODUCT, Q_SEARCH } from './queries';
+import { loadVocabulary } from './vocabulary';
 import { ASSET_TYPES, AssetType, assetTypeOf } from './urn';
 
 /**
@@ -146,35 +138,7 @@ export const datahubManagerPlugin = createBackendPlugin({
           '/vocabulary',
           guarded('GET /vocabulary', async (_req, _res, { settings }) => {
             if (vocabCache && Date.now() - vocabCache.at < 60_000) return vocabCache.value;
-            type Page<E> = { searchAcrossEntities: { searchResults: Array<{ entity: E }> } };
-            const [d, t, g, p] = await Promise.all([
-              datahubQuery<Page<{ urn: string; properties?: { name?: string; description?: string } }>>(settings, Q_VOCAB_DOMAINS),
-              datahubQuery<Page<{ urn: string; name?: string; properties?: { name?: string; description?: string } }>>(settings, Q_VOCAB_TERMS),
-              datahubQuery<Page<{ urn: string; properties?: { name?: string; description?: string } }>>(settings, Q_VOCAB_TAGS),
-              datahubQuery<
-                Page<{
-                  urn: string;
-                  definition?: {
-                    qualifiedName: string;
-                    displayName?: string;
-                    allowedValues?: Array<{ value: { stringValue?: string; numberValue?: number } }>;
-                  };
-                }>
-              >(settings, Q_VOCAB_PROPERTIES),
-            ]);
-            const value = {
-              domains: d.searchAcrossEntities.searchResults.map(r => ({ urn: r.entity.urn, name: r.entity.properties?.name ?? r.entity.urn, description: r.entity.properties?.description })),
-              glossaryTerms: t.searchAcrossEntities.searchResults.map(r => ({ urn: r.entity.urn, name: r.entity.properties?.name ?? r.entity.name ?? r.entity.urn, description: r.entity.properties?.description })),
-              tags: g.searchAcrossEntities.searchResults.map(r => ({ urn: r.entity.urn, name: r.entity.properties?.name ?? r.entity.urn, description: r.entity.properties?.description })),
-              structuredProperties: p.searchAcrossEntities.searchResults
-                .filter(r => r.entity.definition)
-                .map(r => ({
-                  urn: r.entity.urn,
-                  qualifiedName: r.entity.definition!.qualifiedName,
-                  displayName: r.entity.definition!.displayName,
-                  allowedValues: (r.entity.definition!.allowedValues ?? []).map(a => a.value.stringValue ?? a.value.numberValue),
-                })),
-            };
+            const value = await loadVocabulary(settings);
             vocabCache = { at: Date.now(), value };
             return value;
           }),

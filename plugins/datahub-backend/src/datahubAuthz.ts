@@ -1,6 +1,7 @@
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
-import { getUserGroupNames } from './keycloakLookup';
+import { DatahubSettings } from './datahubClient';
+import { getUserEmail, getUserGroupNames } from './keycloakLookup';
 
 export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
 
@@ -56,4 +57,50 @@ export async function requireDatahubAccess(
         `Ask a DataHub admin to add you to one.`,
     );
   }
+}
+
+/**
+ * Pure decision for the WRITE path (design §7.2), unit-tested:
+ *  - backstage-admin and data stewards: anything;
+ *  - otherwise the caller must be in a write group (viewers are read-only) AND,
+ *    when the product already exists, be one of its owners -- directly (their
+ *    email) or through a group they belong to. A NEW product needs only the
+ *    write group: the launcher becomes its technical owner.
+ */
+export function canWrite(
+  caller: Pick<Caller, 'isAdmin'>,
+  email: string,
+  groups: string[],
+  s: Pick<DatahubSettings, 'writeGroups' | 'stewardGroups'>,
+  existingOwners: string[] | undefined,
+): boolean {
+  if (caller.isAdmin || groups.some(g => s.stewardGroups.includes(g))) return true;
+  if (!groups.some(g => s.writeGroups.includes(g))) return false;
+  if (existingOwners === undefined) return true;
+  const mine = new Set([`urn:li:corpuser:${email}`.toLowerCase(), ...groups.map(g => `urn:li:corpGroup:${g}`.toLowerCase())]);
+  return existingOwners.some(o => mine.has(o.toLowerCase()));
+}
+
+export function assertWritesEnabled(s: Pick<DatahubSettings, 'writesEnabled'>): void {
+  if (!s.writesEnabled) {
+    throw new Forbidden('Forbidden: the DataHub write path is disabled (datahub.writes.enabled is not true).');
+  }
+}
+
+export async function requireWriteAccess(
+  config: Config,
+  caller: Caller,
+  s: DatahubSettings,
+  existingOwners: string[] | undefined,
+): Promise<{ email: string }> {
+  assertWritesEnabled(s);
+  const [email, groups] = await Promise.all([getUserEmail(config, caller.username), getUserGroupNames(config, caller.username)]);
+  if (!canWrite(caller, email, groups, s, existingOwners)) {
+    throw new Forbidden(
+      existingOwners === undefined
+        ? `Forbidden: ${caller.entityRef} is not in a DataHub write group (${s.writeGroups.join(', ')}).`
+        : `Forbidden: ${caller.entityRef} is not an owner of this data product (nor a steward or backstage-admin).`,
+    );
+  }
+  return { email };
 }

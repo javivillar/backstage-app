@@ -22,7 +22,7 @@ import {
   activepiecesManagerPlugin,
   activepiecesScaffolderModule,
 } from '@internal/backstage-plugin-activepieces-backend';
-import { datahubManagerPlugin } from '@internal/backstage-plugin-datahub-backend';
+import { datahubManagerPlugin, datahubScaffolderModule } from '@internal/backstage-plugin-datahub-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -182,6 +182,8 @@ backend.add(activepiecesManagerPlugin);
 // — see plugins/datahub-backend/src/datahubAuthz.ts and
 // BACKSTAGE-DATAHUB-DESIGN.md.
 backend.add(datahubManagerPlugin);
+// DataHub write path (scaffolder actions, F2) — inert unless datahub.writes.enabled: true.
+backend.add(datahubScaffolderModule);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {

@@ -25,9 +25,19 @@ export interface DatahubSettings {
   publicUrl: string;
   governedThreshold: number;
   accessGroups: string[];
+  /** F2: the write path (scaffolder actions). OFF unless `datahub.writes.enabled: true`. */
+  writesEnabled: boolean;
+  /** Keycloak groups whose members may register/edit data products they own. */
+  writeGroups: string[];
+  /** Keycloak groups treated as data stewards (may act on any managed asset) -- open decision §12.3. */
+  stewardGroups: string[];
+  /** Steward owner URN set when a brief does not name one (only needed from Confidential up). */
+  defaultSteward: string;
 }
 
 export const DEFAULT_ACCESS_GROUPS = ['datahub-admin', 'datahub-editor', 'datahub-viewer'];
+export const DEFAULT_WRITE_GROUPS = ['datahub-admin', 'datahub-editor'];
+export const DEFAULT_STEWARD_GROUPS = ['datahub-admin'];
 
 /** undefined => the integration is not configured (no token/baseUrl): routes answer 503. */
 export function datahubSettings(config: Config): DatahubSettings | undefined {
@@ -41,6 +51,10 @@ export function datahubSettings(config: Config): DatahubSettings | undefined {
     publicUrl: (dh.getOptionalString('publicUrl') ?? baseUrl).replace(/\/$/, ''),
     governedThreshold: dh.getOptionalNumber('governedThreshold') ?? 80,
     accessGroups: dh.getOptionalStringArray('accessGroups') ?? DEFAULT_ACCESS_GROUPS,
+    writesEnabled: dh.getOptionalBoolean('writes.enabled') ?? false,
+    writeGroups: dh.getOptionalStringArray('writes.groups') ?? DEFAULT_WRITE_GROUPS,
+    stewardGroups: dh.getOptionalStringArray('writes.stewardGroups') ?? DEFAULT_STEWARD_GROUPS,
+    defaultSteward: dh.getOptionalString('writes.defaultSteward') ?? 'urn:li:corpGroup:datahub-admin',
   };
 }
 
