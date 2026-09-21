@@ -76,3 +76,20 @@ export const Q_PRODUCT_CORE = `
     }
   }
 `;
+
+// --- Phase 3: impact of a change (read-only) -------------------------------------------------
+const OWN = 'ownership { owners { owner { ... on CorpUser { urn } ... on CorpGroup { urn } } } }';
+const TAGS = 'tags { tags { tag { urn } } }';
+export const Q_IMPACT = `
+  query($urn: String!, $count: Int!) {
+    searchAcrossLineage(input: { urn: $urn, direction: DOWNSTREAM, query: "*", start: 0, count: $count,
+        types: [DATASET, DATA_FLOW, DATA_JOB, DASHBOARD, CHART, DATA_PRODUCT] }) {
+      total
+      searchResults { degree entity { urn type
+        ... on Dataset { name platform { name } ${OWN} ${TAGS} }
+        ... on Dashboard { properties { name } ${OWN} ${TAGS} }
+        ... on Chart { properties { name } ${OWN} ${TAGS} }
+        ... on DataJob { properties { name } ${OWN} ${TAGS} } } }
+    }
+  }
+`;

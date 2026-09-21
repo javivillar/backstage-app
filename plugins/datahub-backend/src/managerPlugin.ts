@@ -3,7 +3,8 @@ import express, { Request, Response, Router } from 'express';
 import { DatahubError, DatahubSettings, datahubQuery, datahubSettings } from './datahubClient';
 import { Caller, Forbidden, callerFrom, requireDatahubAccess } from './datahubAuthz';
 import { RawEntity, Summary, isMissing, summarize } from './governance';
-import { Q_DATASET, Q_DATA_FLOW, Q_DATA_PRODUCT, Q_SEARCH } from './queries';
+import { Q_DATASET, Q_DATA_FLOW, Q_DATA_PRODUCT, Q_IMPACT, Q_SEARCH } from './queries';
+import { RawImpactResult, summarizeImpact } from './impact';
 import { loadVocabulary } from './vocabulary';
 import { isSoftDeleted } from './datahubRest';
 import { ASSET_TYPES, AssetType, assetTypeOf } from './urn';
@@ -106,6 +107,19 @@ export const datahubManagerPlugin = createBackendPlugin({
           guarded('GET /assets/score', async (req, _res, { settings }) => {
             const s = await loadSummary(settings, req.query.urn);
             return { urn: s.urn, ...s.score };
+          }),
+        );
+
+        // Phase 3: what is downstream of this asset (per DataHub lineage), and who to tell.
+        router.get(
+          '/impact',
+          guarded('GET /impact', async (req, _res, { settings }) => {
+            const urn = typeof req.query.urn === 'string' ? req.query.urn : '';
+            const type = assetTypeOf(urn);
+            if (!type) throw new HttpError('urn must be a dataset, dataProduct or dataFlow URN', 400);
+            if (await isSoftDeleted(settings, type, urn)) throw new HttpError(`No such ${type} in DataHub: ${urn}`, 404);
+            const data = await datahubQuery<{ searchAcrossLineage: RawImpactResult }>(settings, Q_IMPACT, { urn, count: 100 });
+            return summarizeImpact(urn, data.searchAcrossLineage);
           }),
         );
 

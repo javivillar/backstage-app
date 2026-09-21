@@ -93,3 +93,44 @@ export function useAssetSummary(urn: string) {
   }, [get, urn]);
   return state;
 }
+
+export interface ImpactItem {
+  urn: string;
+  type: string;
+  name: string;
+  platform?: string;
+  degree: number;
+  critical: boolean;
+  owners: string[];
+}
+
+export interface Impact {
+  urn: string;
+  total: number;
+  fetched: number;
+  truncated: boolean;
+  byType: Record<string, number>;
+  critical: number;
+  directConsumers: number;
+  maxDegree: number;
+  owners: string[];
+  items: ImpactItem[];
+}
+
+/** Downstream impact of an asset (only meaningful for datasets; other kinds are skipped by the caller). */
+export function useImpact(urn: string, enabled: boolean) {
+  const get = useDatahubFetch();
+  const [state, setState] = useState<{ loading: boolean; error?: string; data?: Impact }>({ loading: enabled });
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    setState({ loading: true });
+    get<Impact>(`/impact?urn=${encodeURIComponent(urn)}`)
+      .then(data => !cancelled && setState({ loading: false, data }))
+      .catch(e => !cancelled && setState({ loading: false, error: (e as Error).message }));
+    return () => {
+      cancelled = true;
+    };
+  }, [get, urn, enabled]);
+  return state;
+}
