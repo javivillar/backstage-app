@@ -39,6 +39,8 @@ export interface Proposal {
 }
 
 const OWNER_TYPES = { business: 'BUSINESS_OWNER', technical: 'TECHNICAL_OWNER', steward: 'DATA_STEWARD' } as const;
+/** Written with every proposal so re-registering an asset that a rollback soft-deleted brings it back. */
+const LIVE = { removed: false };
 const PII_TAGS = ['urn:li:tag:pii', 'urn:li:tag:gdpr'];
 const PERSONAL_TERM = 'urn:li:glossaryTerm:personal-data';
 const SUBTYPE: Record<StoreBrief['kind'], string> = { postgres: 'Table', kafka: 'Topic', s3: 'Prefix', 'alfresco-site': 'Site' };
@@ -126,7 +128,7 @@ function datasetProposal(brief: DataBrief, s: StoreBrief, ctx: PlanContext): Pro
         })),
     };
   }
-  return { entityType: 'dataset', urn, aspects };
+  return { entityType: 'dataset', urn, aspects: { ...aspects, status: LIVE } };
 }
 
 function flowProposals(brief: DataBrief, p: ProcessBrief, ctx: PlanContext): Proposal[] {
@@ -135,6 +137,7 @@ function flowProposals(brief: DataBrief, p: ProcessBrief, ctx: PlanContext): Pro
     urn: flowUrnOf(p),
     aspects: {
       dataFlowInfo: { name: p.name, customProperties: marker(brief, ctx) },
+      status: LIVE,
       domains: { domains: [brief.domain] },
       ownership: owners(brief),
     },
@@ -147,6 +150,7 @@ function flowProposals(brief: DataBrief, p: ProcessBrief, ctx: PlanContext): Pro
       urn: jobUrnOf(p, t),
       aspects: {
         dataJobInfo: { name: t.name, type: { string: 'BACKSTAGE' }, customProperties: marker(brief, ctx) },
+        status: LIVE,
         // The inputs/outputs of the jobs ARE the planned lineage (design §4.3).
         dataJobInputOutput: { inputDatasets: uniq(ins), outputDatasets: uniq(outs) },
         domains: { domains: [brief.domain] },
@@ -185,6 +189,7 @@ export function buildPlan(brief: DataBrief, validation: Pick<Validation, 'errors
       },
       domains: { domains: [brief.domain] },
       ownership: owners(brief),
+      status: LIVE,
       ...(brief.tags?.length ? { globalTags: { tags: brief.tags.map(tag => ({ tag })) } } : {}),
       ...(brief.terms?.length ? { glossaryTerms: { terms: brief.terms.map(t => ({ urn: t })), auditStamp: { time: 0, actor: 'urn:li:corpuser:datahub' } } } : {}),
       ...(links.length

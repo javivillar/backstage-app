@@ -7,6 +7,10 @@
  *
  * steps: create | rerun | deprecate | rollback | cleanup
  *
+ * `cleanup` and the rollback SOFT-delete (status.removed=true): the service account has no
+ * DELETE_ENTITY privilege (by design, least privilege). Hidden assets can be removed for good
+ * by a DataHub admin.
+ *
  * It runs the REAL orchestrator (src/register.ts) against a real DataHub with the
  * plugin's service-account token, on clearly named TEST assets only. Nothing else
  * can be written or deleted: every URN is checked against ALLOWED before any
@@ -16,7 +20,7 @@
  * changes what that rule allows. Change it only through a reviewed PR.
  */
 import * as fs from 'fs';
-import { deleteEntity } from '../src/datahubWriter';
+import { softDeleteEntity } from '../src/datahubWriter';
 import { DatahubSettings, datahubQuery } from '../src/datahubClient';
 import { deprecateAsset, registerBrief } from '../src/register';
 import { DataBrief } from '../src/brief';
@@ -134,6 +138,19 @@ async function exists(type: AssetKind, urn: string): Promise<boolean> {
   return !!d[type]?.exists;
 }
 
+/** True when the asset is gone OR soft-deleted (`status.removed`), which is how the undo hides things. */
+async function hidden(type: AssetKind, urn: string): Promise<boolean> {
+  const d = await datahubQuery<Record<string, { exists?: boolean; status?: { removed?: boolean } | null } | null>>(
+    settings,
+    `query($u:String!){ ${type}(urn:$u){ exists status{ removed } } }`,
+    { u: urn },
+  );
+  const e = d[type];
+  return !e?.exists || e.status?.removed === true;
+}
+
+const seconds = (t0: number) => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+
 function check(name: string, ok: boolean, detail?: unknown): void {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail === undefined ? '' : ` -- ${JSON.stringify(detail)}`}`);
 }
@@ -223,14 +240,19 @@ async function readBack(): Promise<void> {
 }
 
 async function createStep(): Promise<void> {
-  console.log(JSON.stringify(await registerBrief(settings, brief('f2-verify', 'f2_verify'), opts('verify-1')), null, 1));
+  const t0 = Date.now();
+  const r = await registerBrief(settings, brief('f2-verify', 'f2_verify'), opts('verify-1'));
+  console.log(JSON.stringify(r, null, 1));
+  console.log(`registerBrief took ${seconds(t0)}`);
   console.log('--- reading everything back');
   await readBack();
 }
 
 async function rerunStep(): Promise<void> {
+  const t0 = Date.now();
   const r = await registerBrief(settings, brief('f2-verify', 'f2_verify'), opts('verify-2'));
   console.log(JSON.stringify(r, null, 1));
+  console.log(`registerBrief took ${seconds(t0)}`);
   check('idempotent: nothing created, 5 updated', r.created.length === 0 && r.updated.length === 5);
 }
 
@@ -259,12 +281,12 @@ async function rollbackStep(): Promise<void> {
   }
   global.fetch = inner;
   const gone = [
-    !(await exists('dataset', ds('f2_verify_rb'))),
-    !(await exists('dataset', site('f2-verify-rb'))),
-    !(await exists('dataFlow', flow('f2-verify-rb'))),
-    !(await exists('dataJob', job('f2-verify-rb'))),
+    await hidden('dataset', ds('f2_verify_rb')),
+    await hidden('dataset', site('f2-verify-rb')),
+    await hidden('dataFlow', flow('f2-verify-rb')),
+    await hidden('dataJob', job('f2-verify-rb')),
   ];
-  check('rollback removed everything this run created', gone.every(Boolean), gone);
+  check('rollback hid (soft-deleted) everything this run created', gone.every(Boolean), gone);
 }
 
 async function cleanupStep(): Promise<void> {
@@ -283,8 +305,8 @@ async function cleanupStep(): Promise<void> {
   for (const [type, urn] of all) {
     assertTestUrn(urn);
     const kind = type as Proposal['entityType'];
-    await deleteEntity(settings, kind, urn);
-    check(`gone ${urn}`, !(await exists(type, urn)));
+    if (await exists(type, urn)) await softDeleteEntity(settings, kind, urn);
+    check(`hidden ${urn}`, await hidden(type, urn));
   }
 }
 

@@ -9,6 +9,13 @@ import { PlannedType, Proposal } from './plan';
 
 type Writer = Pick<DatahubSettings, 'baseUrl' | 'token'>;
 
+/**
+ * Synchronous writes (`async=false`) wait for DataHub to persist and index every aspect, which can
+ * take well over 30 s for an asset with many aspects (seen live 2026-09-21). On a timeout the write
+ * MAY STILL HAVE BEEN APPLIED, so callers must treat that outcome as unknown (register.ts does).
+ */
+const WRITE_TIMEOUT_MS = 120_000;
+
 async function rest(s: Writer, method: string, path: string, body?: unknown): Promise<{ status: number; text: string }> {
   let res: Response;
   try {
@@ -16,10 +23,10 @@ async function rest(s: Writer, method: string, path: string, body?: unknown): Pr
       method,
       headers: { Authorization: `Bearer ${s.token}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     });
   } catch (e) {
-    throw new DatahubError(`DataHub is not reachable: ${(e as Error).message}`, 502);
+    throw new DatahubError(`DataHub did not answer (${(e as Error).message}); the write may or may not have been applied`, 502);
   }
   return { status: res.status, text: await res.text() };
 }
@@ -34,12 +41,15 @@ export async function upsertProposal(s: Writer, p: Proposal): Promise<void> {
   }
 }
 
-/** Removes an entity (undo of a run that failed half way). A missing entity counts as removed. */
-export async function deleteEntity(s: Writer, type: PlannedType, urn: string): Promise<void> {
-  const r = await rest(s, 'DELETE', `/entity/${type}/${encodeURIComponent(urn)}`);
-  if (r.status !== 404 && (r.status < 200 || r.status >= 300)) {
-    throw new DatahubError(`Could not remove ${urn}: ${r.status} ${r.text.slice(0, 200)}`, 502);
-  }
+/**
+ * Undo of a run that failed half way: SOFT delete (`status.removed = true`), which hides the asset
+ * from search and pages and is reversible. It deliberately does NOT use `DELETE`: the service
+ * account has no DELETE_ENTITY privilege (verified live 2026-09-21: 403 "unauthorized to DELETE
+ * entities") and granting it would let the token hard-delete ANY asset of the four types, including
+ * ingested ones. Re-registering the same asset revives it (every proposal carries `status.removed=false`).
+ */
+export async function softDeleteEntity(s: Writer, type: PlannedType, urn: string): Promise<void> {
+  await upsertProposal(s, { entityType: type, urn, aspects: { status: { removed: true } } });
 }
 
 /** The current `value` of one aspect, or undefined if the entity/aspect does not exist. */

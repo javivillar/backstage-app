@@ -32,8 +32,9 @@ const brief = (over: Partial<DataBrief> = {}): DataBrief => ({
 interface World {
   existing: Record<string, Array<{ key: string; value: string }>>; // urn -> customProperties (absent = does not exist)
   writes: Array<{ type: string; urn: string; aspects: string[] }>;
-  deletes: string[];
+  softDeletes: string[];
   failOn?: string; // urn whose write returns 500
+  appliedOnFail?: boolean; // the failing write was in fact applied by DataHub (timeout case)
   productOwners?: string[];
   productAssets?: string[];
 }
@@ -82,21 +83,29 @@ function mockDatahub(w: World) {
     const m = /\/openapi\/v3\/entity\/(\w+)(?:\/(.+?))?(?:\?|$)/.exec(u)!;
     if (method === 'POST') {
       const [ent] = JSON.parse(String(init?.body));
-      if (w.failOn === ent.urn) return asJson(500, 'boom');
-      w.writes.push({ type: m[1], urn: ent.urn, aspects: Object.keys(ent).filter(k => k !== 'urn') });
+      const apply = () => {
+        if (ent.status?.value?.removed === true) {
+          w.softDeletes.push(ent.urn);
+          delete w.existing[ent.urn];
+        } else {
+          w.writes.push({ type: m[1], urn: ent.urn, aspects: Object.keys(ent).filter(k => k !== 'urn') });
+          w.existing[ent.urn] = [{ key: 'managedBy', value: 'backstage' }];
+        }
+      };
+      if (w.failOn === ent.urn && ent.status?.value?.removed !== true) {
+        if (w.appliedOnFail) apply();
+        return asJson(500, 'boom');
+      }
+      apply();
       return asJson(200, '[]');
-    }
-    if (method === 'DELETE') {
-      w.deletes.push(decodeURIComponent(m[2]));
-      return asJson(200, '');
     }
     if (method === 'GET') return asJson(200, { urn: PRODUCT, dataProductProperties: { value: { name: 'Pedidos web', assets: (w.productAssets ?? []).map(a => ({ destinationUrn: a })) } } });
     return asJson(500, 'unexpected');
   }) as unknown as typeof fetch;
 }
 
-const fresh = (): World => ({ existing: {}, writes: [], deletes: [] });
-const opts = (over = {}) => ({ ctx: { runId: 'r1', requestedBy: 'user:default/test-b' }, callerEmail: 'b@x.com', authorize: async () => {}, ...over });
+const fresh = (): World => ({ existing: {}, writes: [], softDeletes: [] });
+const opts = (over = {}) => ({ ctx: { runId: 'r1', requestedBy: 'user:default/test-b' }, callerEmail: 'b@x.com', authorize: async () => {}, settleMs: 0, ...over });
 
 describe('registerBrief', () => {
   it('validates first: an invalid brief writes nothing', async () => {
@@ -142,21 +151,46 @@ describe('registerBrief', () => {
     expect(w.writes).toEqual([]);
   });
 
-  it('a failure half way removes only what THIS run created, most-dependent first', async () => {
+  it('a failure half way soft-deletes only what THIS run created (never with DELETE)', async () => {
     const w = fresh();
-    w.failOn = PRODUCT;
+    w.failOn = PRODUCT; // the product write fails and was NOT applied
     mockDatahub(w);
-    await expect(registerBrief(settings, brief(), opts())).rejects.toThrow(/Everything this run created was removed/);
-    expect(w.deletes).toEqual([DS]);
+    await expect(registerBrief(settings, brief(), opts())).rejects.toThrow(/soft-deleted/);
+    expect(w.softDeletes).toEqual([DS]);
   });
 
-  it('does not delete pre-existing managed assets when it rolls back', async () => {
+  it('a write that TIMED OUT but was applied anyway is also undone (the live bug of 2026-09-21)', async () => {
+    const w = fresh();
+    w.failOn = DS; // the FIRST write errors out...
+    w.appliedOnFail = true; // ...but DataHub had already applied it
+    mockDatahub(w);
+    await expect(registerBrief(settings, brief(), opts())).rejects.toThrow(/soft-deleted/);
+    expect(w.softDeletes).toEqual([DS]);
+    expect(w.existing[DS]).toBeUndefined();
+  });
+
+  it('a failed write that never reached DataHub leaves nothing to undo', async () => {
+    const w = fresh();
+    w.failOn = DS;
+    mockDatahub(w);
+    await expect(registerBrief(settings, brief(), opts())).rejects.toThrow(/soft-deleted/);
+    expect(w.softDeletes).toEqual([]);
+  });
+
+  it('does not soft-delete pre-existing managed assets when it rolls back', async () => {
     const w = fresh();
     w.existing[DS] = [{ key: 'managedBy', value: 'backstage' }];
     w.failOn = PRODUCT;
     mockDatahub(w);
     await expect(registerBrief(settings, brief(), opts())).rejects.toThrow();
-    expect(w.deletes).toEqual([]);
+    expect(w.softDeletes).toEqual([]);
+  });
+
+  it('every proposal revives a previously soft-deleted asset (status.removed=false)', async () => {
+    const w = fresh();
+    mockDatahub(w);
+    await registerBrief(settings, brief(), opts());
+    expect(w.writes.every(x => x.aspects.includes('status'))).toBe(true);
   });
 
   it('asks authorize() with the existing owners (undefined for a new product) BEFORE writing', async () => {
