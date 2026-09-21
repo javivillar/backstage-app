@@ -1,4 +1,4 @@
-import { assetUrl, summarize, RawEntity } from './governance';
+import { assetUrl, isMissing, summarize, RawEntity } from './governance';
 import { hasAccess } from './datahubAuthz';
 import { datahubQuery } from './datahubClient';
 
@@ -79,6 +79,18 @@ describe('summarize / score', () => {
     );
     expect(s.managedBy).toBe('backstage');
     expect(s.deprecated).toBe(true);
+  });
+});
+
+describe('isMissing', () => {
+  it('treats the hollow entity DataHub returns for an unknown URN as missing', () => {
+    expect(isMissing({ urn: 'urn:li:dataset:x', exists: false })).toBe(true);
+    expect(isMissing(null)).toBe(true);
+    expect(isMissing(undefined)).toBe(true);
+  });
+  it('keeps real assets (exists true, or field absent)', () => {
+    expect(isMissing({ urn: 'urn:li:dataset:x', exists: true })).toBe(false);
+    expect(isMissing({ urn: 'urn:li:dataset:x' })).toBe(false);
   });
 });
 

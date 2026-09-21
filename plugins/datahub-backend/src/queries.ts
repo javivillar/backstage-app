@@ -12,7 +12,7 @@ const COMMON = `
 `;
 
 const DATASET = `
-  urn name platform { name }
+  urn exists name platform { name }
   properties { name description customProperties { key value } }
   editableProperties { description }
   schemaMetadata { fields { fieldPath description } }
@@ -20,8 +20,8 @@ const DATASET = `
   ${COMMON}
 `;
 
-const DATA_PRODUCT = `urn properties { name description } ${COMMON}`;
-const DATA_FLOW = `urn platform { name } properties { name description } ${COMMON}`;
+const DATA_PRODUCT = `urn exists properties { name description } ${COMMON}`;
+const DATA_FLOW = `urn exists platform { name } properties { name description } ${COMMON}`;
 
 export const ASSET_FRAGMENTS = `
   ... on Dataset { ${DATASET} }
