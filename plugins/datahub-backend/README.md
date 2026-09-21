@@ -46,3 +46,21 @@ GMS only admits Backstage if the chart's `networkPolicy.backstage.enabled` is on
 
 `datahub.io/dataset`, `datahub.io/data-product`, `datahub.io/flow` (a URN each)
 make the card and tab appear on the entity.
+
+## Live verification of the write path (F2)
+
+`scripts/verify_write.ts` runs the real orchestrator against a real DataHub on TEST assets only
+(`f2-verify`, `f2_verify`, `f2_probe`; any other URN aborts before writing or deleting), reads every
+aspect back, and cleans up. Steps: `create`, `rerun`, `deprecate`, `rollback`, `cleanup`.
+
+```bash
+node -r /var/lib/one/backstage-app/node_modules/sucrase/register \
+  /var/lib/one/backstage-app/plugins/datahub-backend/scripts/verify_write.ts <step>
+```
+
+Needs the service-account token in `/var/lib/one/datahub-f2/datahub.token` (mode 600) or
+`DATAHUB_TOKEN_FILE`; `DATAHUB_BASE_URL` overrides the DataHub URL. Options, pros/cons, the permission
+model and the closing procedure: `BACKSTAGE-DATAHUB-F2-VERIFICATION.md` in `refresquito-services`.
+
+Security note: a Claude Code permission rule that pins this exact file allows EVERYTHING the file
+does, so changes to it must go through a reviewed PR, and the rule is added by a person, never by the agent.
