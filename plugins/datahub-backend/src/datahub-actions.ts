@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import { resolve as resolvePath } from 'path';
 import { Config } from '@backstage/config';
 import { UserInfoService } from '@backstage/backend-plugin-api';
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
@@ -13,6 +15,7 @@ import { Q_IMPACT } from './queries';
 import { getUserEmail } from './keycloakLookup';
 import { requireDatahubAccess } from './datahubAuthz';
 import { assetTypeOf } from './urn';
+import { buildCatalogInfo } from './catalogInfo';
 import { VocabularyRequestError, VocabularyRequest, requestVocabulary } from './vocabularyRequest';
 
 // Scaffolder actions of the DataHub write path (F2). Every one re-checks who is
@@ -240,6 +243,38 @@ export function requestVocabularyAction({ config, userInfo }: ActionOptions) {
       ctx.output('dryRun', res.dryRun);
       ctx.output('alreadyRequested', res.alreadyRequested);
       if (res.issueUrl) ctx.output('issueUrl', res.issueUrl);
+    },
+  });
+}
+
+interface WriteCatalogInfoInput {
+  brief: DataBrief;
+}
+
+/**
+ * Writes catalog-info.yaml (+ README.md) for a data product into the scaffolder workspace: a System, a Resource per store and a
+ * Component per process, annotated with the DataHub URNs they mirror and carrying a DataHub link. It touches neither DataHub nor
+ * GitHub, so it is dry-run friendly (the scaffolder's dry-run runs it and returns the files).
+ */
+export function writeCatalogInfoAction({ config, userInfo }: ActionOptions) {
+  return createTemplateAction<WriteCatalogInfoInput>({
+    id: 'datahub:write-catalog-info',
+    description: 'Generates the Backstage catalog-info.yaml (System/Resources/Components annotated with datahub.io/*) for a data product.',
+    supportsDryRun: true,
+    schema: {
+      input: { type: 'object', required: ['brief'], properties: { brief: { type: 'object' } } },
+      output: { type: 'object', properties: { entities: { type: 'array' }, catalogInfoPath: { type: 'string' } } },
+    },
+    async handler(ctx) {
+      const s = settingsOrThrow(config);
+      const caller = await callerFrom(await ctx.getInitiatorCredentials(), userInfo);
+      await requireDatahubAccess(config, caller, s.accessGroups);
+      const info = buildCatalogInfo(ctx.input.brief, { ownerRef: caller.entityRef, publicUrl: s.publicUrl });
+      await fs.writeFile(resolvePath(ctx.workspacePath, 'catalog-info.yaml'), info.yaml);
+      await fs.writeFile(resolvePath(ctx.workspacePath, 'README.md'), info.readme);
+      ctx.logger.info(`datahub:write-catalog-info user=${caller.entityRef} entities=${info.entities.map(e => `${e.kind}/${e.name}`).join(',')}`);
+      ctx.output('entities', info.entities);
+      ctx.output('catalogInfoPath', '/catalog-info.yaml');
     },
   });
 }
