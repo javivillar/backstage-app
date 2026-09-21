@@ -6,6 +6,7 @@ import {
   registerAssetAction,
   registerDataProductAction,
   requestVocabularyAction,
+  writeCatalogInfoAction,
 } from './datahub-actions';
 
 /** The DataHub write path (F2). Inert unless `datahub.writes.enabled: true` (see datahubAuthz.assertWritesEnabled). */
@@ -27,6 +28,7 @@ export const datahubScaffolderModule = createBackendModule({
           deprecateAssetAction(options),
           checkImpactAction(options),
           requestVocabularyAction(options),
+          writeCatalogInfoAction(options),
         );
       },
     });
