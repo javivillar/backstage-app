@@ -1,5 +1,5 @@
 import { DataBrief } from './brief';
-import { canWrite } from './datahubAuthz';
+import { canWrite, capabilitiesFor } from './datahubAuthz';
 import { DatahubSettings } from './datahubClient';
 import { BriefError, ConflictError, applyDefaults, deprecateAsset, extendProduct, registerBrief } from './register';
 
@@ -267,4 +267,18 @@ describe('canWrite', () => {
     expect(canWrite({ isAdmin: true }, 'c@x.com', [], s, owners)).toBe(true);
   });
   it('a user in no group can do nothing', () => expect(canWrite({ isAdmin: false }, 'b@x.com', [], s, undefined)).toBe(false));
+});
+
+describe('capabilitiesFor', () => {
+  const s = { writesEnabled: true, writeGroups: ['datahub-admin', 'datahub-editor'], stewardGroups: ['datahub-admin'] };
+  it('a viewer can read but not create', () => {
+    expect(capabilitiesFor({ isAdmin: false }, 'b@x.com', ['datahub-viewer'], s)).toEqual({ canRead: true, canCreate: false, writesEnabled: true, isSteward: false });
+  });
+  it('an editor can create; a steward is flagged', () => {
+    expect(capabilitiesFor({ isAdmin: false }, 'b@x.com', ['datahub-editor'], s).canCreate).toBe(true);
+    expect(capabilitiesFor({ isAdmin: false }, 'b@x.com', ['datahub-admin'], s).isSteward).toBe(true);
+  });
+  it('nobody can create while the write path is switched off', () => {
+    expect(capabilitiesFor({ isAdmin: true }, 'a@x.com', ['datahub-admin'], { ...s, writesEnabled: false }).canCreate).toBe(false);
+  });
 });

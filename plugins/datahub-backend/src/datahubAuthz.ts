@@ -81,6 +81,30 @@ export function canWrite(
   return existingOwners.some(o => mine.has(o.toLowerCase()));
 }
 
+export interface Capabilities {
+  /** Every caller that gets this far can read (the access gate already ran). */
+  canRead: true;
+  /** May start the templates that CREATE things in DataHub (new product, register assets, deprecate). */
+  canCreate: boolean;
+  writesEnabled: boolean;
+  isSteward: boolean;
+}
+
+/** What this user can do, so the UI shows only the buttons that will work. Pure, unit-tested. */
+export function capabilitiesFor(
+  caller: Pick<Caller, 'isAdmin'>,
+  email: string,
+  groups: string[],
+  s: Pick<DatahubSettings, 'writesEnabled' | 'writeGroups' | 'stewardGroups'>,
+): Capabilities {
+  return {
+    canRead: true,
+    canCreate: s.writesEnabled && canWrite(caller, email, groups, s, undefined),
+    writesEnabled: s.writesEnabled,
+    isSteward: caller.isAdmin || groups.some(g => s.stewardGroups.includes(g)),
+  };
+}
+
 export function assertWritesEnabled(s: Pick<DatahubSettings, 'writesEnabled'>): void {
   if (!s.writesEnabled) {
     throw new Forbidden('Forbidden: the DataHub write path is disabled (datahub.writes.enabled is not true).');
