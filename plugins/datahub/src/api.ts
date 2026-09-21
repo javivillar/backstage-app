@@ -1,0 +1,95 @@
+import { useCallback, useEffect, useState } from 'react';
+import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
+
+export interface Check {
+  id: string;
+  label: string;
+  ok: boolean;
+  applicable: boolean;
+  hint: string;
+}
+
+export interface Score {
+  score: number;
+  governed: boolean;
+  threshold: number;
+  checks: Check[];
+}
+
+export interface Ref {
+  urn: string;
+  name: string;
+}
+
+export interface Summary {
+  urn: string;
+  type: 'dataset' | 'dataProduct' | 'dataFlow';
+  name: string;
+  description?: string;
+  platform?: string;
+  url: string;
+  domain?: Ref;
+  owners: Array<Ref & { kind: 'user' | 'group'; type: string }>;
+  tags: Ref[];
+  terms: Ref[];
+  classification?: string;
+  retentionDays?: number;
+  lawfulBasis?: string;
+  freshnessSlaHours?: number;
+  personalData: boolean;
+  deprecated: boolean;
+  deprecationNote?: string;
+  managedBy?: string;
+  columns?: { total: number; described: number };
+  score: Score;
+}
+
+export interface SearchResult {
+  total: number;
+  start: number;
+  count: number;
+  items: Summary[];
+  threshold: number;
+}
+
+export const TYPE_LABEL: Record<Summary['type'], string> = {
+  dataset: 'Dataset',
+  dataProduct: 'Data product',
+  dataFlow: 'Data flow',
+};
+
+async function errorText(res: Response): Promise<string> {
+  const body = await res.json().catch(() => ({}));
+  return body.error ?? `${res.status} ${res.statusText}`;
+}
+
+/** Calls the datahub-manager backend (read-only). Returns the parsed JSON or throws with the backend's message. */
+export function useDatahubFetch() {
+  const discoveryApi = useApi(discoveryApiRef);
+  const fetchApi = useApi(fetchApiRef);
+  return useCallback(
+    async <T,>(path: string): Promise<T> => {
+      const baseUrl = await discoveryApi.getBaseUrl('datahub-manager');
+      const res = await fetchApi.fetch(`${baseUrl}${path}`);
+      if (!res.ok) throw new Error(await errorText(res));
+      return (await res.json()) as T;
+    },
+    [discoveryApi, fetchApi],
+  );
+}
+
+export function useAssetSummary(urn: string) {
+  const get = useDatahubFetch();
+  const [state, setState] = useState<{ loading: boolean; error?: string; data?: Summary }>({ loading: true });
+  useEffect(() => {
+    let cancelled = false;
+    setState({ loading: true });
+    get<Summary>(`/assets/summary?urn=${encodeURIComponent(urn)}`)
+      .then(data => !cancelled && setState({ loading: false, data }))
+      .catch(e => !cancelled && setState({ loading: false, error: (e as Error).message }));
+    return () => {
+      cancelled = true;
+    };
+  }, [get, urn]);
+  return state;
+}

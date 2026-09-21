@@ -12,6 +12,7 @@ import Category from '@mui/icons-material/Category';
 import Schedule from '@mui/icons-material/Schedule';
 import Person from '@mui/icons-material/Person';
 import Schema from '@mui/icons-material/Schema';
+import Dataset from '@mui/icons-material/Dataset';
 import GridView from '@mui/icons-material/GridView';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
@@ -68,6 +69,7 @@ import { TechDocsAddons } from '@backstage/plugin-techdocs-react';
 import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
+import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
 import {
   IfKroResourceGraphAvailable,
   IfKroOverviewAvailable,
@@ -227,6 +229,13 @@ const overviewContent = (
       <EntityCatalogGraphCard height={400} />
     </div>
     <EntitySwitch>
+      <EntitySwitch.Case if={isDatahubAvailable}>
+        <div style={span(12)}>
+          <EntityDatahubCard />
+        </div>
+      </EntitySwitch.Case>
+    </EntitySwitch>
+    <EntitySwitch>
       <EntitySwitch.Case if={isArgocdAvailable}>
         <div style={span(12)}>
           <EntityArgoCDOverviewCard />
@@ -320,6 +329,13 @@ const serviceEntityPage = (
     >
       <EntityTerraformContent />
     </EntityLayout.Route>
+    <EntityLayout.Route
+      path="/datahub"
+      title={tabLabel(<Dataset />, 'Data governance')}
+      if={isDatahubAvailable}
+    >
+      <EntityDatahubContent />
+    </EntityLayout.Route>
   </EntityLayout>
 );
 
@@ -360,6 +376,13 @@ const websiteEntityPage = (
       if={isTerraformAvailable}
     >
       <EntityTerraformContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route
+      path="/datahub"
+      title={tabLabel(<Dataset />, 'Data governance')}
+      if={isDatahubAvailable}
+    >
+      <EntityDatahubContent />
     </EntityLayout.Route>
   </EntityLayout>
 );
@@ -411,6 +434,13 @@ const defaultEntityPage = (
     </EntityLayout.Route>
     <EntityLayout.Route path="/docs" title={tabLabel(<Description />, 'Docs')}>
       {techdocsContent}
+    </EntityLayout.Route>
+    <EntityLayout.Route
+      path="/datahub"
+      title={tabLabel(<Dataset />, 'Data governance')}
+      if={isDatahubAvailable}
+    >
+      <EntityDatahubContent />
     </EntityLayout.Route>
   </EntityLayout>
 );

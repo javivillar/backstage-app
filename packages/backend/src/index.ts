@@ -22,6 +22,7 @@ import {
   activepiecesManagerPlugin,
   activepiecesScaffolderModule,
 } from '@internal/backstage-plugin-activepieces-backend';
+import { datahubManagerPlugin } from '@internal/backstage-plugin-datahub-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -174,6 +175,13 @@ backend.add(alfrescoManagerPlugin);
 // the API key used underneath is platform-wide) — see
 // plugins/activepieces-backend/src/activepiecesAuthz.ts.
 backend.add(activepiecesManagerPlugin);
+
+// DataHub manager (phase 1, READ ONLY) — entity card, governance tab and the
+// /datahub catalog page. Talks to DataHub with a Reader service-account token;
+// per-user access is enforced in the plugin (datahub-* Keycloak group gate)
+// — see plugins/datahub-backend/src/datahubAuthz.ts and
+// BACKSTAGE-DATAHUB-DESIGN.md.
+backend.add(datahubManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
