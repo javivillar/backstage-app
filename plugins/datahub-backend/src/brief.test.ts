@@ -1,4 +1,4 @@
-import { DataBrief, Vocabulary, storeUrn, validateBrief } from './brief';
+import { DataBrief, Vocabulary, normalizeBrief, storeUrn, validateBrief } from './brief';
 import { buildPlan, undoOrder } from './plan';
 
 const vocab: Vocabulary = {
@@ -165,5 +165,27 @@ describe('buildPlan', () => {
     const product = plan[plan.length - 1];
     const assets = (product.aspects.dataProductProperties as { assets: Array<{ destinationUrn: string }> }).assets.map(a => a.destinationUrn);
     expect(assets).toEqual([storeUrn(b.stores[0]), 'urn:li:dataFlow:(camunda,checkout,prod)']);
+  });
+});
+
+describe('normalizeBrief', () => {
+  it('maps the short ids a form collects to DataHub URNs', () => {
+    const n = normalizeBrief(
+      brief({ domain: 'sales', businessOwner: 'sales-analytics', technicalOwner: 'carlos@x.com', steward: 'datahub-admin', terms: ['personal-data'], tags: ['gold', ''] }),
+    );
+    expect(n.domain).toBe('urn:li:domain:sales');
+    expect(n.businessOwner).toBe('urn:li:corpGroup:sales-analytics');
+    expect(n.technicalOwner).toBe('urn:li:corpuser:carlos@x.com');
+    expect(n.steward).toBe('urn:li:corpGroup:datahub-admin');
+    expect(n.terms).toEqual(['urn:li:glossaryTerm:personal-data']);
+    expect(n.tags).toEqual(['urn:li:tag:gold']);
+  });
+
+  it('leaves URNs alone and treats empty strings as not given', () => {
+    const n = normalizeBrief(brief({ domain: 'urn:li:domain:sales', technicalOwner: '  ', steward: '' }));
+    expect(n.domain).toBe('urn:li:domain:sales');
+    expect(n.technicalOwner).toBe('');
+    expect(n.steward).toBeUndefined();
+    expect(validateBrief({ ...n, technicalOwner: 'urn:li:corpuser:a@x.com' }, vocab).errors).toEqual([]);
   });
 });

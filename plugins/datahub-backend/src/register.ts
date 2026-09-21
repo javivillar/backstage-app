@@ -1,4 +1,4 @@
-import { CLASSIFICATION_ORDER, DataBrief, Vocabulary, productUrn, validateBrief } from './brief';
+import { CLASSIFICATION_ORDER, DataBrief, Vocabulary, normalizeBrief, productUrn, validateBrief } from './brief';
 import { DatahubError, DatahubSettings, datahubQuery } from './datahubClient';
 import { deleteEntity, getAspect, upsertProposal } from './datahubWriter';
 import { PlanContext, PlannedType, Proposal, buildPlan } from './plan';
@@ -79,7 +79,7 @@ async function existingProductOwners(s: DatahubSettings, urn: string): Promise<s
 }
 
 export async function registerBrief(s: DatahubSettings, rawBrief: DataBrief, opts: RegisterOptions): Promise<RegisterResult> {
-  const brief = applyDefaults(rawBrief, s, opts.callerEmail);
+  const brief = applyDefaults(normalizeBrief(rawBrief), s, opts.callerEmail);
   const vocab: Vocabulary = await loadVocabulary(s);
   const validation = validateBrief(brief, vocab);
   if (validation.errors.length > 0) throw new BriefError(validation.errors);
@@ -192,7 +192,7 @@ export async function extendProduct(
     processes: additions.processes,
     backstageEntity: customProp(p.properties?.customProperties, 'backstageEntity'),
   };
-  const b = applyDefaults(brief, s, opts.callerEmail);
+  const b = applyDefaults(normalizeBrief(brief), s, opts.callerEmail);
   const validation = validateBrief(b, await loadVocabulary(s));
   if (validation.errors.length > 0) throw new BriefError(validation.errors);
   const plan = buildPlan(b, validation, opts.ctx);

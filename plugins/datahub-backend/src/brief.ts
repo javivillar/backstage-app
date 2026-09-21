@@ -94,6 +94,41 @@ export function storeRef(s: StoreBrief): string {
   return `${s.kind}:${s.name}`;
 }
 
+const looksLikeUrn = (v: string) => v.startsWith('urn:li:');
+
+/**
+ * Templates are forms: people type `sales`, `sales-analytics`, `ana@x.com`,
+ * `personal-data`. This turns short ids into the URNs DataHub uses, so the
+ * template stays trivial (no string-building in Nunjucks) and the mapping is
+ * tested. Anything that already is a URN passes through untouched, and empty
+ * strings count as "not given".
+ */
+export function normalizeBrief(b: DataBrief): DataBrief {
+  const some = (v?: string) => (v && v.trim() ? v.trim() : undefined);
+  const owner = (v?: string): string | undefined => {
+    const x = some(v);
+    if (!x) return undefined;
+    if (looksLikeUrn(x)) return x;
+    return x.includes('@') ? `urn:li:corpuser:${x}` : `urn:li:corpGroup:${x}`;
+  };
+  const withPrefix = (prefix: string) => (v?: string) => {
+    const x = some(v);
+    if (!x) return undefined;
+    return looksLikeUrn(x) ? x : `${prefix}${x}`;
+  };
+  const list = (xs: string[] | undefined, f: (v?: string) => string | undefined) =>
+    xs === undefined ? undefined : xs.map(f).filter((x): x is string => !!x);
+  return {
+    ...b,
+    domain: withPrefix('urn:li:domain:')(b.domain) ?? '',
+    businessOwner: owner(b.businessOwner) ?? '',
+    technicalOwner: owner(b.technicalOwner) ?? '',
+    steward: owner(b.steward),
+    terms: list(b.terms, withPrefix('urn:li:glossaryTerm:')),
+    tags: list(b.tags, withPrefix('urn:li:tag:')),
+  };
+}
+
 export function storeUrn(s: StoreBrief): string {
   const env = s.env ?? 'PROD';
   switch (s.kind) {
@@ -147,7 +182,7 @@ export function validateBrief(brief: DataBrief, vocab: Vocabulary): Validation {
     ['technicalOwner', brief.technicalOwner],
     ['steward', brief.steward],
   ] as const) {
-    if (urn !== undefined && !OWNER_URN.test(urn)) err(`${label} must be a urn:li:corpuser / urn:li:corpGroup URN`);
+    if (urn && !OWNER_URN.test(urn)) err(`${label} must be a urn:li:corpuser / urn:li:corpGroup URN`);
   }
   if (!brief.businessOwner) err('businessOwner is required');
   if (!brief.technicalOwner) err('technicalOwner is required');
