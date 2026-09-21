@@ -18,6 +18,8 @@ const PERSONAL_TAGS = ['urn:li:tag:pii', 'urn:li:tag:gdpr'];
 
 export interface RawEntity {
   urn: string;
+  /** DataHub answers an unknown URN with an EMPTY entity (not null) and `exists: false`. */
+  exists?: boolean | null;
   name?: string | null;
   platform?: { name?: string | null } | null;
   properties?: {
@@ -95,6 +97,11 @@ export interface Summary {
   managedBy?: string;
   columns?: { total: number; described: number };
   score: Score;
+}
+
+/** True when DataHub has no such asset (it returns a hollow object, not null, for an unknown URN). */
+export function isMissing(raw: RawEntity | null | undefined): boolean {
+  return !raw || raw.exists === false;
 }
 
 function structured(raw: RawEntity, qualifiedName: string): { s?: string; n?: number } {

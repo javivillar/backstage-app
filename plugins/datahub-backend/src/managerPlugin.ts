@@ -2,7 +2,7 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import express, { Request, Response, Router } from 'express';
 import { DatahubError, DatahubSettings, datahubQuery, datahubSettings } from './datahubClient';
 import { Caller, Forbidden, callerFrom, requireDatahubAccess } from './datahubAuthz';
-import { RawEntity, Summary, summarize } from './governance';
+import { RawEntity, Summary, isMissing, summarize } from './governance';
 import {
   Q_DATASET,
   Q_DATA_FLOW,
@@ -96,7 +96,7 @@ export const datahubManagerPlugin = createBackendPlugin({
           const { doc, key } = QUERY_BY_TYPE[type];
           const data = await datahubQuery<Record<string, RawEntity | null>>(settings, doc, { urn });
           const raw = data[key];
-          if (!raw) throw new HttpError(`No such ${type} in DataHub: ${urn}`, 404);
+          if (!raw || isMissing(raw)) throw new HttpError(`No such ${type} in DataHub: ${urn}`, 404);
           return summarize(type, raw, settings.publicUrl, settings.governedThreshold);
         }
 
