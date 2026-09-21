@@ -1,6 +1,6 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { Request, Router } from 'express';
-import { camundaFetch, camundaPublicUrl } from './camundaClient';
+import { camundaFetch, camundaPublicUrl, deleteAllProcessDefinitionVersions } from './camundaClient';
 import { ADMIN_GROUP_REF, CallerInfo, ownerMap, requireOwnerOrAdmin } from './ownership';
 
 interface ProcessDefinition {
@@ -79,14 +79,7 @@ export const camundaManagerPlugin = createBackendPlugin({
             const key = req.params.key;
             await requireOwnerOrAdmin(config, caller, key);
 
-            const delRes = await camundaFetch(
-              config,
-              `/process-definition/key/${encodeURIComponent(key)}?cascade=true`,
-              { method: 'DELETE' },
-            );
-            if (!delRes.ok && delRes.status !== 204) {
-              throw new Error(`${delRes.status} ${await delRes.text()}`);
-            }
+            await deleteAllProcessDefinitionVersions(config, key);
             res.status(204).send();
           } catch (e) {
             logger.error('camunda-manager DELETE /process-definitions failed', e as Error);

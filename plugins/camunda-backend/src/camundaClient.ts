@@ -38,3 +38,33 @@ export function camundaPublicUrl(config: Config): string {
     ''
   );
 }
+
+/**
+ * `DELETE /process-definition/key/{key}` only removes the LATEST version
+ * (verified live, 2026-09-06) — a key with any history (i.e. ever redeployed
+ * via camunda:update-process) is left with older versions still active and
+ * visible after that call, silently defeating "delete this process". Delete
+ * every version's own id individually instead.
+ */
+export async function deleteAllProcessDefinitionVersions(
+  config: Config,
+  processKey: string,
+): Promise<void> {
+  const listRes = await camundaFetch(config, `/process-definition?key=${encodeURIComponent(processKey)}`);
+  if (!listRes.ok) {
+    throw new Error(
+      `Failed to list versions of Camunda process "${processKey}": ${listRes.status} ${await listRes.text()}`,
+    );
+  }
+  const versions = (await listRes.json()) as { id: string }[];
+  for (const { id } of versions) {
+    const delRes = await camundaFetch(config, `/process-definition/${encodeURIComponent(id)}?cascade=true`, {
+      method: 'DELETE',
+    });
+    if (!delRes.ok && delRes.status !== 204) {
+      throw new Error(
+        `Failed to delete Camunda process "${processKey}" version ${id}: ${delRes.status} ${await delRes.text()}`,
+      );
+    }
+  }
+}
