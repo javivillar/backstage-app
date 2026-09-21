@@ -1,7 +1,8 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Response, Router } from 'express';
 import { DatahubError, DatahubSettings, datahubQuery, datahubSettings } from './datahubClient';
-import { Caller, Forbidden, callerFrom, requireDatahubAccess } from './datahubAuthz';
+import { Caller, Forbidden, callerFrom, capabilitiesFor, requireDatahubAccess } from './datahubAuthz';
+import { getUserEmail, getUserGroupNames } from './keycloakLookup';
 import { RawEntity, Summary, isMissing, summarize } from './governance';
 import { Q_DATASET, Q_DATA_FLOW, Q_DATA_PRODUCT, Q_IMPACT, Q_SEARCH } from './queries';
 import { RawImpactResult, summarizeImpact } from './impact';
@@ -107,6 +108,15 @@ export const datahubManagerPlugin = createBackendPlugin({
           guarded('GET /assets/score', async (req, _res, { settings }) => {
             const s = await loadSummary(settings, req.query.urn);
             return { urn: s.urn, ...s.score };
+          }),
+        );
+
+        // What THIS user can do (drives which "create" buttons the UI shows).
+        router.get(
+          '/capabilities',
+          guarded('GET /capabilities', async (_req, _res, { caller, settings }) => {
+            const [email, groups] = await Promise.all([getUserEmail(config, caller.username), getUserGroupNames(config, caller.username)]);
+            return capabilitiesFor(caller, email, groups, settings);
           }),
         );
 

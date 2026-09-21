@@ -17,10 +17,53 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { SearchResult, TYPE_LABEL, useDatahubFetch } from '../api';
+import { SearchResult, TYPE_LABEL, useCapabilities, useDatahubFetch } from '../api';
 import { ClassificationChip, OwnerChips, ScoreBar } from './parts';
 
 const PAGE = 25;
+
+// The scaffolder is mounted at /create; each template is /create/templates/<namespace>/<name>.
+const template = (name: string) => `/create/templates/default/${name}`;
+
+/**
+ * The actions of this plugin live in the software templates: this bar puts them where people look for them.
+ * Templates that CREATE things in DataHub only show for users whose group allows it (GET /capabilities).
+ */
+function ActionsBar() {
+  const caps = useCapabilities();
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+        {caps?.canCreate && (
+          <>
+            <Button variant="contained" href={template('datahub-new-data-product')}>
+              New data product
+            </Button>
+            <Button variant="outlined" href={template('datahub-register-asset')}>
+              Add assets to a product
+            </Button>
+            <Button variant="outlined" href={template('datahub-deprecate-asset')}>
+              Deprecate an asset
+            </Button>
+          </>
+        )}
+        <Button variant="outlined" href={template('datahub-check-impact')}>
+          Check impact of a change
+        </Button>
+        <Button variant="outlined" href={template('datahub-request-vocabulary')}>
+          Request vocabulary
+        </Button>
+      </Box>
+      {caps && !caps.canCreate && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          {caps.writesEnabled
+            ? 'Creating data products needs the datahub-editor group. You can read, check impact and request vocabulary.'
+            : 'Creating data products is switched off. You can read, check impact and request vocabulary.'}
+        </Typography>
+      )}
+    </Box>
+  );
+}
 
 /**
  * /datahub — read-only search over the DataHub catalog with the governance
@@ -55,6 +98,7 @@ export function DatahubCatalogPage() {
     <Page themeId="tool">
       <Header title="DataHub" subtitle="Data assets and their governance completeness (read-only)" />
       <Content>
+        <ActionsBar />
         <Box
           component="form"
           onSubmit={(e: React.FormEvent) => {

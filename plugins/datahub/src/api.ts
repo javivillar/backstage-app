@@ -117,6 +117,29 @@ export interface Impact {
   items: ImpactItem[];
 }
 
+export interface Capabilities {
+  canRead: boolean;
+  canCreate: boolean;
+  writesEnabled: boolean;
+  isSteward: boolean;
+}
+
+/** What the current user may do (undefined while loading or if the call fails: buttons that need it stay hidden). */
+export function useCapabilities(): Capabilities | undefined {
+  const get = useDatahubFetch();
+  const [caps, setCaps] = useState<Capabilities | undefined>();
+  useEffect(() => {
+    let cancelled = false;
+    get<Capabilities>('/capabilities')
+      .then(c => !cancelled && setCaps(c))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [get]);
+  return caps;
+}
+
 /** Downstream impact of an asset (only meaningful for datasets; other kinds are skipped by the caller). */
 export function useImpact(urn: string, enabled: boolean) {
   const get = useDatahubFetch();
