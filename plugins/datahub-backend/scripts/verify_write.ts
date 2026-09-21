@@ -20,7 +20,7 @@
  * changes what that rule allows. Change it only through a reviewed PR.
  */
 import * as fs from 'fs';
-import { softDeleteEntity } from '../src/datahubWriter';
+import { getAspect, softDeleteEntity } from '../src/datahubWriter';
 import { DatahubSettings, datahubQuery } from '../src/datahubClient';
 import { deprecateAsset, registerBrief } from '../src/register';
 import { DataBrief } from '../src/brief';
@@ -138,15 +138,14 @@ async function exists(type: AssetKind, urn: string): Promise<boolean> {
   return !!d[type]?.exists;
 }
 
-/** True when the asset is gone OR soft-deleted (`status.removed`), which is how the undo hides things. */
+/**
+ * True when the asset is gone OR soft-deleted (`status.removed`), which is how the undo hides things.
+ * The `status` aspect is read over REST because GraphQL's `DataProduct` type has no `status` field.
+ */
 async function hidden(type: AssetKind, urn: string): Promise<boolean> {
-  const d = await datahubQuery<Record<string, { exists?: boolean; status?: { removed?: boolean } | null } | null>>(
-    settings,
-    `query($u:String!){ ${type}(urn:$u){ exists status{ removed } } }`,
-    { u: urn },
-  );
-  const e = d[type];
-  return !e?.exists || e.status?.removed === true;
+  if (!(await exists(type, urn))) return true;
+  const st = await getAspect<{ removed?: boolean }>(settings, type, urn, 'status');
+  return st?.removed === true;
 }
 
 const seconds = (t0: number) => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
