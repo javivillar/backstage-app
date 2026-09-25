@@ -15,6 +15,7 @@ import StorageIcon from '@mui/icons-material/Storage';
 import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import HubIcon from '@mui/icons-material/Hub';
 import DatasetIcon from '@mui/icons-material/Dataset';
+import ApiIcon from '@mui/icons-material/Api';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -100,6 +101,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         <SidebarItem icon={StorageIcon} to="seaweedfs-manager" text="SeaweedFS Manager" />
         <SidebarItem icon={FolderSharedIcon} to="alfresco-manager" text="Alfresco Manager" />
         <SidebarItem icon={HubIcon} to="activepieces-manager" text="Activepieces Manager" />
+        <SidebarItem icon={ApiIcon} to="gravitee-manager" text="Gravitee Manager" />
         <SidebarItem icon={DatasetIcon} to="datahub" text="DataHub" />
         <SidebarDivider />
         <span

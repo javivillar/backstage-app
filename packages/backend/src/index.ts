@@ -27,6 +27,7 @@ import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
 } from '@internal/backstage-plugin-alfresco-backend';
+import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backend';
 
 const backend = createBackend();
 
@@ -184,6 +185,15 @@ backend.add(activepiecesManagerPlugin);
 backend.add(datahubManagerPlugin);
 // DataHub write path (scaffolder actions, F2) — inert unless datahub.writes.enabled: true.
 backend.add(datahubScaffolderModule);
+
+// Gravitee manager -- list/create endpoints backing the /gravitee-manager page
+// ("soft" self-service of Gravitee gateways = v4 HTTP proxy APIs). The caller
+// becomes the API's native Gravitee PRIMARY_OWNER; teammates (same
+// gravitee-team-* Keycloak group) get a read-only view here. Deliberately NO
+// scaffolder module: task parameters are visible to every user while the
+// permission policy is allow-all. Answers 503 unless graviteeAdmin.* is
+// configured -- see plugins/gravitee-backend/README.md.
+backend.add(graviteeManagerPlugin);
 
 // Terraform backend
 if (process.env.MOCK_MODE !== 'true') {
