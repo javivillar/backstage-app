@@ -33,10 +33,13 @@ interface V2Page<T> {
   pagination?: { page: number; pageCount: number };
 }
 
+// The v2 list omits primaryOwner and deploymentState unless expanded (verified on
+// APIM 4.12: without it every API looked like a teammate's, even to its owner).
+// `expands` takes one comma-separated value; a repeated parameter keeps only the first.
 export async function listAllApis(config: Config): Promise<GvApi[]> {
   const out: GvApi[] = [];
   for (let page = 1; ; page++) {
-    const res = await gvJson<V2Page<GvApi>>(config, `${envV2Path(config)}/apis?page=${page}&perPage=100`);
+    const res = await gvJson<V2Page<GvApi>>(config, `${envV2Path(config)}/apis?page=${page}&perPage=100&expands=primaryOwner,deploymentState`);
     out.push(...(res.data ?? []));
     if (!res.pagination || page >= res.pagination.pageCount) return out;
   }
