@@ -1,3 +1,4 @@
+import { Entity } from '@backstage/catalog-model';
 import { cloneElement, type CSSProperties, type ReactElement } from 'react';
 import Dashboard from '@mui/icons-material/Dashboard';
 import RocketLaunch from '@mui/icons-material/RocketLaunch';
@@ -71,6 +72,12 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
+import { EntityAvailabilityCard } from './EntityAvailabilityCard';
+import { EntitySecurityCard } from './EntitySecurityCard';
+import { NAMESPACE_ANNOTATION } from './usePrometheus';
+
+// services of the stack: the catalog entities that say which namespace they run in
+const hasNamespace = (entity: Entity) => Boolean(entity.metadata.annotations?.[NAMESPACE_ANNOTATION]);
 import {
   IfKroResourceGraphAvailable,
   IfKroOverviewAvailable,
@@ -233,6 +240,16 @@ const overviewContent = (
       <EntitySwitch.Case if={hasServiceMetadata}>
         <div style={span(12)}>
           <EntityServiceMetadataCard />
+        </div>
+      </EntitySwitch.Case>
+    </EntitySwitch>
+    <EntitySwitch>
+      <EntitySwitch.Case if={hasNamespace}>
+        <div style={span(12)}>
+          <EntityAvailabilityCard />
+        </div>
+        <div style={span(12)}>
+          <EntitySecurityCard />
         </div>
       </EntitySwitch.Case>
     </EntitySwitch>
