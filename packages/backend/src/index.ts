@@ -136,6 +136,13 @@ if (process.env.MOCK_MODE === 'true') {
   backend.add(import('@terasky/backstage-plugin-kro-resources-backend'));
 }
 
+// Argo CD: the API behind the Argo CD card of the entity page (/api/argocd/...). It was a
+// dependency of this package but never registered, so the card answered "Cannot get argo
+// location(s) for service" (404). Mock mode has its own stub (./plugins/mock-argocd, below).
+if (process.env.MOCK_MODE !== 'true' && k8sEnabled) {
+  backend.add(import('@roadiehq/backstage-plugin-argo-cd-backend'));
+}
+
 // Keycloak OIDC auth
 if (process.env.KEYCLOAK_URL) {
   backend.add(authModuleKeycloakOIDCProvider);
