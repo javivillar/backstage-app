@@ -21,6 +21,8 @@ import {
   ArgoCDApiClient,
 } from '@roadiehq/backstage-plugin-argo-cd';
 import { keycloakApis } from '@internal/plugin-keycloak';
+import { techRadarApiRef } from '@backstage-community/plugin-tech-radar';
+import { ConfigTechRadarApi } from './techRadar';
 
 export const apis: AnyApiFactory[] = [
   createApiFactory({
@@ -62,6 +64,11 @@ export const apis: AnyApiFactory[] = [
         searchInstances: true,
         useNamespacedApps: false,
       }),
+  }),
+  createApiFactory({
+    api: techRadarApiRef,
+    deps: { configApi: configApiRef },
+    factory: ({ configApi }) => new ConfigTechRadarApi(configApi),
   }),
   ...keycloakApis,
 ];

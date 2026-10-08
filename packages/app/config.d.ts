@@ -40,4 +40,31 @@ export interface Config {
       iconUrl?: string;
     }>;
   };
+  /**
+   * Tech Radar shown at /tech-radar: technologies and where the organization stands on each.
+   * @deepVisibility frontend
+   */
+  techRadar?: {
+    /** The four quadrants (kinds of technology) */
+    quadrants?: Array<{ id: string; name: string }>;
+    /** Rings, from the centre outwards. Default: adopt, trial, assess, hold */
+    rings?: Array<{
+      id: string;
+      name: string;
+      color: string;
+      description?: string;
+    }>;
+    entries?: Array<{
+      id: string;
+      title: string;
+      /** id of a quadrant */
+      quadrant: string;
+      /** id of a ring */
+      ring: string;
+      /** Date of the decision (YYYY-MM-DD) */
+      date?: string;
+      description?: string;
+      url?: string;
+    }>;
+  };
 }
