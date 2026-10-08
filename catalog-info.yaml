@@ -1,9 +1,25 @@
+# Backstage catalog entry of this repository (read by the Refresquito Backstage).
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: backstage-idpbuilder
-  description: An example of a Backstage application.
+  name: backstage-app
+  title: Backstage app (Refresquito)
+  description: 'The Backstage application of the platform (fork of the CNOE app): frontend, backend and the Refresquito plugins. Each push to main builds the image that cnoe-oneke deploys.'
+  annotations:
+    github.com/project-slug: javivillar/backstage-app
+    backstage.io/source-location: url:https://github.com/javivillar/backstage-app/tree/main/
+  tags:
+  - fork
+  - typescript
+  - backstage
+  links:
+  - url: https://github.com/javivillar/backstage-app
+    title: Repository
+    icon: github
 spec:
   type: website
-  owner: guests
-  lifecycle: experimental
+  lifecycle: production
+  owner: group:default/platform-team
+  system: platform
+  dependencyOf:
+  - component:default/cnoe-oneke
