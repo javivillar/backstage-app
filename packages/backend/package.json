@@ -27,6 +27,7 @@
     "@backstage/plugin-auth-backend-module-oidc-provider": "^0.4.14",
     "@backstage/plugin-auth-node": "^0.6.14",
     "@backstage/plugin-catalog-backend": "^3.5.0",
+    "@backstage/plugin-catalog-backend-module-github": "^0.13.0",
     "@backstage/plugin-catalog-backend-module-gitlab": "^0.8.0",
     "@backstage/plugin-catalog-backend-module-scaffolder-entity-model": "^0.2.18",
     "@backstage/plugin-catalog-node": "^2.2.0",
