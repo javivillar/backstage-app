@@ -6,13 +6,15 @@ import { NAMESPACE_ANNOTATION, usePrometheus } from './usePrometheus';
 const WINDOW = '15d';
 const TARGET_ANNOTATION = 'refresquito.io/sla-availability';
 
+const TONES = { ok: '#2e7d32', bad: '#c62828' };
+
 const pct = (value: number | undefined, digits = 2) =>
   value === undefined || Number.isNaN(value) ? '—' : `${value.toFixed(digits)} %`;
 
 const Figure = ({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: 'ok' | 'bad' }) => (
   <div style={{ minWidth: 0 }}>
     <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.65 }}>{label}</div>
-    <div style={{ fontSize: '1.9rem', fontWeight: 600, lineHeight: 1.25, color: tone === 'ok' ? '#2e7d32' : tone === 'bad' ? '#c62828' : undefined }}>
+    <div style={{ fontSize: '1.9rem', fontWeight: 600, lineHeight: 1.25, color: tone ? TONES[tone] : undefined }}>
       {value}
     </div>
     {note && <div style={{ fontSize: '0.85rem', opacity: 0.75 }}>{note}</div>}
@@ -50,19 +52,27 @@ export const EntityAvailabilityCard = () => {
     const total = value?.total[0]?.value;
     const http = value?.http[0]?.value;
     const met = availability !== undefined && target !== undefined ? availability >= target : undefined;
+    let metTone: 'ok' | 'bad' | undefined;
+    let metNote = 'no data yet';
+    if (met !== undefined) {
+      metTone = met ? 'ok' : 'bad';
+      metNote = met ? 'meets the target' : 'below the target';
+    }
+    let readyTone: 'ok' | 'bad' | undefined;
+    if (total !== undefined) readyTone = ready === total ? 'ok' : 'bad';
     body = (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 28 }}>
         <Figure
           label={`Measured, last ${WINDOW.replace('d', ' days')}`}
           value={pct(availability)}
-          tone={met === undefined ? undefined : met ? 'ok' : 'bad'}
-          note={met === undefined ? 'no data yet' : met ? 'meets the target' : 'below the target'}
+          tone={metTone}
+          note={metNote}
         />
         <Figure label="Target" value={target !== undefined ? pct(target, target % 1 === 0 ? 0 : 1) : '—'} note={targetText ?? 'no service level defined'} />
         <Figure
           label="Workloads ready now"
           value={total === undefined ? '—' : `${ready ?? 0} / ${total}`}
-          tone={total === undefined ? undefined : ready === total ? 'ok' : 'bad'}
+          tone={readyTone}
           note="deployments and stateful sets"
         />
         <Figure label="HTTP requests without 5xx" value={pct(http)} note={http === undefined ? 'no traffic through the ingress' : `last ${WINDOW.replace('d', ' days')}`} />
