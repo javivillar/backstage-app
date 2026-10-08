@@ -101,6 +101,10 @@ backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 // Catalog
 backend.add(import('@backstage/plugin-catalog-backend'));
 
+// Discover catalog-info.yaml files in the repositories of a GitHub owner. Does nothing until
+// app-config declares catalog.providers.github (owner, filters, schedule).
+backend.add(import('@backstage/plugin-catalog-backend-module-github'));
+
 // Add GitLab integration for catalog processing
 if (process.env.GIT_HOSTNAME) {
   backend.add(import('@backstage/plugin-catalog-backend-module-gitlab'));
