@@ -70,6 +70,7 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
+import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import {
   IfKroResourceGraphAvailable,
   IfKroOverviewAvailable,
@@ -228,6 +229,13 @@ const overviewContent = (
     <div style={span(6)}>
       <EntityCatalogGraphCard height={400} />
     </div>
+    <EntitySwitch>
+      <EntitySwitch.Case if={hasServiceMetadata}>
+        <div style={span(12)}>
+          <EntityServiceMetadataCard />
+        </div>
+      </EntitySwitch.Case>
+    </EntitySwitch>
     <EntitySwitch>
       <EntitySwitch.Case if={isDatahubAvailable}>
         <div style={span(12)}>
