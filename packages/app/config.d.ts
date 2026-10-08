@@ -4,6 +4,16 @@ export interface Config {
    */
   homepage?: {
     /**
+     * Title of the hero of the homepage. Default: "Internal Developer Platform".
+     * @visibility frontend
+     */
+    title?: string;
+    /**
+     * Line under the title. Default: "Discover, manage, and deploy your services".
+     * @visibility frontend
+     */
+    subtitle?: string;
+    /**
      * Quick links displayed on the homepage
      * @visibility frontend
      */

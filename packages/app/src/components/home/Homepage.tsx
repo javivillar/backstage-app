@@ -245,6 +245,14 @@ const LinkIcon = () => (
 export const Homepage = () => {
   const config = useApi(configApiRef);
 
+  // Title and subtitle of the hero: from the configuration (homepage.title / homepage.subtitle),
+  // so that each deployment can name itself (e.g. its zone and program) without a new image.
+  const heroTitle =
+    config.getOptionalString('homepage.title') ?? 'Internal Developer Platform';
+  const heroSubtitle =
+    config.getOptionalString('homepage.subtitle') ??
+    'Discover, manage, and deploy your services';
+
   const tools: ToolCardProps[] = (() => {
     try {
       const links = config.getOptionalConfigArray('homepage.quickLinks');
@@ -288,10 +296,8 @@ export const Homepage = () => {
         <Content>
           {/* Hero */}
           <div className="cnoe-hero-header" style={heroStyle}>
-            <h1 style={heroTitleStyle}>Internal Developer Platform</h1>
-            <p style={heroSubtitleStyle}>
-              Discover, manage, and deploy your services
-            </p>
+            <h1 style={heroTitleStyle}>{heroTitle}</h1>
+            <p style={heroSubtitleStyle}>{heroSubtitle}</p>
           </div>
 
           {/* Elevated search bar */}
