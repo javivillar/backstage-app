@@ -265,14 +265,17 @@ style.textContent = `
   }
 
   /* ===== FILTER SIDEBARS ===== */
-  /* Hide all filter sidebars — catalog uses empty filters, docs/create hidden via CSS */
+  /* Hide all filter sidebars — catalog uses empty filters, docs/create hidden via CSS.
+     Not on the graph page (body[data-route], set by RouteMarker in Root.tsx): there the same
+     two-column layout holds the controls that choose what the graph shows, and hiding them left
+     the page empty for good. */
   [class*="CatalogFilterLayout-filters"],
-  article > [class*="MuiGrid-container"] > [class*="MuiGrid-grid-lg-2"] {
+  body:not([data-route="catalog-graph"]) article > [class*="MuiGrid-container"] > [class*="MuiGrid-grid-lg-2"] {
     display: none !important;
   }
   /* Make content area take full width */
   [class*="CatalogFilterLayout-content"],
-  article > [class*="MuiGrid-container"] > [class*="MuiGrid-grid-lg-10"] {
+  body:not([data-route="catalog-graph"]) article > [class*="MuiGrid-container"] > [class*="MuiGrid-grid-lg-10"] {
     flex: 1 !important;
     max-width: 100% !important;
     flex-basis: 100% !important;
