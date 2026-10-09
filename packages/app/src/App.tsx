@@ -43,7 +43,7 @@ import { DatahubCatalogPage } from '@internal/plugin-datahub';
 import { GraviteeManagerPage } from '@internal/plugin-gravitee';
 import { createApp } from '@backstage/app-defaults';
 import { AppRouter, FlatRoutes } from '@backstage/core-app-api';
-import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
+import { StackGraphPage } from './components/catalog/StackGraphPage';
 import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
@@ -147,7 +147,7 @@ const routes = (
       {searchPage}
     </Route>
     <Route path="/settings" element={<UserSettingsPage />} />
-    <Route path="/catalog-graph" element={<CatalogGraphPage />} />
+    <Route path="/catalog-graph" element={<StackGraphPage />} />
   </FlatRoutes>
 );
 
