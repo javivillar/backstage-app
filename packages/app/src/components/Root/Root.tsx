@@ -1,4 +1,5 @@
-import { type PropsWithChildren } from 'react';
+import { type PropsWithChildren, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import MapIcon from '@mui/icons-material/MyLocation';
@@ -36,6 +37,7 @@ import {
   SidebarExpandButton,
 } from '@backstage/core-components';
 import { MyGroupsSidebarItem } from '@backstage/plugin-org';
+import { useGraphLink } from './useGraphLink';
 
 const sidebarLogoStyles = {
   root: {
@@ -71,9 +73,27 @@ const SidebarLogo = () => {
   );
 };
 
+/**
+ * Writes the first segment of the current path on <body data-route="...">, so the global styles
+ * of index.tsx can tell one page from another (class names are not readable in a build).
+ */
+const RouteMarker = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.body.dataset.route = pathname.split('/')[1] || 'home';
+  }, [pathname]);
+  return null;
+};
+
+/** "Graph": opens the catalog graph on every system instead of on an empty page. */
+const GraphSidebarItem = () => (
+  <SidebarItem icon={CategoryIcon} to={useGraphLink()} text="Graph" />
+);
+
 export const Root = ({ children }: PropsWithChildren<{}>) => (
   <SidebarPage>
     <Sidebar>
+      <RouteMarker />
       {/* Logo */}
       <SidebarLogo />
 
@@ -118,7 +138,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         </span>
         <SidebarScrollWrapper>
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
-          <SidebarItem icon={CategoryIcon} to="catalog-graph" text="Graph" />
+          <GraphSidebarItem />
         </SidebarScrollWrapper>
       </SidebarGroup>
 
