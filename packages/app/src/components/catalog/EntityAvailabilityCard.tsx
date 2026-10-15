@@ -32,9 +32,13 @@ export const EntityAvailabilityCard = () => {
   const ns = entity.metadata.annotations?.[NAMESPACE_ANNOTATION] ?? '';
   const targetText = entity.metadata.annotations?.[TARGET_ANNOTATION];
   const target = targetText ? parseFloat(targetText) : undefined;
+  // `max by` drops the labels of the scrape (instance, pod): when kube-state-metrics restarts on another
+  // address, both its old and its new series are in the window, and joining them as they are fails
+  // with "duplicate series for the match group" (Prometheus answers 422 and the card shows nothing).
+  const by = (metric: string, kind: string) => `max by (namespace,${kind}) (${metric}{namespace="${ns}"})`;
   const workloads =
-    `(kube_deployment_status_replicas_available{namespace="${ns}"} >= bool on(namespace,deployment) kube_deployment_spec_replicas{namespace="${ns}"})` +
-    ` or (kube_statefulset_status_replicas_ready{namespace="${ns}"} >= bool on(namespace,statefulset) kube_statefulset_replicas{namespace="${ns}"})`;
+    `(${by('kube_deployment_status_replicas_available', 'deployment')} >= bool on(namespace,deployment) ${by('kube_deployment_spec_replicas', 'deployment')})` +
+    ` or (${by('kube_statefulset_status_replicas_ready', 'statefulset')} >= bool on(namespace,statefulset) ${by('kube_statefulset_replicas', 'statefulset')})`;
   const requests = `traefik_service_requests_total{service=~"${ns}-.*"`;
   const { value, loading, error } = usePrometheus({
     availability: `avg_over_time((min(${workloads}))[${WINDOW}:5m]) * 100`,
