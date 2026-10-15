@@ -162,9 +162,22 @@ style.textContent = `
     text-align: center !important;
     width: 100% !important;
   }
-  /* Hide the actions/kebab menu container */
+  /* The right-hand block of the header: its labels (Owner, Lifecycle) stay hidden, but its menu (⋮: Unregister
+     entity, Inspect entity, Copy entity URL) is kept, in the top-right corner. Hiding the whole block left no way
+     to unregister an entity from the catalog. */
   main > header > div:last-child:not(:first-child) {
+    display: flex !important;
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  main > header > div:last-child:not(:first-child) > :not(button) {
     display: none !important;
+  }
+  main > header > div:last-child:not(:first-child) > button {
+    color: #fff !important;
   }
 
   /* ===== ENTITY PAGE CARD SHADOWS ===== */
