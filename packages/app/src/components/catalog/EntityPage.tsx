@@ -100,9 +100,17 @@ import {
   isTerraformAvailable,
 } from '@internal/plugin-terraform';
 import {
+  EntityArgoCDHistoryCard,
   EntityArgoCDOverviewCard,
   isArgocdAvailable,
 } from '@roadiehq/backstage-plugin-argo-cd';
+import { EntityGithubRunsCard } from './EntityGithubRunsCard';
+import { EntityDeploymentChangesCard } from './EntityDeploymentChangesCard';
+import { DEPLOYMENT_FILE_ANNOTATION, REPOSITORY_ANNOTATION, SLUG_ANNOTATION } from './useGithub';
+
+const hasGithubSlug = (e: Entity) => Boolean(e.metadata.annotations?.[SLUG_ANNOTATION]);
+const hasRepository = (e: Entity) => Boolean(e.metadata.annotations?.[REPOSITORY_ANNOTATION]);
+const hasDeploymentFile = (e: Entity) => Boolean(e.metadata.annotations?.[DEPLOYMENT_FILE_ANNOTATION]);
 
 // CSS grid layout helpers (replaces MUI Grid)
 const grid12: CSSProperties = {
@@ -173,8 +181,38 @@ const techdocsContent = (
   </EntityTechdocsContent>
 );
 
+// CI/CD: the CI of a repository (GitHub Actions), and for what Argo CD deploys, its deployments
+// (Argo CD history, the changes merged to the file that deploys it, the CI of its repository).
 const cicdContent = (
   <EntitySwitch>
+    <EntitySwitch.Case if={hasGithubSlug}>
+      <div style={grid12}>
+        <div style={span(12)}>
+          <EntityGithubRunsCard />
+        </div>
+      </div>
+    </EntitySwitch.Case>
+    <EntitySwitch.Case if={isArgocdAvailable}>
+      <div style={grid12}>
+        <div style={span(12)}>
+          <EntityArgoCDHistoryCard />
+        </div>
+        <EntitySwitch>
+          <EntitySwitch.Case if={hasDeploymentFile}>
+            <div style={span(12)}>
+              <EntityDeploymentChangesCard />
+            </div>
+          </EntitySwitch.Case>
+        </EntitySwitch>
+        <EntitySwitch>
+          <EntitySwitch.Case if={hasRepository}>
+            <div style={span(12)}>
+              <EntityGithubRunsCard title="CI of its repository: GitHub Actions" />
+            </div>
+          </EntitySwitch.Case>
+        </EntitySwitch>
+      </div>
+    </EntitySwitch.Case>
     <EntitySwitch.Case if={isArgoWorkflowsAvailable}>
       <div style={grid12}>
         <div style={span(12)}>
