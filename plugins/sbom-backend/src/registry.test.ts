@@ -13,9 +13,9 @@ const BOM = {
     { type: 'file', name: '/usr/lib/x.so' },
   ],
 };
-const IMAGE = 'sha256:' + 'a'.repeat(64);
-const SBOM_MANIFEST = 'sha256:' + 'b'.repeat(64);
-const LAYER = 'sha256:' + 'c'.repeat(64);
+const IMAGE = `sha256:${'a'.repeat(64)}`;
+const SBOM_MANIFEST = `sha256:${'b'.repeat(64)}`;
+const LAYER = `sha256:${'c'.repeat(64)}`;
 
 /** A registry in memory: a bearer challenge, then the manifests and blobs of one repository. */
 function registry({ referrersApi }: { referrersApi: boolean }) {
@@ -26,7 +26,7 @@ function registry({ referrersApi }: { referrersApi: boolean }) {
     manifests: [
       { mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: SBOM_MANIFEST, size: 1, artifactType: 'application/vnd.cyclonedx+json',
         annotations: { 'org.opencontainers.image.created': '2026-10-17T00:00:00Z', 'org.opencontainers.image.revision': 'abc123' } },
-      { mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: 'sha256:' + 'd'.repeat(64), size: 1, artifactType: 'application/vnd.other' },
+      { mediaType: 'application/vnd.oci.image.manifest.v1+json', digest: `sha256:${'d'.repeat(64)}`, size: 1, artifactType: 'application/vnd.other' },
     ],
   };
   const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
