@@ -510,6 +510,9 @@ const defaultEntityPage = (
     >
       <EntityDatahubContent />
     </EntityLayout.Route>
+    <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
+      <EntitySbomContent />
+    </EntityLayout.Route>
   </EntityLayout>
 );
 
