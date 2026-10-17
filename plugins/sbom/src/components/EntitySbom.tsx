@@ -16,8 +16,8 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Download from '@mui/icons-material/Download';
-import { sbomImages } from '../annotations';
-import { Component, ImageSbom, useDownload, useImageSbom } from '../api';
+import { SbomSource, sbomSources } from '../annotations';
+import { Component, ImageSbom, useDownload, useSbom } from '../api';
 
 const ECOSYSTEM_LABEL: Record<string, string> = {
   pypi: 'Python',
@@ -33,8 +33,9 @@ const ECOSYSTEM_LABEL: Record<string, string> = {
 
 const label = (ecosystem: string) => ECOSYSTEM_LABEL[ecosystem] ?? ecosystem;
 const shortDigest = (d?: string) => (d ? `${d.slice(0, 19)}…` : '');
-/** the part of the image a person reads: app-api:abc1234 */
-const imageName = (ref: string) => {
+/** the part of the image a person reads: app-api:abc1234; a release as repo@tag */
+const sourceName = ({ kind, ref }: SbomSource) => {
+  if (kind === 'release') return ref.split('/').pop() ?? ref;
   const last = ref.split('/').pop() ?? ref;
   const [name, tag] = last.split(/[:@]/);
   return tag ? `${name}:${tag.replace(/^sha256-?/, '').slice(0, 7)}` : name;
@@ -49,20 +50,32 @@ function Summary({ data }: { data: ImageSbom }) {
       title="SBOM"
       subheader={`${s.total} components · CycloneDX ${s.specVersion ?? ''}${s.generator ? ` · ${s.generator}` : ''}`}
       action={
-        <Button size="small" startIcon={<Download fontSize="small" />} onClick={() => download(data.image).catch(e => setError((e as Error).message))}>
+        <Button size="small" startIcon={<Download fontSize="small" />} onClick={() => download(data.kind, data.image).catch(e => setError((e as Error).message))}>
           CycloneDX JSON
         </Button>
       }
     >
       <Box sx={{ display: 'grid', gap: 1.5 }}>
         {error && <Typography color="error" variant="body2">{error}</Typography>}
-        <Typography variant="body2">
-          Image <code>{data.image}</code>
-          <br />
-          Digest <code title={data.digest}>{shortDigest(data.digest)}</code>
-          {data.created && <> · SBOM attached {new Date(data.created).toLocaleString()}</>}
-          {data.revision && <> · commit <code>{data.revision.slice(0, 7)}</code></>}
-        </Typography>
+        {data.kind === 'release' ? (
+          <Typography variant="body2">
+            Release{' '}
+            <a href={data.url} target="_blank" rel="noopener">
+              <code>{data.image}</code>
+            </a>
+            <br />
+            File <code>{data.asset}</code>
+            {data.created && <> · published {new Date(data.created).toLocaleString()}</>}
+          </Typography>
+        ) : (
+          <Typography variant="body2">
+            Image <code>{data.image}</code>
+            <br />
+            Digest <code title={data.digest}>{shortDigest(data.digest)}</code>
+            {data.created && <> · SBOM attached {new Date(data.created).toLocaleString()}</>}
+            {data.revision && <> · commit <code>{data.revision.slice(0, 7)}</code></>}
+          </Typography>
+        )}
         {s.frameworks.length > 0 && (
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -184,8 +197,8 @@ function Components({ components }: { components: Component[] }) {
   );
 }
 
-function ImageSbomView({ image }: { image: string }) {
-  const { loading, error, data } = useImageSbom(image);
+function SbomView({ source }: { source: SbomSource }) {
+  const { loading, error, data } = useSbom(source.kind, source.ref);
   if (loading) return <Progress />;
   if (error) {
     return (
@@ -198,8 +211,17 @@ function ImageSbomView({ image }: { image: string }) {
     return (
       <InfoCard title="SBOM">
         <Typography variant="body2">
-          The image <code>{image}</code> has no SBOM attached: it was built before its CI made SBOMs. The next image
-          its CI publishes (a merge in <code>main</code>) will have one.
+          {source.kind === 'release' ? (
+            <>
+              The release <code>{source.ref}</code> has no SBOM file: it was published before its release workflow made
+              SBOMs.
+            </>
+          ) : (
+            <>
+              The image <code>{source.ref}</code> has no SBOM attached: it was built before its CI made SBOMs. The next
+              image its CI publishes (a merge in <code>main</code>) will have one.
+            </>
+          )}
         </Typography>
       </InfoCard>
     );
@@ -212,23 +234,28 @@ function ImageSbomView({ image }: { image: string }) {
   );
 }
 
-/** The SBOM tab of a component: one view per image it runs (annotation refresquito.io/sbom-images). */
+/**
+ * The SBOM tab of a component: one view per image it runs (annotation refresquito.io/sbom-images) and per release of
+ * a library it is made of (refresquito.io/sbom-releases).
+ */
 export function EntitySbomContent() {
   const { entity } = useEntity();
-  const images = sbomImages(entity);
+  const sources = sbomSources(entity);
   const [current, setCurrent] = useState(0);
-  if (!images.length) return <Typography variant="body2">This component says no images (refresquito.io/sbom-images).</Typography>;
-  const index = Math.min(current, images.length - 1);
+  if (!sources.length) {
+    return <Typography variant="body2">This component says no images or releases (refresquito.io/sbom-images, refresquito.io/sbom-releases).</Typography>;
+  }
+  const index = Math.min(current, sources.length - 1);
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
-      {images.length > 1 && (
+      {sources.length > 1 && (
         <Tabs value={index} onChange={(_e, v) => setCurrent(v)}>
-          {images.map(ref => (
-            <Tab key={ref} label={imageName(ref)} />
+          {sources.map(source => (
+            <Tab key={`${source.kind}:${source.ref}`} label={sourceName(source)} />
           ))}
         </Tabs>
       )}
-      <ImageSbomView key={images[index]} image={images[index]} />
+      <SbomView key={`${sources[index].kind}:${sources[index].ref}`} source={sources[index]} />
     </Box>
   );
 }

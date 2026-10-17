@@ -23,7 +23,12 @@ export interface SbomSummary {
 }
 
 export interface ImageSbom {
+  /** the image, or for a release owner/repo@tag */
   image: string;
+  kind: 'image' | 'release';
+  /** a release: its page on GitHub and the name of its SBOM file */
+  url?: string;
+  asset?: string;
   digest?: string;
   sbomDigest?: string;
   created?: string;
@@ -37,7 +42,7 @@ async function errorText(res: Response): Promise<string> {
   return body.error ?? `${res.status} ${res.statusText}`;
 }
 
-export function useImageSbom(image: string) {
+export function useSbom(kind: 'image' | 'release', ref: string) {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [state, setState] = useState<{ loading: boolean; error?: string; data?: ImageSbom }>({ loading: true });
@@ -46,9 +51,10 @@ export function useImageSbom(image: string) {
     setState({ loading: true });
     (async () => {
       const base = await discovery.getBaseUrl('sbom');
-      const res = await fetch(`${base}/image?ref=${encodeURIComponent(image)}`);
+      const res = await fetch(`${base}/${kind}?ref=${encodeURIComponent(ref)}`);
       if (!res.ok) throw new Error(await errorText(res));
-      return (await res.json()) as ImageSbom;
+      const body = await res.json();
+      return { ...body, kind, image: body.image ?? body.release } as ImageSbom;
     })().then(
       data => alive && setState({ loading: false, data }),
       e => alive && setState({ loading: false, error: (e as Error).message }),
@@ -56,7 +62,7 @@ export function useImageSbom(image: string) {
     return () => {
       alive = false;
     };
-  }, [discovery, fetch, image]);
+  }, [discovery, fetch, kind, ref]);
   return state;
 }
 
@@ -65,9 +71,9 @@ export function useDownload() {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   return useCallback(
-    async (image: string) => {
+    async (kind: 'image' | 'release', image: string) => {
       const base = await discovery.getBaseUrl('sbom');
-      const res = await fetch(`${base}/image/raw?ref=${encodeURIComponent(image)}`);
+      const res = await fetch(`${base}/${kind}/raw?ref=${encodeURIComponent(image)}`);
       if (!res.ok) throw new Error(await errorText(res));
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement('a');

@@ -6,6 +6,9 @@ the registry (`oras attach`, artifact type `application/vnd.cyclonedx+json`), fo
 
 - `GET /api/sbom/image?ref=<image>`: its summary (components, ecosystems, licenses, the Refresquito frameworks).
 - `GET /api/sbom/image/raw?ref=<image>`: the CycloneDX document.
+- `GET /api/sbom/release?ref=<owner/repo@tag>` and `/release/raw`: the same for the SBOM file (`*.cdx.json`) of a
+  release of GitHub, for a library (annotation `refresquito.io/sbom-releases`), read with the token of
+  `integrations.github`.
 
 It finds the SBOM with the referrers API of the registry, or in the tag `sha256-<hex>` that oras writes on a registry
 without it. Signed-in users only; read only; only images under `sbom.allowedImages`.
@@ -14,4 +17,5 @@ without it. Signed-in users only; read only; only images under `sbom.allowedImag
 sbom:
   allowedImages: ['ghcr.io/javivillar/']
   dockerConfig: ${GHCR_DOCKERCONFIG}   # Docker config JSON with the pull credentials of the registry
+  allowedReleases: ['javivillar/']     # only releases of these repositories
 ```
