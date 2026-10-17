@@ -15,6 +15,7 @@ import Person from '@mui/icons-material/Person';
 import Schema from '@mui/icons-material/Schema';
 import Dataset from '@mui/icons-material/Dataset';
 import GridView from '@mui/icons-material/GridView';
+import Inventory from '@mui/icons-material/Inventory2';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
   EntityAboutCard,
@@ -71,6 +72,7 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
+import { EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
@@ -398,6 +400,9 @@ const serviceEntityPage = (
       if={isDatahubAvailable}
     >
       <EntityDatahubContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
+      <EntitySbomContent />
     </EntityLayout.Route>
   </EntityLayout>
 );

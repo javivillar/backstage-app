@@ -23,6 +23,7 @@ import {
   activepiecesScaffolderModule,
 } from '@internal/backstage-plugin-activepieces-backend';
 import { datahubManagerPlugin, datahubScaffolderModule } from '@internal/backstage-plugin-datahub-backend';
+import { sbomPlugin } from '@internal/backstage-plugin-sbom-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -196,6 +197,10 @@ backend.add(activepiecesManagerPlugin);
 backend.add(datahubManagerPlugin);
 // DataHub write path (scaffolder actions, F2) — inert unless datahub.writes.enabled: true.
 backend.add(datahubScaffolderModule);
+
+// SBOM tab -- the CycloneDX SBOM the CI attached to each image a component runs (annotation
+// refresquito.io/sbom-images), read from the registry (sbom.allowedImages, sbom.dockerConfig). Read only.
+backend.add(sbomPlugin);
 
 // Gravitee manager -- list/create endpoints backing the /gravitee-manager page
 // ("soft" self-service of Gravitee gateways = v4 HTTP proxy APIs). The caller
