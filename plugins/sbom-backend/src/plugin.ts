@@ -1,8 +1,9 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Response, Router } from 'express';
 import { SbomSummary, summarize } from './cyclonedx';
-import { FoundSbom, RegistryClient, RegistryError, credentialsFromDockerConfig, findSbom } from './registry';
+import { FoundSbom, RegistryClient, RegistryError, credentialsFromDockerConfig, findSbom, parseImageRef } from './registry';
 import { FoundReleaseSbom, findReleaseSbom } from './releases';
+import { ImageScan, findImageScan } from './vulnerabilities';
 
 /**
  * Backend of the SBOM tab: the CycloneDX SBOM that the CI attached to an image in the registry (oras attach), for
@@ -13,12 +14,15 @@ import { FoundReleaseSbom, findReleaseSbom } from './releases';
  *   GET /api/sbom/image/raw?ref=...                           the CycloneDX document as it is
  *   GET /api/sbom/release?ref=owner/repo@tag                   the same for the SBOM file of a release of GitHub
  *   GET /api/sbom/release/raw?ref=...                          (annotation refresquito.io/sbom-releases: a library)
+ *   GET /api/sbom/vulnerabilities?ref=<image>                  its vulnerabilities, from Wazuh's daily image scan
  *
  * Config (app-config):
  *   sbom:
  *     allowedImages: ['ghcr.io/javivillar/']   # only images under these prefixes are read (default: none)
  *     dockerConfig: ${GHCR_DOCKERCONFIG}         # a Docker config JSON with the pull credentials of the registry
  *     allowedReleases: ['javivillar/']           # only releases of repositories under these prefixes
+ *     vulnerabilitiesUrl: http://wazuh-oneke-security-exporter.<ns>:9950   # the security exporter of wazuh-oneke
+ *                                                  # (its last image scan); empty: the tab shows no vulnerabilities
  * The releases are read with the token of integrations.github (github.com).
  */
 export const sbomPlugin = createBackendPlugin({
@@ -36,6 +40,7 @@ export const sbomPlugin = createBackendPlugin({
         const allowed = settings?.getOptionalStringArray('allowedImages') ?? [];
         const dockerConfig = settings?.getOptionalString('dockerConfig');
         const allowedReleases = settings?.getOptionalStringArray('allowedReleases') ?? [];
+        const vulnerabilitiesUrl = settings?.getOptionalString('vulnerabilitiesUrl') ?? '';
         const githubToken = (config.getOptionalConfigArray('integrations.github') ?? [])
           .find(c => (c.getOptionalString('host') ?? 'github.com') === 'github.com')
           ?.getOptionalString('token');
@@ -72,6 +77,19 @@ export const sbomPlugin = createBackendPlugin({
           if (releases.size > 200) releases.delete(releases.keys().next().value as string);
           return entry;
         };
+        // the image scan runs once a day: its answer is kept a few minutes (the digest of a tag of a commit is stable)
+        const scans = new Map<string, { at: number; digest: string; scan: ImageScan | undefined }>();
+        const SCAN_TTL = 5 * 60 * 1000;
+        const lookupScan = async (ref: string) => {
+          const hit = scans.get(ref);
+          if (hit && Date.now() - hit.at < SCAN_TTL) return hit;
+          const digest = (await lookup(ref)).found?.digest ?? (await client.resolve(parseImageRef(ref)));
+          const entry = { at: Date.now(), digest, scan: await findImageScan(vulnerabilitiesUrl, digest, ref) };
+          scans.set(ref, entry);
+          if (scans.size > 200) scans.delete(scans.keys().next().value as string);
+          return entry;
+        };
+
         const releaseOf = (req: Request): string => {
           const ref = String(req.query.ref ?? '').trim();
           if (!ref) throw new RegistryError('Missing ?ref=<owner/repo@tag>', 400);
@@ -154,8 +172,26 @@ export const sbomPlugin = createBackendPlugin({
             res.type('application/vnd.cyclonedx+json').send(JSON.stringify(found.bom, null, 2));
           }),
         );
+        router.get(
+          '/vulnerabilities',
+          guarded('vulnerabilities', async (req, res) => {
+            const ref = imageOf(req);
+            if (!vulnerabilitiesUrl) {
+              res.json({ image: ref, configured: false, scan: null });
+              return;
+            }
+            let entry;
+            try {
+              entry = await lookupScan(ref);
+            } catch (e) {
+              if (e instanceof RegistryError) throw e;
+              throw new RegistryError(`Wazuh's image scan could not be read: ${(e as Error).message}`, 502);
+            }
+            res.json({ image: ref, configured: true, digest: entry.digest, scan: entry.scan ?? null });
+          }),
+        );
         router.get('/health', (_req, res) => {
-          res.json({ status: 'ok', allowedImages: allowed, allowedReleases, credentials: !!dockerConfig, github: !!githubToken });
+          res.json({ status: 'ok', allowedImages: allowed, allowedReleases, credentials: !!dockerConfig, github: !!githubToken, vulnerabilities: !!vulnerabilitiesUrl });
         });
         httpRouter.use(router);
         httpRouter.addAuthPolicy({ path: '/health', allow: 'unauthenticated' });
