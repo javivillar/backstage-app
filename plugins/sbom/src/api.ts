@@ -66,6 +66,61 @@ export function useSbom(kind: 'image' | 'release', ref: string) {
   return state;
 }
 
+export interface Vulnerability {
+  id: string;
+  sev: string;
+  pkg?: string;
+  ver?: string;
+  fix?: string;
+  title?: string;
+}
+
+/** The last scan of an image by Wazuh's daily image scan (Trivy), through the security exporter of wazuh-oneke. */
+export interface ImageScan {
+  digest: string;
+  namespace?: string;
+  run?: string;
+  db?: string;
+  status: 'scanned' | 'scan_error';
+  message?: string | null;
+  counts: Record<string, number>;
+  os?: string | null;
+  /** CRITICAL and HIGH only */
+  vulns: Vulnerability[];
+}
+
+export interface ImageVulnerabilities {
+  image: string;
+  /** false: this Backstage has no sbom.vulnerabilitiesUrl */
+  configured: boolean;
+  digest?: string;
+  /** null: the last scan did not see this image (deployed after it, or not running) */
+  scan: ImageScan | null;
+}
+
+export function useVulnerabilities(ref: string) {
+  const discovery = useApi(discoveryApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const [state, setState] = useState<{ loading: boolean; error?: string; data?: ImageVulnerabilities }>({ loading: true });
+  useEffect(() => {
+    let alive = true;
+    setState({ loading: true });
+    (async () => {
+      const base = await discovery.getBaseUrl('sbom');
+      const res = await fetch(`${base}/vulnerabilities?ref=${encodeURIComponent(ref)}`);
+      if (!res.ok) throw new Error(await errorText(res));
+      return (await res.json()) as ImageVulnerabilities;
+    })().then(
+      data => alive && setState({ loading: false, data }),
+      e => alive && setState({ loading: false, error: (e as Error).message }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [discovery, fetch, ref]);
+  return state;
+}
+
 /** Downloads the CycloneDX document of the image (the request carries the Backstage token, so not a plain link). */
 export function useDownload() {
   const discovery = useApi(discoveryApiRef);

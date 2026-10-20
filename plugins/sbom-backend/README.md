@@ -6,6 +6,9 @@ the registry (`oras attach`, artifact type `application/vnd.cyclonedx+json`), fo
 
 - `GET /api/sbom/image?ref=<image>`: its summary (components, ecosystems, licenses, the Refresquito frameworks).
 - `GET /api/sbom/image/raw?ref=<image>`: the CycloneDX document.
+- `GET /api/sbom/vulnerabilities?ref=<image>`: its vulnerabilities from Wazuh's daily image scan (Trivy), as the
+  security exporter of wazuh-oneke serves them (`GET <sbom.vulnerabilitiesUrl>/vulnerabilities?digest=`, then
+  `?image=`): `{configured, digest, scan}`; `scan` is null when the last run did not see the image. Kept 5 minutes.
 - `GET /api/sbom/release?ref=<owner/repo@tag>` and `/release/raw`: the same for the SBOM file (`*.cdx.json`) of a
   release of GitHub, for a library (annotation `refresquito.io/sbom-releases`), read with the token of
   `integrations.github`.
@@ -18,4 +21,6 @@ sbom:
   allowedImages: ['ghcr.io/javivillar/']
   dockerConfig: ${GHCR_DOCKERCONFIG}   # Docker config JSON with the pull credentials of the registry
   allowedReleases: ['javivillar/']     # only releases of these repositories
+  # the security exporter of wazuh-oneke (0.19.0+); empty: the tab shows no vulnerabilities
+  vulnerabilitiesUrl: http://wazuh-oneke-security-exporter.<prefix>wazuh-oneke.svc.cluster.local:9950
 ```
