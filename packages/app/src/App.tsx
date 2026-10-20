@@ -49,6 +49,7 @@ import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/
 import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
+import { TopologyPage } from './components/topology/TopologyPage';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
 
 const app = createApp({
@@ -123,6 +124,7 @@ const routes = (
       }
     />
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
+    <Route path="/topology" element={<TopologyPage />} />
     <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route path="/superset-manager" element={<SupersetManagerPage />} />
     <Route path="/camunda-manager" element={<CamundaManagerPage />} />

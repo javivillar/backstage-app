@@ -45,6 +45,8 @@ if (process.env.MOCK_MODE === 'true') {
   backend.add(import('@backstage/plugin-proxy-backend'));
 }
 backend.add(import('@backstage/plugin-techdocs-backend'));
+// the live topology of the platform, published by the OpenNebula host (page Topology)
+backend.add(import('./plugins/topology'));
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));
