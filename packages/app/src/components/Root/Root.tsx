@@ -17,6 +17,7 @@ import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import HubIcon from '@mui/icons-material/Hub';
 import DatasetIcon from '@mui/icons-material/Dataset';
 import ApiIcon from '@mui/icons-material/Api';
+import LanIcon from '@mui/icons-material/Lan';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -137,6 +138,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
           Tools
         </span>
         <SidebarScrollWrapper>
+          <SidebarItem icon={LanIcon} to="topology" text="Topology" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />
         </SidebarScrollWrapper>
