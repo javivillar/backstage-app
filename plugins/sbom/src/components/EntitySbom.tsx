@@ -126,7 +126,7 @@ function Vulnerabilities({ image }: { image: string }) {
   const [fixable, setFixable] = useState(false);
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(25);
-  const vulns = data?.scan?.vulns ?? [];
+  const vulns = useMemo(() => data?.scan?.vulns ?? [], [data]);
   const rows = useMemo(
     () =>
       vulns
