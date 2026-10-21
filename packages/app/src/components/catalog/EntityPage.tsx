@@ -73,7 +73,7 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
-import { EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
+import { EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
@@ -358,10 +358,14 @@ const isApplication = (entity: Entity) =>
     !!entity.metadata.annotations?.['refresquito.io/framework-line']);
 
 const qualityContent = (
-  <EntityTechInsightsScorecardContent
-    title="Quality & Security"
-    description="What this application runs and how it is maintained: its catalog entry, the SBOM and vulnerabilities of its images, and the line of the Python Framework it is built on. Refreshed every hour."
-  />
+  <div style={{ display: 'grid', gap: 16 }}>
+    <EntityTechInsightsScorecardContent
+      title="Quality & Security"
+      description="What this application runs and how it is maintained: its catalog entry, the SBOM and vulnerabilities of its images, and the line of the Python Framework it is built on. Refreshed every hour."
+    />
+    {/* every test and the coverage of each file, from the quality report of its images */}
+    <EntityQualityDetailContent />
+  </div>
 );
 
 const serviceEntityPage = (

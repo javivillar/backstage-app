@@ -10,6 +10,23 @@ export interface TestRun {
   skipped: number;
 }
 
+/** One test of the run (detail.tests): its name, result, time in seconds and, if it did not pass, why. */
+export interface TestCase {
+  name: string;
+  status: 'passed' | 'failed' | 'error' | 'skipped';
+  time: number;
+  message?: string;
+}
+
+/** One file (detail.coverage): its coverage in percent and the lines no test runs ("12-14, 40"). */
+export interface FileCoverage {
+  file: string;
+  lines: number;
+  branches?: number;
+  statements?: number;
+  missing?: string;
+}
+
 export interface QualityPart {
   tests?: TestRun;
   /** percentages */
@@ -17,6 +34,8 @@ export interface QualityPart {
   ruff?: { issues: number };
   mypy?: { errors: number };
   eslint?: { errors: number; warnings: number };
+  /** every test and every file (reports since quality.py with detail; older ones lack it) */
+  detail?: { tests?: TestCase[]; coverage?: FileCoverage[] };
 }
 
 export interface QualityReport {

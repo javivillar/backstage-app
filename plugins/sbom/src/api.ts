@@ -140,3 +140,67 @@ export function useDownload() {
     [discovery, fetch],
   );
 }
+
+/** The quality report of an application (quality.json its CI attaches to its images; the same on each of them). */
+export interface TestCase {
+  name: string;
+  status: 'passed' | 'failed' | 'error' | 'skipped';
+  time: number;
+  message?: string;
+}
+
+export interface FileCoverage {
+  file: string;
+  lines: number;
+  branches?: number;
+  statements?: number;
+  missing?: string;
+}
+
+export interface QualityPart {
+  tests?: { total: number; failures: number; errors: number; skipped: number };
+  coverage?: { lines?: number; branches?: number; statements?: number; functions?: number };
+  ruff?: { issues: number };
+  mypy?: { errors: number };
+  eslint?: { errors: number; warnings: number };
+  detail?: { tests?: TestCase[]; coverage?: FileCoverage[] };
+}
+
+export interface QualityReport {
+  schema: string;
+  revision?: string;
+  generated?: string;
+  backend?: QualityPart;
+  frontend?: QualityPart;
+}
+
+export interface ImageQuality {
+  image: string;
+  attached: { digest: string; created?: string; revision?: string } | null;
+  /** null: the image has no quality report attached (built before its CI made them) */
+  report: QualityReport | null;
+}
+
+export function useQuality(ref: string | undefined) {
+  const discovery = useApi(discoveryApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const [state, setState] = useState<{ loading: boolean; error?: string; data?: ImageQuality }>({ loading: !!ref });
+  useEffect(() => {
+    if (!ref) return undefined;
+    let alive = true;
+    setState({ loading: true });
+    (async () => {
+      const base = await discovery.getBaseUrl('sbom');
+      const res = await fetch(`${base}/quality?ref=${encodeURIComponent(ref)}`);
+      if (!res.ok) throw new Error(await errorText(res));
+      return (await res.json()) as ImageQuality;
+    })().then(
+      data => alive && setState({ loading: false, data }),
+      e => alive && setState({ loading: false, error: (e as Error).message }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [discovery, fetch, ref]);
+  return state;
+}
