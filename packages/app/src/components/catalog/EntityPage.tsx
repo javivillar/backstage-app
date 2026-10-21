@@ -10,6 +10,7 @@ import Description from '@mui/icons-material/Description';
 import Bolt from '@mui/icons-material/Bolt';
 import Storage from '@mui/icons-material/Storage';
 import Category from '@mui/icons-material/Category';
+import VerifiedUser from '@mui/icons-material/VerifiedUser';
 import Schedule from '@mui/icons-material/Schedule';
 import Person from '@mui/icons-material/Person';
 import Schema from '@mui/icons-material/Schema';
@@ -73,6 +74,7 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
 import { EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
+import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
@@ -346,6 +348,22 @@ const dependenciesContent = (
   </div>
 );
 
+/**
+ * An application of the platform (it runs images with their SBOM, or is built on a line of the Python Framework):
+ * its scorecard Quality & Security (Tech Insights; facts in plugins/sbom-backend/src/techInsights.ts).
+ */
+const isApplication = (entity: Entity) =>
+  !(entity.metadata.tags ?? []).includes('framework-line') &&
+  (!!entity.metadata.annotations?.['refresquito.io/sbom-images'] ||
+    !!entity.metadata.annotations?.['refresquito.io/framework-line']);
+
+const qualityContent = (
+  <EntityTechInsightsScorecardContent
+    title="Quality & Security"
+    description="What this application runs and how it is maintained: its catalog entry, the SBOM and vulnerabilities of its images, and the line of the Python Framework it is built on. Refreshed every hour."
+  />
+);
+
 const serviceEntityPage = (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
@@ -403,6 +421,9 @@ const serviceEntityPage = (
     </EntityLayout.Route>
     <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
       <EntitySbomContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/quality" title={tabLabel(<VerifiedUser />, 'Quality & Security')} if={isApplication}>
+      {qualityContent}
     </EntityLayout.Route>
   </EntityLayout>
 );
