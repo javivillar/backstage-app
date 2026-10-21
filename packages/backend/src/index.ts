@@ -23,7 +23,7 @@ import {
   activepiecesScaffolderModule,
 } from '@internal/backstage-plugin-activepieces-backend';
 import { datahubManagerPlugin, datahubScaffolderModule } from '@internal/backstage-plugin-datahub-backend';
-import { sbomPlugin } from '@internal/backstage-plugin-sbom-backend';
+import { sbomPlugin, techInsightsModuleSupplyChain } from '@internal/backstage-plugin-sbom-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -203,6 +203,13 @@ backend.add(datahubScaffolderModule);
 // SBOM tab -- the CycloneDX SBOM the CI attached to each image a component runs (annotation
 // refresquito.io/sbom-images), read from the registry (sbom.allowedImages, sbom.dockerConfig). Read only.
 backend.add(sbomPlugin);
+
+// Scorecard "Quality & Security" (Tech Insights): facts of the catalog (owner, description, TechDocs) and of what each
+// application runs (SBOM, Wazuh image scan, line of the Python Framework: plugins/sbom-backend/src/techInsights.ts),
+// checked by the rules of techInsights.factChecker.checks (app-config, chart cnoe-oneke).
+backend.add(import('@backstage-community/plugin-tech-insights-backend'));
+backend.add(import('@backstage-community/plugin-tech-insights-backend-module-jsonfc'));
+backend.add(techInsightsModuleSupplyChain);
 
 // Gravitee manager -- list/create endpoints backing the /gravitee-manager page
 // ("soft" self-service of Gravitee gateways = v4 HTTP proxy APIs). The caller

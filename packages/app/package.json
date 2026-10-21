@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@backstage-community/plugin-github-actions": "^0.22.0",
+    "@backstage-community/plugin-tech-insights": "1.3.0",
     "@backstage-community/plugin-tech-radar": "^1.17.0",
     "@backstage/app-defaults": "^1.7.6",
     "@backstage/catalog-model": "^1.7.7",

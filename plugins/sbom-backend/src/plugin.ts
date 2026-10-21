@@ -110,7 +110,8 @@ export const sbomPlugin = createBackendPlugin({
 
         const guarded = (name: string, handler: (req: Request, res: Response) => Promise<void>) => async (req: Request, res: Response) => {
           try {
-            await httpAuth.credentials(req, { allow: ['user'] });
+            // users, and this backend itself (the facts of the scorecard, plugin tech-insights)
+            await httpAuth.credentials(req, { allow: ['user', 'service'] });
             await handler(req, res);
           } catch (e) {
             const err = e as Error & { status?: number; name?: string };
