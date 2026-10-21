@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Content, Header, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { useTheme } from '@mui/material/styles';
@@ -10,35 +10,24 @@ import Typography from '@mui/material/Typography';
 type PageName = 'topology' | 'network';
 
 /**
- * Inside the frame, the page's link to the design (network.html) asks this page to switch tab: the frame is
- * sandboxed without same-origin, so it cannot navigate to a sibling file.
+ * The page of the frame: the backend serves it with its own Content-Security-Policy (inline, in srcdoc, it would
+ * inherit the one of Backstage, which refuses its scripts). The frame is a navigation of the browser, without the
+ * Backstage token: first a session cookie of the topology plugin (like TechDocs).
  */
-const BRIDGE = `<script>document.addEventListener('click', e => {
-  const a = e.target.closest && e.target.closest('a[href="network.html"]');
-  if (a) { e.preventDefault(); parent.postMessage({ rqTopology: 'network' }, '*'); }
-});</script>`;
-
-/** The page in the theme of Backstage (both pages carry their light and dark palettes, chosen by data-theme). */
-function prepare(html: string, mode: 'light' | 'dark'): string {
-  return html.replace(/<html([^>]*)>/i, `<html$1 data-theme="${mode}">`).replace(/<\/body>/i, `${BRIDGE}</body>`);
-}
-
-function useTopology(name: PageName) {
+function useTopology(name: PageName, mode: 'light' | 'dark') {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
-  const [state, setState] = useState<{ loading: boolean; html?: string; error?: string; updated?: string }>({ loading: true });
+  const [state, setState] = useState<{ loading: boolean; src?: string; error?: string; updated?: string }>({ loading: true });
   useEffect(() => {
     let alive = true;
     setState({ loading: true });
     (async () => {
       const base = await discovery.getBaseUrl('topology');
       const status = await (await fetch(`${base}/status`)).json().catch(() => ({}));
-      const res = await fetch(`${base}/page/${name}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-      }
-      return { html: await res.text(), updated: status.updated as string | undefined };
+      if (!status.available) throw new Error('The OpenNebula host has not published the topology to this cluster yet');
+      const cookie = await fetch(`${base}/cookie`, { credentials: 'include' });
+      if (!cookie.ok) throw new Error(`${cookie.status} ${cookie.statusText}`);
+      return { src: `${base}/frame/${name}?theme=${mode}`, updated: status.updated as string | undefined };
     })().then(
       data => alive && setState({ loading: false, ...data }),
       e => alive && setState({ loading: false, error: (e as Error).message }),
@@ -46,7 +35,7 @@ function useTopology(name: PageName) {
     return () => {
       alive = false;
     };
-  }, [discovery, fetch, name]);
+  }, [discovery, fetch, name, mode]);
   return state;
 }
 
@@ -56,9 +45,8 @@ function useTopology(name: PageName) {
  */
 export const TopologyPage = () => {
   const [page, setPage] = useState<PageName>('topology');
-  const { loading, html, error, updated } = useTopology(page);
   const mode = useTheme().palette.mode === 'dark' ? 'dark' : 'light';
-  const doc = useMemo(() => (html ? prepare(html, mode) : undefined), [html, mode]);
+  const { loading, src, error, updated } = useTopology(page, mode);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -89,11 +77,11 @@ export const TopologyPage = () => {
               </Typography>
             </WarningPanel>
           )}
-          {doc && !loading && (
+          {src && !loading && (
             <iframe
               title={page === 'topology' ? 'Live topology' : 'Network design'}
-              srcDoc={doc}
-              // its scripts draw the diagrams; no same-origin: it cannot read Backstage or its token
+              src={src}
+              // its scripts draw the diagrams and answer its tabs; no same-origin: it cannot read Backstage or its token
               sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
               style={{ width: '100%', height: 'calc(100vh - 230px)', minHeight: 600, border: 0, borderRadius: 4 }}
             />
