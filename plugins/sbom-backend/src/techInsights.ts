@@ -9,11 +9,12 @@ import {
 } from '@backstage-community/plugin-tech-insights-node';
 import type { Component, SbomSummary } from './cyclonedx';
 import type { ImageScan } from './vulnerabilities';
+import { QualityReport, qualityFacts } from './quality';
 
 /**
  * Facts of the scorecard "Quality & Security" (Tech Insights) about what an application of the platform runs: the
- * SBOM of its images, their vulnerabilities in Wazuh's last image scan, and the line of the Python Framework it is
- * built on, compared with the latest line of the catalog. Read through the API of the SBOM tab (plugin sbom), with
+ * SBOM of its images, their vulnerabilities in Wazuh's last image scan, the line of the Python Framework it is built
+ * on, compared with the latest line of the catalog, and the quality report of its commit (tests, coverage, linters). Read through the API of the SBOM tab (plugin sbom), with
  * the credentials of this backend.
  *
  * An application is a Component with the annotation refresquito.io/sbom-images or refresquito.io/framework-line that
@@ -32,6 +33,8 @@ export interface ImageFacts {
   sbom?: SbomSummary | null;
   /** configured false: this Backstage reads no image scan (sbom.vulnerabilitiesUrl) */
   scan?: { configured: boolean; scan: ImageScan | null };
+  /** null: no quality report attached; undefined: it could not be read */
+  quality?: QualityReport | null;
 }
 
 const list = (entity: Entity, key: string) =>
@@ -63,16 +66,22 @@ export function compareLines(a: string, b: string): number {
 export function frameworkLines(entities: Entity[]): string[] {
   const lines = entities
     .filter(isFrameworkLine)
-    .map(e => e.metadata.annotations?.[ANNOTATION_FRAMEWORK_LINE])
-    .filter((l): l is string => !!l);
+    .map(e => normalizeLine(e.metadata.annotations?.[ANNOTATION_FRAMEWORK_LINE]))
+    .filter(Boolean);
   return [...new Set(lines)].sort(compareLines);
 }
 
 const lineOf = (version?: string) => (version ?? '').split('.').slice(0, 2).join('.');
 
+/** "3.1", also when written as the component of the line (python-framework-3-1) */
+export function normalizeLine(value?: string): string {
+  const m = /(\d+)[.-](\d+)$/.exec((value ?? '').trim());
+  return m ? `${m[1]}.${m[2]}` : '';
+}
+
 /** The facts of one application, from what its images say. */
 export function applicationFacts(entity: Entity, lines: string[], images: ImageFacts[]): TechInsightFact['facts'] {
-  const line = entity.metadata.annotations?.[ANNOTATION_FRAMEWORK_LINE] ?? '';
+  const line = normalizeLine(entity.metadata.annotations?.[ANNOTATION_FRAMEWORK_LINE]);
   const latest = lines[lines.length - 1] ?? '';
   const withSbom = images.filter(i => i.sbom);
   const framework: Component[] = withSbom.flatMap(i => i.sbom!.frameworks ?? []).filter(c => FRAMEWORK_PACKAGES.includes(c.name));
@@ -95,12 +104,14 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
     // the images carry the line the application says it is on (the packages of the framework in their SBOM)
     imagesMatchFrameworkLine: !!line && framework.length > 0 && framework.every(c => lineOf(c.version) === line),
     frameworkInImages: [...new Set(framework.map(c => `${c.name} ${c.version ?? '?'}`))].sort().join(', '),
+    // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
+    ...qualityFacts(images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined),
   };
 }
 
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.1.0',
+  version: '0.2.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -119,6 +130,13 @@ export const supplyChainFactRetriever: FactRetriever = {
     frameworkLineMaintained: { type: 'boolean', description: 'Its line is still maintained (in the catalog)' },
     imagesMatchFrameworkLine: { type: 'boolean', description: 'The framework packages in its images are of its line' },
     frameworkInImages: { type: 'string', description: 'Framework packages found in the SBOMs of its images' },
+    qualityReport: { type: 'boolean', description: 'Every image has the quality report of its commit attached' },
+    testsFailed: { type: 'integer', description: 'Tests that failed or errored (backend and frontend); -1: not reported' },
+    backendCoverage: { type: 'float', description: 'Line coverage of the backend tests (%); -1: not reported' },
+    frontendCoverage: { type: 'float', description: 'Line coverage of the frontend tests (%); -1: not reported' },
+    lintIssues: { type: 'integer', description: 'ruff issues plus eslint errors; -1: not reported' },
+    typeErrors: { type: 'integer', description: 'mypy errors of the backend; -1: not reported' },
+    qualityRevision: { type: 'string', description: 'Commit of the quality report' },
   },
   async handler(ctx: FactRetrieverContext): Promise<TechInsightFact[]> {
     const { discovery, auth, logger } = ctx;
@@ -151,7 +169,8 @@ export const supplyChainFactRetriever: FactRetriever = {
       for (const ref of list(entity, ANNOTATION_SBOM_IMAGES)) {
         const sbom = await get<{ summary: SbomSummary | null }>('/image', ref);
         const scan = await get<{ configured: boolean; scan: ImageScan | null }>('/vulnerabilities', ref);
-        images.push({ ref, sbom: sbom ? sbom.summary : undefined, scan });
+        const quality = await get<{ report: QualityReport | null }>('/quality', ref);
+        images.push({ ref, sbom: sbom ? sbom.summary : undefined, scan, quality: quality ? quality.report : undefined });
       }
       facts.push({
         entity: { namespace: entity.metadata.namespace ?? 'default', kind: entity.kind, name: entity.metadata.name },
