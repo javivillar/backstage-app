@@ -1,0 +1,489 @@
+{
+ "schema": "refresquito.quality/v1",
+ "revision": "5ba9326bfd4c14b8d6a4db96b224107654f70678",
+ "generated": "2026-10-21T14:00:00Z",
+ "backend": {
+  "tests": {
+   "total": 28,
+   "failures": 1,
+   "errors": 0,
+   "skipped": 0
+  },
+  "coverage": {
+   "lines": 96.9
+  },
+  "ruff": {
+   "issues": 0
+  },
+  "mypy": {
+   "errors": 0
+  },
+  "detail": {
+   "tests": [
+    {
+     "name": "tests.test_dashboards::test_its_dashboards_and_a_guest_token_for_the_user",
+     "status": "passed",
+     "time": 2.117
+    },
+    {
+     "name": "tests.test_dashboards::test_pets_by_status_as_superset_computes_them",
+     "status": "failed",
+     "time": 0.151,
+     "message": "AssertionError: assert 404 == 200"
+    },
+    {
+     "name": "tests.test_dashboards::test_nobody_without_a_petstore_role",
+     "status": "passed",
+     "time": 0.136
+    },
+    {
+     "name": "tests.test_documents::test_documents_of_a_pet",
+     "status": "passed",
+     "time": 0.292
+    },
+    {
+     "name": "tests.test_files::test_files_of_a_pet",
+     "status": "passed",
+     "time": 0.194
+    },
+    {
+     "name": "tests.test_pets::test_admin_creates_a_pet",
+     "status": "passed",
+     "time": 0.15
+    },
+    {
+     "name": "tests.test_pets::test_viewer_reads_but_does_not_write",
+     "status": "passed",
+     "time": 0.158
+    },
+    {
+     "name": "tests.test_pets::test_without_a_token_or_a_petstore_role_nothing_is_readable",
+     "status": "passed",
+     "time": 0.09
+    },
+    {
+     "name": "tests.test_pets::test_two_pets_cannot_share_a_name",
+     "status": "passed",
+     "time": 0.144
+    },
+    {
+     "name": "tests.test_pets::test_update",
+     "status": "passed",
+     "time": 0.527
+    },
+    {
+     "name": "tests.test_pets::test_delete",
+     "status": "passed",
+     "time": 0.261
+    },
+    {
+     "name": "tests.test_pets::test_list_is_sorted_filtered_and_paged",
+     "status": "passed",
+     "time": 0.431
+    },
+    {
+     "name": "tests.test_pets::test_invalid_pets_are_rejected_with_the_field[fields0-name]",
+     "status": "passed",
+     "time": 0.149
+    },
+    {
+     "name": "tests.test_pets::test_invalid_pets_are_rejected_with_the_field[fields1-species]",
+     "status": "passed",
+     "time": 0.158
+    },
+    {
+     "name": "tests.test_pets::test_invalid_pets_are_rejected_with_the_field[fields2-status]",
+     "status": "passed",
+     "time": 0.159
+    },
+    {
+     "name": "tests.test_pets::test_invalid_pets_are_rejected_with_the_field[fields3-birth_date]",
+     "status": "passed",
+     "time": 0.162
+    },
+    {
+     "name": "tests.test_pets::test_invalid_pets_are_rejected_with_the_field[fields4-name]",
+     "status": "passed",
+     "time": 0.144
+    },
+    {
+     "name": "tests.test_pets::test_names_are_trimmed",
+     "status": "passed",
+     "time": 0.207
+    },
+    {
+     "name": "tests.test_pets::test_ready_checks_the_database",
+     "status": "passed",
+     "time": 0.141
+    },
+    {
+     "name": "tests.test_pets::test_openapi_is_published_under_api",
+     "status": "passed",
+     "time": 0.51
+    },
+    {
+     "name": "tests.test_review::test_a_review_is_a_process_and_a_task_of_the_reviewer",
+     "status": "passed",
+     "time": 0.269
+    },
+    {
+     "name": "tests.test_review::test_a_task_of_someone_else_cannot_be_completed",
+     "status": "passed",
+     "time": 0.22
+    },
+    {
+     "name": "tests.test_review::test_review_needs_the_admin_and_an_existing_pet",
+     "status": "passed",
+     "time": 0.139
+    },
+    {
+     "name": "tests.test_welcome::test_welcome_waits_for_the_flow",
+     "status": "passed",
+     "time": 0.213
+    },
+    {
+     "name": "tests.test_welcome::test_a_new_pet_starts_the_flow_and_its_run_is_listed",
+     "status": "passed",
+     "time": 0.234
+    },
+    {
+     "name": "tests.test_welcome::test_the_flow_tells_how_it_ended",
+     "status": "passed",
+     "time": 0.259
+    },
+    {
+     "name": "tests.test_welcome::test_a_flow_sets_the_status_of_a_pet",
+     "status": "passed",
+     "time": 0.174
+    },
+    {
+     "name": "tests.test_welcome::test_only_its_flows_set_the_status",
+     "status": "passed",
+     "time": 0.147
+    }
+   ],
+   "coverage": [
+    {
+     "file": "src/petstore/openapi.py",
+     "lines": 0.0,
+     "statements": 5,
+     "missing": "6, 8, 10, 12-13"
+    },
+    {
+     "file": "src/petstore/main.py",
+     "lines": 88.9,
+     "statements": 18,
+     "missing": "43-44"
+    },
+    {
+     "file": "src/petstore/documents.py",
+     "lines": 96.8,
+     "statements": 31,
+     "missing": "47"
+    },
+    {
+     "file": "src/petstore/__init__.py",
+     "lines": 100.0,
+     "statements": 1,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/api.py",
+     "lines": 100.0,
+     "statements": 53,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/dashboards.py",
+     "lines": 100.0,
+     "statements": 14,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/files.py",
+     "lines": 100.0,
+     "statements": 38,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/models.py",
+     "lines": 100.0,
+     "statements": 19,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/review.py",
+     "lines": 100.0,
+     "statements": 27,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/schemas.py",
+     "lines": 100.0,
+     "statements": 30,
+     "missing": ""
+    },
+    {
+     "file": "src/petstore/welcome.py",
+     "lines": 100.0,
+     "statements": 22,
+     "missing": ""
+    }
+   ]
+  }
+ },
+ "frontend": {
+  "tests": {
+   "total": 27,
+   "failures": 0,
+   "errors": 0,
+   "skipped": 0
+  },
+  "coverage": {
+   "lines": 100,
+   "branches": 80,
+   "statements": 100,
+   "functions": 100
+  },
+  "eslint": {
+   "errors": 0,
+   "warnings": 0
+  },
+  "detail": {
+   "tests": [
+    {
+     "name": "App \u203a forbidden page links back to the start",
+     "status": "passed",
+     "time": 0.016
+    },
+    {
+     "name": "App \u203a home: sign in, go to the pets, or explain the missing role",
+     "status": "passed",
+     "time": 0.039
+    },
+    {
+     "name": "App \u203a shows the user, the menu of its role and signs out",
+     "status": "passed",
+     "time": 0.027
+    },
+    {
+     "name": "App \u203a offers to sign in when nobody is",
+     "status": "passed",
+     "time": 0.009
+    },
+    {
+     "name": "PetFiles \u203a lists them; an admin may add one",
+     "status": "passed",
+     "time": 0.016
+    },
+    {
+     "name": "PetFiles \u203a a viewer only reads them",
+     "status": "passed",
+     "time": 0.007
+    },
+    {
+     "name": "PetDocuments \u203a a viewer only reads them",
+     "status": "passed",
+     "time": 0.013
+    },
+    {
+     "name": "PetDocuments \u203a lists them; an admin may add one",
+     "status": "passed",
+     "time": 0.012
+    },
+    {
+     "name": "PetList \u203a deletes after asking, and reloads",
+     "status": "passed",
+     "time": 0.084
+    },
+    {
+     "name": "PetList \u203a stops loading when the list fails; the framework tells the user",
+     "status": "passed",
+     "time": 0.011
+    },
+    {
+     "name": "PetList \u203a moves between pages",
+     "status": "passed",
+     "time": 0.012
+    },
+    {
+     "name": "PetList \u203a shows the actions that write only to an admin",
+     "status": "passed",
+     "time": 0.029
+    },
+    {
+     "name": "PetList \u203a filters by status and species from the first page",
+     "status": "passed",
+     "time": 0.015
+    },
+    {
+     "name": "PetList \u203a lists the pets of the first page",
+     "status": "passed",
+     "time": 0.015
+    },
+    {
+     "name": "PetList \u203a says so when nothing matches",
+     "status": "passed",
+     "time": 0.009
+    },
+    {
+     "name": "PetForm \u203a does not call the API with an invalid form",
+     "status": "passed",
+     "time": 0.05
+    },
+    {
+     "name": "PetForm \u203a puts a taken name next to the name",
+     "status": "passed",
+     "time": 0.012
+    },
+    {
+     "name": "PetForm \u203a shows what the API says about each field",
+     "status": "passed",
+     "time": 0.013
+    },
+    {
+     "name": "PetForm \u203a creates a pet and goes back to the list",
+     "status": "passed",
+     "time": 0.021
+    },
+    {
+     "name": "PetForm \u203a goes back to the list when the pet to edit does not exist",
+     "status": "passed",
+     "time": 0.011
+    },
+    {
+     "name": "PetForm \u203a loads the pet to edit and saves it with PUT",
+     "status": "passed",
+     "time": 0.011
+    },
+    {
+     "name": "Flows \u203a shows the runs of the flows and reloads them",
+     "status": "passed",
+     "time": 0.015
+    },
+    {
+     "name": "Dashboard \u203a shows the pets by status and embeds the dashboard main",
+     "status": "passed",
+     "time": 0.011
+    },
+    {
+     "name": "PetDetail \u203a shows the pet (each platform block has its own component and test)",
+     "status": "passed",
+     "time": 0.014
+    },
+    {
+     "name": "Tasks \u203a lists the tasks of the user",
+     "status": "passed",
+     "time": 0.007
+    },
+    {
+     "name": "PetWelcome \u203a calls the API and tells the user what it answered",
+     "status": "passed",
+     "time": 0.005
+    },
+    {
+     "name": "PetReview \u203a calls the API and tells the user what it answered",
+     "status": "passed",
+     "time": 0.006
+    }
+   ],
+   "coverage": [
+    {
+     "file": "src/app/pets/pet-welcome.ts",
+     "lines": 100,
+     "statements": 7,
+     "branches": 50,
+     "missing": ""
+    },
+    {
+     "file": "src/app/api/pets.ts",
+     "lines": 100,
+     "statements": 16,
+     "branches": 57.14,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-list.ts",
+     "lines": 100,
+     "statements": 24,
+     "branches": 60,
+     "missing": ""
+    },
+    {
+     "file": "src/app/app.ts",
+     "lines": 100,
+     "statements": 4,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pages/dashboard.ts",
+     "lines": 100,
+     "statements": 6,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pages/flows.ts",
+     "lines": 100,
+     "statements": 3,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pages/home.ts",
+     "lines": 100,
+     "statements": 7,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pages/tasks.ts",
+     "lines": 100,
+     "statements": 2,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-detail.ts",
+     "lines": 100,
+     "statements": 7,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-documents.ts",
+     "lines": 100,
+     "statements": 5,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-files.ts",
+     "lines": 100,
+     "statements": 5,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-form.ts",
+     "lines": 100,
+     "statements": 34,
+     "branches": 100,
+     "missing": ""
+    },
+    {
+     "file": "src/app/pets/pet-review.ts",
+     "lines": 100,
+     "statements": 7,
+     "missing": ""
+    },
+    {
+     "file": "src/app/roles.ts",
+     "lines": 100,
+     "statements": 2,
+     "missing": ""
+    },
+    {
+     "file": "src/app/testing.ts",
+     "lines": 100,
+     "statements": 7,
+     "branches": 100,
+     "missing": ""
+    }
+   ]
+  }
+ }
+}
