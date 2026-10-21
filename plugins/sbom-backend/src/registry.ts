@@ -172,9 +172,49 @@ export class RegistryClient {
   async blob(image: ImageRef, digest: string, maxBytes: number): Promise<Buffer> {
     const res = await this.must(image, `/blobs/${digest}`, `The blob ${digest}`);
     const data = Buffer.from(await res.arrayBuffer());
-    if (data.length > maxBytes) throw new RegistryError(`The SBOM is larger than ${maxBytes} bytes`, 413);
+    if (data.length > maxBytes) throw new RegistryError(`The artifact is larger than ${maxBytes} bytes`, 413);
     return data;
   }
+}
+
+/** The quality report the CI attaches next to the SBOM (tests, coverage, linters: .github/quality.py of the app). */
+export const QUALITY_ARTIFACT_TYPE = 'application/vnd.refresquito.quality.v1+json';
+
+export interface FoundAttachment {
+  image: string;
+  digest: string;
+  /** the digest of the attached artifact */
+  attachedDigest: string;
+  created?: string;
+  revision?: string;
+  content: unknown;
+}
+
+/** The newest artifact of that type attached to the image (by `created` of oras attach), or undefined when it has none. */
+export async function findAttached(
+  client: RegistryClient,
+  ref: string,
+  artifactType: string,
+  maxBytes = 20 * 1024 * 1024,
+): Promise<FoundAttachment | undefined> {
+  const image = parseImageRef(ref);
+  const digest = await client.resolve(image);
+  const found = await client.referrers(image, digest, artifactType);
+  if (!found.length) return undefined;
+  const created = (d: Descriptor) => d.annotations?.['org.opencontainers.image.created'] ?? '';
+  const newest = [...found].sort((a, b) => created(b).localeCompare(created(a)))[0];
+  const manifest = await client.manifest(image, newest.digest);
+  const layer = (manifest.layers ?? []).find(l => l.mediaType === artifactType) ?? manifest.layers?.[0];
+  if (!layer) throw new RegistryError(`The artifact ${newest.digest} has no content`, 502);
+  const content = JSON.parse((await client.blob(image, layer.digest, maxBytes)).toString('utf8'));
+  return {
+    image: ref,
+    digest,
+    attachedDigest: newest.digest,
+    created: created(newest) || manifest.annotations?.['org.opencontainers.image.created'],
+    revision: newest.annotations?.['org.opencontainers.image.revision'] ?? manifest.annotations?.['org.opencontainers.image.revision'],
+    content,
+  };
 }
 
 export interface FoundSbom {
@@ -188,22 +228,8 @@ export interface FoundSbom {
 
 /** The newest CycloneDX SBOM attached to the image (by `created` of oras attach), or undefined when it has none. */
 export async function findSbom(client: RegistryClient, ref: string, maxBytes = 20 * 1024 * 1024): Promise<FoundSbom | undefined> {
-  const image = parseImageRef(ref);
-  const digest = await client.resolve(image);
-  const found = await client.referrers(image, digest, SBOM_ARTIFACT_TYPE);
-  if (!found.length) return undefined;
-  const created = (d: Descriptor) => d.annotations?.['org.opencontainers.image.created'] ?? '';
-  const newest = [...found].sort((a, b) => created(b).localeCompare(created(a)))[0];
-  const manifest = await client.manifest(image, newest.digest);
-  const layer = (manifest.layers ?? []).find(l => l.mediaType === SBOM_ARTIFACT_TYPE) ?? manifest.layers?.[0];
-  if (!layer) throw new RegistryError(`The SBOM ${newest.digest} has no content`, 502);
-  const bom = JSON.parse((await client.blob(image, layer.digest, maxBytes)).toString('utf8'));
-  return {
-    image: ref,
-    digest,
-    sbomDigest: newest.digest,
-    created: created(newest) || manifest.annotations?.['org.opencontainers.image.created'],
-    revision: newest.annotations?.['org.opencontainers.image.revision'] ?? manifest.annotations?.['org.opencontainers.image.revision'],
-    bom,
-  };
+  const found = await findAttached(client, ref, SBOM_ARTIFACT_TYPE, maxBytes);
+  if (!found) return undefined;
+  const { attachedDigest, content, ...rest } = found;
+  return { ...rest, sbomDigest: attachedDigest, bom: content };
 }

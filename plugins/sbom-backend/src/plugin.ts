@@ -1,7 +1,17 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Response, Router } from 'express';
 import { SbomSummary, summarize } from './cyclonedx';
-import { FoundSbom, RegistryClient, RegistryError, credentialsFromDockerConfig, findSbom, parseImageRef } from './registry';
+import { QualityReport, parseQuality } from './quality';
+import {
+  FoundSbom,
+  QUALITY_ARTIFACT_TYPE,
+  RegistryClient,
+  RegistryError,
+  credentialsFromDockerConfig,
+  findAttached,
+  findSbom,
+  parseImageRef,
+} from './registry';
 import { FoundReleaseSbom, findReleaseSbom } from './releases';
 import { ImageScan, findImageScan } from './vulnerabilities';
 
@@ -15,6 +25,8 @@ import { ImageScan, findImageScan } from './vulnerabilities';
  *   GET /api/sbom/release?ref=owner/repo@tag                   the same for the SBOM file of a release of GitHub
  *   GET /api/sbom/release/raw?ref=...                          (annotation refresquito.io/sbom-releases: a library)
  *   GET /api/sbom/vulnerabilities?ref=<image>                  its vulnerabilities, from Wazuh's daily image scan
+ *   GET /api/sbom/quality?ref=<image>                          the quality report the CI attached next to the SBOM
+ *                                                              (tests, coverage, linters; quality.json of the app)
  *
  * Config (app-config):
  *   sbom:
@@ -77,6 +89,22 @@ export const sbomPlugin = createBackendPlugin({
           if (releases.size > 200) releases.delete(releases.keys().next().value as string);
           return entry;
         };
+        // the quality report of an image is of its commit: immutable too
+        const reports = new Map<string, { at: number; found?: { digest: string; created?: string; revision?: string }; report?: QualityReport }>();
+        const lookupQuality = async (ref: string) => {
+          const hit = reports.get(ref);
+          if (hit && Date.now() - hit.at < TTL) return hit;
+          const found = await findAttached(client, ref, QUALITY_ARTIFACT_TYPE, 1024 * 1024);
+          const entry = {
+            at: Date.now(),
+            found: found && { digest: found.attachedDigest, created: found.created, revision: found.revision },
+            report: found ? parseQuality(found.content) : undefined,
+          };
+          reports.set(ref, entry);
+          if (reports.size > 200) reports.delete(reports.keys().next().value as string);
+          return entry;
+        };
+
         // the image scan runs once a day: its answer is kept a few minutes (the digest of a tag of a commit is stable)
         const scans = new Map<string, { at: number; digest: string; scan: ImageScan | undefined }>();
         const SCAN_TTL = 5 * 60 * 1000;
@@ -189,6 +217,14 @@ export const sbomPlugin = createBackendPlugin({
               throw new RegistryError(`Wazuh's image scan could not be read: ${(e as Error).message}`, 502);
             }
             res.json({ image: ref, configured: true, digest: entry.digest, scan: entry.scan ?? null });
+          }),
+        );
+        router.get(
+          '/quality',
+          guarded('quality', async (req, res) => {
+            const ref = imageOf(req);
+            const { found, report } = await lookupQuality(ref);
+            res.json({ image: ref, attached: found ?? null, report: report ?? null });
           }),
         );
         router.get('/health', (_req, res) => {
