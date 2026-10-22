@@ -10,6 +10,7 @@ import {
 import type { Component, SbomSummary } from './cyclonedx';
 import type { ImageScan } from './vulnerabilities';
 import { QualityReport, qualityFacts } from './quality';
+import { governanceFactRetriever } from './governance';
 
 /**
  * Facts of the scorecard "Quality & Security" (Tech Insights) about what an application of the platform runs: the
@@ -190,7 +191,10 @@ export const techInsightsModuleSupplyChain = createBackendModule({
     env.registerInit({
       deps: { providers: techInsightsFactRetrieversExtensionPoint },
       async init({ providers }) {
-        providers.addFactRetrievers({ refresquitoSupplyChainFactRetriever: supplyChainFactRetriever });
+        providers.addFactRetrievers({
+          refresquitoSupplyChainFactRetriever: supplyChainFactRetriever,
+          refresquitoDataGovernanceFactRetriever: governanceFactRetriever,
+        });
       },
     });
   },
