@@ -73,6 +73,36 @@ export interface Vulnerability {
   ver?: string;
   fix?: string;
   title?: string;
+  /** context added by Wazuh (wazuh-oneke 0.20.0): EPSS, CISA KEV (absent = unknown), days in its image repository */
+  epss?: number;
+  epss_pct?: number;
+  kev?: boolean;
+  kev_added?: string;
+  kev_due?: string;
+  kev_ransomware?: boolean;
+  first_seen?: string;
+  age_days?: number;
+}
+
+export interface ScanContext {
+  /** null: the KEV feed was not available */
+  kev: number | null;
+  kev_ids?: string[];
+  kev_ransomware?: number | null;
+  epss_max?: number | null;
+  epss_max_id?: string | null;
+  critical_fix_max_days?: number;
+  high_fix_max_days?: number;
+  kev_max_days?: number | null;
+}
+
+export interface Feed {
+  status: 'fresh' | 'cached' | 'missing' | 'disabled';
+  version?: string;
+  model?: string;
+  date?: string;
+  age_days?: number;
+  error?: string;
 }
 
 /** The last scan of an image by Wazuh's daily image scan (Trivy), through the security exporter of wazuh-oneke. */
@@ -85,8 +115,10 @@ export interface ImageScan {
   message?: string | null;
   counts: Record<string, number>;
   os?: string | null;
-  /** CRITICAL and HIGH only */
+  /** CRITICAL and HIGH, plus any severity that is in CISA KEV */
   vulns: Vulnerability[];
+  context?: ScanContext | null;
+  feeds?: { kev?: Feed; epss?: Feed; tracking_since?: string } | null;
 }
 
 export interface ImageVulnerabilities {

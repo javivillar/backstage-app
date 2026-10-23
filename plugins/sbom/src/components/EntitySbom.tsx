@@ -17,7 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Download from '@mui/icons-material/Download';
 import { SbomSource, sbomSources } from '../annotations';
-import { Component, ImageSbom, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
+import { Component, Feed, ImageSbom, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
 
 const ECOSYSTEM_LABEL: Record<string, string> = {
   pypi: 'Python',
@@ -119,8 +119,47 @@ const when = (iso?: string) => (iso ? `${iso.slice(0, 16).replace('T', ' ')} UTC
 const advisory = (id: string) =>
   id.startsWith('GHSA-') ? `https://github.com/advisories/${id}` : `https://avd.aquasec.com/nvd/${id.toLowerCase()}`;
 
-/** The vulnerabilities of the image, as Wazuh's daily image scan (Trivy) found them. */
-function Vulnerabilities({ image }: { image: string }) {
+const KEV_COLOR = '#b71c1c';
+const kevUrl = (id: string) => `https://www.cisa.gov/known-exploited-vulnerabilities-catalog?search_api_fulltext=${id}`;
+/** EPSS as a percentage: 0.27775 -> "27.8 %", tiny ones "< 0.1 %" */
+export function epssText(epss?: number) {
+  if (epss === undefined) return '';
+  if (epss < 0.001) return '< 0.1 %';
+  return `${(epss * 100).toFixed(epss < 0.1 ? 1 : 0)} %`;
+}
+
+/** the KEV cell: a red chip to CISA's entry, "no", or nothing when the KEV feed was not available */
+function KevCell({ v }: { v: Vulnerability }) {
+  if (v.kev === undefined) return null;
+  if (!v.kev) return <span style={{ opacity: 0.5 }}>no</span>;
+  return (
+    <a href={kevUrl(v.id)} target="_blank" rel="noopener" title={`In CISA KEV since ${v.kev_added ?? '?'}`}>
+      <Chip
+        size="small"
+        label={v.kev_ransomware ? 'KEV · ransomware' : 'KEV'}
+        sx={{ bgcolor: KEV_COLOR, color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+      />
+    </a>
+  );
+}
+/** most urgent first: known exploited, severity, probability of exploitation, then the id */
+export const byUrgency = (a: Vulnerability, b: Vulnerability) =>
+  Number(!!b.kev) - Number(!!a.kev) ||
+  SEVERITIES.indexOf(a.sev) - SEVERITIES.indexOf(b.sev) ||
+  (b.epss ?? -1) - (a.epss ?? -1) ||
+  a.id.localeCompare(b.id);
+
+/** "KEV catalogue 2026.10.21 · EPSS of 2026-10-22", with what is wrong with a feed */
+function feedText(name: string, f?: Feed) {
+  if (!f || f.status === 'disabled') return `${name}: not used`;
+  if (f.status === 'missing') return `${name}: not available${f.error ? ` (${f.error})` : ''}`;
+  const what = f.version ? `${name} ${f.version}` : `${name} of ${f.date ?? '?'}`;
+  const age = (f.age_days ?? 0) > 3 ? `, ${f.age_days} days old` : '';
+  return `${what}${f.status === 'cached' ? ' (cached copy: the last download failed)' : ''}${age}`;
+}
+
+/** The vulnerabilities of the image, as Wazuh's daily image scan (Trivy) found them, with the context Wazuh adds. */
+export function Vulnerabilities({ image }: { image: string }) {
   const { loading, error, data } = useVulnerabilities(image);
   const [severity, setSeverity] = useState('all');
   const [fixable, setFixable] = useState(false);
@@ -130,8 +169,8 @@ function Vulnerabilities({ image }: { image: string }) {
   const rows = useMemo(
     () =>
       vulns
-        .filter(v => (severity === 'all' || v.sev === severity) && (!fixable || !!v.fix))
-        .sort((a, b) => SEVERITIES.indexOf(a.sev) - SEVERITIES.indexOf(b.sev) || a.id.localeCompare(b.id)),
+        .filter(v => (severity === 'all' || (severity === 'KEV' ? !!v.kev : v.sev === severity)) && (!fixable || !!v.fix))
+        .sort(byUrgency),
     [vulns, severity, fixable],
   );
   const title = 'Vulnerabilities';
@@ -167,6 +206,10 @@ function Vulnerabilities({ image }: { image: string }) {
   }
   const unique = (sev: string) => new Set(vulns.filter(v => v.sev === sev).map(v => v.id)).size;
   const withFix = new Set(vulns.filter(v => v.fix).map(v => v.id)).size;
+  const ctx = scan.context;
+  const kevKnown = !!ctx && ctx.kev !== null && ctx.kev !== undefined;
+  const kevIds = new Set(vulns.filter(v => v.kev).map(v => v.id));
+  const days = (n?: number) => (n === undefined || n < 0 ? 'none' : `${n} days`);
   return (
     <InfoCard
       title={title}
@@ -188,6 +231,33 @@ function Vulnerabilities({ image }: { image: string }) {
             {unique('HIGH')} high CVEs, {withFix} with a fix
           </Typography>
         </Box>
+        {ctx ? (
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Chip
+              size="small"
+              label={kevKnown ? `known exploited (CISA KEV) ${kevIds.size}` : 'known exploited: unknown'}
+              sx={kevIds.size > 0 ? { bgcolor: KEV_COLOR, color: '#fff', fontWeight: 600 } : { opacity: 0.7 }}
+              variant={kevIds.size > 0 ? 'filled' : 'outlined'}
+            />
+            {(ctx.kev_ransomware ?? 0) > 0 && (
+              <Chip size="small" label={`used by ransomware ${ctx.kev_ransomware}`} sx={{ bgcolor: KEV_COLOR, color: '#fff' }} />
+            )}
+            <Typography variant="body2" sx={{ opacity: 0.75 }}>
+              highest EPSS {ctx.epss_max !== null && ctx.epss_max !== undefined ? `${epssText(ctx.epss_max)} (${ctx.epss_max_id})` : 'none'} ·
+              oldest fixable critical open {days(ctx.critical_fix_max_days)}, high {days(ctx.high_fix_max_days)}
+            </Typography>
+          </Box>
+        ) : (
+          <Typography variant="body2" sx={{ opacity: 0.6 }}>
+            No context (EPSS, CISA KEV, age) in this scan: it needs wazuh-oneke 0.20.0.
+          </Typography>
+        )}
+        {scan.feeds && (
+          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+            Context by Wazuh: {feedText('CISA KEV', scan.feeds.kev)} · {feedText('EPSS', scan.feeds.epss)}
+            {scan.feeds.tracking_since ? ` · days counted since ${scan.feeds.tracking_since}` : ''}
+          </Typography>
+        )}
         {vulns.length === 0 ? (
           <Typography variant="body2">No CRITICAL or HIGH vulnerabilities.</Typography>
         ) : (
@@ -202,9 +272,10 @@ function Vulnerabilities({ image }: { image: string }) {
                   setSeverity(e.target.value);
                   setPage(0);
                 }}
-                sx={{ minWidth: 160 }}
+                sx={{ minWidth: 240 }}
               >
-                <MenuItem value="all">Critical and high</MenuItem>
+                <MenuItem value="all">Critical, high and known exploited</MenuItem>
+                <MenuItem value="KEV">Known exploited (KEV)</MenuItem>
                 <MenuItem value="CRITICAL">Critical</MenuItem>
                 <MenuItem value="HIGH">High</MenuItem>
               </TextField>
@@ -228,6 +299,9 @@ function Vulnerabilities({ image }: { image: string }) {
                 <TableRow>
                   <TableCell>Vulnerability</TableCell>
                   <TableCell>Severity</TableCell>
+                  <TableCell title="CISA Known Exploited Vulnerabilities: exploited in the wild">KEV</TableCell>
+                  <TableCell title="FIRST EPSS: probability of exploitation in the next 30 days">EPSS</TableCell>
+                  <TableCell title="Days since its image repository first had it (Wazuh)">Open</TableCell>
                   <TableCell>Package</TableCell>
                   <TableCell>Installed</TableCell>
                   <TableCell>Fixed in</TableCell>
@@ -243,6 +317,15 @@ function Vulnerabilities({ image }: { image: string }) {
                       </a>
                     </TableCell>
                     <TableCell sx={{ color: SEVERITY_COLOR[v.sev], fontWeight: 600 }}>{v.sev.toLowerCase()}</TableCell>
+                    <TableCell>
+                      <KevCell v={v} />
+                    </TableCell>
+                    <TableCell title={v.epss_pct !== undefined ? `percentile ${(v.epss_pct * 100).toFixed(1)}` : undefined}>
+                      {epssText(v.epss)}
+                    </TableCell>
+                    <TableCell title={v.first_seen ? `first seen ${v.first_seen}` : undefined}>
+                      {v.age_days !== undefined ? `${v.age_days} d` : ''}
+                    </TableCell>
                     <TableCell>{v.pkg}</TableCell>
                     <TableCell>{v.ver}</TableCell>
                     <TableCell>{v.fix || <span style={{ opacity: 0.6 }}>no fix yet</span>}</TableCell>

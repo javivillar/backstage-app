@@ -10,6 +10,48 @@ export interface Vulnerability {
   ver?: string;
   fix?: string;
   title?: string;
+  /**
+   * The context Wazuh adds (wazuh-oneke 0.20.0, USE-CASES.md I6): FIRST EPSS score and percentile, whether it is in
+   * CISA KEV (absent when the KEV feed is not available: unknown), and since when its image repository has it.
+   */
+  epss?: number;
+  epss_pct?: number;
+  kev?: boolean;
+  kev_added?: string;
+  kev_due?: string;
+  kev_ransomware?: boolean;
+  first_seen?: string;
+  age_days?: number;
+}
+
+/** Per image, computed by Wazuh. kev null: the KEV feed was not available. *_max_days -1: none open. */
+export interface ScanContext {
+  kev: number | null;
+  kev_ids?: string[];
+  kev_ransomware?: number | null;
+  epss_max?: number | null;
+  epss_max_id?: string | null;
+  critical_fix_max_days?: number;
+  high_fix_max_days?: number;
+  kev_max_days?: number | null;
+}
+
+export interface Feed {
+  status: 'fresh' | 'cached' | 'missing' | 'disabled';
+  url?: string;
+  version?: string;
+  model?: string;
+  /** the date of the data (KEV catalogue release, EPSS score date) and its age on the day of the run */
+  date?: string;
+  age_days?: number;
+  error?: string;
+}
+
+export interface ScanFeeds {
+  kev?: Feed;
+  epss?: Feed;
+  /** first_seen counts from this day (the first run of wazuh-oneke 0.20.0) */
+  tracking_since?: string;
 }
 
 export interface ImageScan {
@@ -23,8 +65,11 @@ export interface ImageScan {
   message?: string | null;
   counts: Record<string, number>;
   os?: string | null;
-  /** CRITICAL and HIGH only */
+  /** CRITICAL and HIGH, plus any severity that is in CISA KEV */
   vulns: Vulnerability[];
+  /** wazuh-oneke 0.20.0+ */
+  context?: ScanContext | null;
+  feeds?: ScanFeeds | null;
 }
 
 /**
