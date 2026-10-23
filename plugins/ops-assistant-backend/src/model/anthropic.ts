@@ -93,7 +93,7 @@ export class AnthropicProvider implements ModelProvider {
       system: [{ type: 'text', text: request.system, cache_control: { type: 'ephemeral' } }],
       tools,
       messages: toAnthropic(request.messages),
-    });
+    }, { signal: request.signal });
     const u = response.usage;
     return {
       parts: fromAnthropic(response.content),

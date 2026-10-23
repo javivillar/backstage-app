@@ -12,6 +12,13 @@ export interface ToolCallRecord {
   chars: number;
 }
 
+/** thrown by runTurn when its signal is aborted */
+export class Cancelled extends Error {
+  constructor() {
+    super('cancelled');
+  }
+}
+
 export interface Turn {
   /** the whole conversation, with what this turn added (the client keeps it and sends it back next time) */
   messages: Message[];
@@ -37,7 +44,13 @@ export async function runTurn(options: {
   maxSteps?: number;
   /** told of each tool call as soon as it returns (the page shows them while the model works) */
   onToolCall?: (call: ToolCallRecord) => void;
+  /** aborted when the operator cancels: the loop stops at once, and the conversation stays as it was */
+  signal?: AbortSignal;
 }): Promise<Turn> {
+  const { signal } = options;
+  const check = () => {
+    if (signal?.aborted) throw new Cancelled();
+  };
   const { provider, tools, system, question } = options;
   const maxSteps = options.maxSteps ?? 12;
   const messages: Message[] = [...options.history, { role: 'user', parts: [{ type: 'text', text: question }] }];
@@ -48,7 +61,15 @@ export async function runTurn(options: {
   let model: string | undefined;
 
   for (let step = 0; step < maxSteps; step++) {
-    const completion = await provider.complete({ system, messages, tools: specs });
+    check();
+    let completion;
+    try {
+      completion = await provider.complete({ system, messages, tools: specs, signal });
+    } catch (e) {
+      check();
+      throw e;
+    }
+    check();
     model = completion.model ?? model;
     for (const [k, v] of Object.entries(completion.usage ?? {})) usage[k] = (usage[k] ?? 0) + v;
     messages.push({ role: 'assistant', parts: completion.parts });

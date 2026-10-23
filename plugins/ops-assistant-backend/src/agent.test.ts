@@ -1,4 +1,4 @@
-import { runTurn, Tools } from './agent';
+import { Cancelled, runTurn, Tools } from './agent';
 import type { Completion, CompletionRequest, ModelProvider } from './model/types';
 
 class Scripted implements ModelProvider {
@@ -58,5 +58,21 @@ describe('runTurn', () => {
     const p = new Scripted([{ parts: [], stop: 'refusal' }]);
     const turn = await runTurn({ provider: p, tools, system: 's', history: [], question: 'q' });
     expect(turn.answer).toMatch(/declined/);
+  });
+});
+
+describe('runTurn cancel', () => {
+  it('stops when the signal is aborted, during a model call', async () => {
+    const abort = new AbortController();
+    const provider: ModelProvider = {
+      id: 'fake',
+      label: 'fake',
+      complete: async req => {
+        abort.abort();
+        expect(req.signal?.aborted).toBe(true);
+        throw new Error('request aborted');
+      },
+    };
+    await expect(runTurn({ provider, tools, system: 's', history: [], question: 'q', signal: abort.signal })).rejects.toBeInstanceOf(Cancelled);
   });
 });

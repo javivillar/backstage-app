@@ -19,6 +19,7 @@ import { providerFromConfig } from './model';
  *                                    messages: the conversation so far, as the last answer returned it
  *   GET  /api/ops-assistant/chat/:id {status: running|done|error, toolCalls, elapsedMs, turn?, error?}
  *                                    turn: {answer, messages, toolCalls, stop, model, usage}
+ *   DELETE /api/ops-assistant/chat/:id   cancels it (the conversation stays as it was before the question)
  *   (a question takes longer than a proxy keeps a request open: src/jobs.ts)
  *
  * Config (app-config):
@@ -103,6 +104,7 @@ export const opsAssistantPlugin = createBackendPlugin({
               maxSteps,
               tools: { list: () => mcp!.listTools(), call: (name, input) => mcp!.callTool(name, input, user) },
               onToolCall: call => j.toolCalls.push(call),
+              signal: j.signal,
             });
             // one audit line per question: who, what was looked at, what it cost (never the answer or the data)
             logger.info('ops-assistant turn', {
@@ -120,6 +122,20 @@ export const opsAssistantPlugin = createBackendPlugin({
             return;
           }
           res.status(202).json({ id: job.id });
+        });
+
+        router.delete('/chat/:id', async (req: Request, res: Response) => {
+          const { user, allowed } = await caller(req);
+          if (!allowed) {
+            res.status(403).json({ error: 'Not allowed.' });
+            return;
+          }
+          if (!jobs.cancel(req.params.id, user)) {
+            res.status(404).json({ error: 'No such question being answered.' });
+            return;
+          }
+          logger.info('ops-assistant cancelled', { user });
+          res.status(204).end();
         });
 
         router.get('/chat/:id', async (req: Request, res: Response) => {

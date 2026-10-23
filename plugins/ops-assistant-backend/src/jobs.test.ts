@@ -48,3 +48,21 @@ describe('Jobs', () => {
     expect(jobs.get(job.id, 'u')).toBeUndefined();
   });
 });
+
+describe('Jobs.cancel', () => {
+  it('aborts the work of its own user only', async () => {
+    const jobs = new Jobs();
+    let seen: AbortSignal | undefined;
+    const job = jobs.start('u', j => {
+      seen = j.signal;
+      return new Promise<Turn>((_, reject) => j.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    })!;
+    expect(jobs.cancel(job.id, 'other')).toBe(false);
+    expect(jobs.cancel(job.id, 'u')).toBe(true);
+    expect(seen?.aborted).toBe(true);
+    await flush();
+    expect(jobs.get(job.id, 'u')?.status).toBe('cancelled');
+    expect(jobs.cancel(job.id, 'u')).toBe(false);
+    expect(jobs.running('u')).toBe(0);
+  });
+});

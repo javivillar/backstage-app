@@ -64,6 +64,7 @@ export const OpsAssistantPage = () => {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<JobProgress | undefined>();
+  const current = useRef<string | undefined>();
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,6 +101,7 @@ export const OpsAssistantPage = () => {
       });
       const begun = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(begun.error ?? `${res.status} ${res.statusText}`);
+      current.current = begun.id;
       for (;;) {
         await sleep(POLL_MS);
         const poll = await fetch(`${base}/chat/${begun.id}`);
@@ -110,6 +112,7 @@ export const OpsAssistantPage = () => {
           continue;
         }
         if (job.status === 'error') throw new Error(job.error ?? 'The model could not answer');
+        if (job.status === 'cancelled') throw new Error('Cancelled. The conversation stays as it was before this question.');
         const turn = job.turn;
         messages = turn.messages;
         done = { ...done, answer: turn.answer, toolCalls: turn.toolCalls, model: turn.model, usage: turn.usage, ms: job.elapsedMs };
@@ -118,12 +121,21 @@ export const OpsAssistantPage = () => {
     } catch (e) {
       done = { ...done, error: (e as Error).message };
     }
+    current.current = undefined;
     setProgress(undefined);
     setState(s => ({ messages, exchanges: [...s.exchanges.slice(0, -1), done] }));
     setBusy(false);
   };
 
   const reset = () => setState({ messages: [], exchanges: [] });
+
+  // the next poll sees the job cancelled and ends the question
+  const cancel = async () => {
+    const id = current.current;
+    if (!id) return;
+    const base = await discovery.getBaseUrl('ops-assistant');
+    await fetch(`${base}/chat/${id}`, { method: 'DELETE' }).catch(() => undefined);
+  };
 
   let body;
   if (infoError) body = <WarningPanel title="The assistant is not reachable" message={infoError} />;
@@ -171,7 +183,10 @@ export const OpsAssistantPage = () => {
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <MarkdownContent content={x.answer} dialect="gfm" />
                 {!!x.toolCalls?.length && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Tools used:
+                    </Typography>
                     {x.toolCalls.map((t, j) => (
                       <Chip key={j} size="small" label={describe(t)} color={t.isError ? 'warning' : 'default'} title={`${t.chars} characters`} />
                     ))}
@@ -207,9 +222,15 @@ export const OpsAssistantPage = () => {
             <Button variant="contained" disabled={busy || !question.trim()} onClick={() => ask(question)}>
               Ask
             </Button>
-            <Button disabled={busy || !state.exchanges.length} onClick={reset}>
-              New
-            </Button>
+            {busy ? (
+              <Button color="warning" variant="outlined" onClick={cancel}>
+                Cancel
+              </Button>
+            ) : (
+              <Button disabled={!state.exchanges.length} onClick={reset}>
+                New
+              </Button>
+            )}
           </Box>
         </Box>
       </Box>
