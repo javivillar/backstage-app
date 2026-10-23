@@ -1,0 +1,60 @@
+{
+  "active": [
+    {
+      "check": "vulnerability",
+      "id": "CVE-2023-44487",
+      "image": "ghcr.io/javivillar/petstore-web",
+      "reason": "HTTP/2 is off in nginx",
+      "approvedBy": "sec",
+      "expires": "2027-03-31",
+      "days_left": 159
+    },
+    {
+      "check": "endpoint",
+      "id": "GET /api/info",
+      "reason": "version on the sign-in page",
+      "approvedBy": "sec",
+      "expires": "2026-12-31",
+      "days_left": 69
+    }
+  ],
+  "expired": [
+    {
+      "check": "license",
+      "id": "some-lib",
+      "reason": "dual licensed, we use it under MIT",
+      "approvedBy": "sec",
+      "expires": "2026-01-01"
+    }
+  ],
+  "invalid": [
+    {
+      "check": "sast",
+      "id": "B608",
+      "reason": "query built from a fixed list",
+      "approvedBy": "sec",
+      "expires": "2027-01-01",
+      "entry": 3,
+      "why": "file is required for a sast / secret exception"
+    },
+    {
+      "check": "secret",
+      "id": "generic-api-key",
+      "file": "tests/fixtures/fake.env",
+      "reason": "a fake key of the tests",
+      "approvedBy": "",
+      "expires": "2029-01-01",
+      "entry": 5,
+      "why": "approvedBy is required (the approver, a CODEOWNER of the file); expires at most 365 days ahead"
+    },
+    {
+      "check": "typo",
+      "id": "x",
+      "reason": "short",
+      "expires": "tomorrow",
+      "entry": 6,
+      "why": "check is one of vulnerability, endpoint, sast, secret, license, os-eol; reason is required (why it is accepted, at least a sentence); approvedBy is required (the approver, a CODEOWNER of the file); expires is a date (YYYY-MM-DD)"
+    }
+  ],
+  "file": true
+}

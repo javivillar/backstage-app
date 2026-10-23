@@ -35,3 +35,9 @@ The SBOM card of each image also applies the **license policy** of the platform 
 license the policy denies (GPL, AGPL, SSPL..., `sbom.licenses.denied`) in red, and the ones that say no license at all.
 A license expression is denied only when no allowed license can satisfy it (`MIT OR GPL-3.0` is allowed). The
 Vulnerabilities card says when the **OS of the image is out of support** (no more security fixes; wazuh-oneke 0.21.0).
+
+The card's last tab, **Exceptions**, lists the approved security exceptions of the commit
+(`platform/security-exceptions.yaml`, validated by its CI): the invalid ones with why (they do not apply), the active
+ones until when (amber when they expire within 30 days), and the ones expired since — their expiry is checked when the
+page is shown, not only when the CI ran. A finding of a kernel package of an image shows *n/a (kernel)* in the
+Vulnerabilities card (wazuh-oneke 0.22.0).

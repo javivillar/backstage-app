@@ -22,6 +22,8 @@ export interface Vulnerability {
   kev_ransomware?: boolean;
   first_seen?: string;
   age_days?: number;
+  /** a kernel package: does not apply to a container (wazuh-oneke 0.22.0, USE-CASES.md I9) */
+  not_applicable?: string;
   /** wazuh-oneke 0.20.0, USE-CASES.md I7: os (distribution package) | lang; CVSS attack vector; loaded or not */
   cls?: 'os' | 'lang';
   av?: 'N' | 'A' | 'L' | 'P' | '';

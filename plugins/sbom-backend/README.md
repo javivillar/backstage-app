@@ -26,7 +26,11 @@ fixable one has been open, -1 none), and from the packages in use and the exposu
 (`licenses.ts`, config `sbom.licenses`: `denied`, `ecosystems`, `ignore`) applied to each SBOM, `deniedLicenses` and
 `unknownLicenses` (distinct dependencies of the application). From the quality report it also takes the code findings: `unauthenticatedEndpoints` (operations with no
 authentication not declared public), `sastIssues` (Bandit HIGH + MEDIUM and the eslint rules of security) and
-`secretsFound` (git history + images); -1 when the report does not say it. The SLA thresholds are checks of app-config (cnoe-oneke
+`secretsFound` (git history + images); -1 when the report does not say it. Before counting, it leaves out the findings of the active **security exceptions** of the commit
+(`exceptions.ts`: the part `exceptions` of the quality report, checked against today's date — an exception that expired
+since the CI does not apply) and the findings Wazuh marks `not_applicable` (kernel packages). Facts
+`securityExceptions`, `securityExceptionsInvalid`, `securityExceptionsExpiring` (within 30 days),
+`securityExceptionIds`. The SLA thresholds are checks of app-config (cnoe-oneke
 `backstage.techInsights.sla`), not code.
 
 It finds the SBOM with the referrers API of the registry, or in the tag `sha256-<hex>` that oras writes on a registry

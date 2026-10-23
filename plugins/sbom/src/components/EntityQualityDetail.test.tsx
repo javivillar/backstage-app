@@ -2,7 +2,9 @@ import { fireEvent, screen } from '@testing-library/react';
 import { EntityProvider } from '@backstage/plugin-catalog-react';
 import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { TestApiProvider, renderInTestApp } from '@backstage/test-utils';
-import { EntityQualityDetailContent } from './EntityQualityDetail';
+import { EntityQualityDetailContent, ExceptionsTab } from './EntityQualityDetail';
+// quality.py exceptions of petstore#25 on a sample file: 2 active, 1 expired, 3 invalid
+import exceptionsPart from './exceptions.fixture.json';
 import report from './quality.fixture.json';
 // quality.py of petstore#21 on real tool outputs: the endpoints of the petstore plus one without authentication and one
 // declared public, Bandit and eslint on probe files, gitleaks and Trivy on probe secrets
@@ -84,6 +86,26 @@ describe('EntityQualityDetailContent', () => {
     await view;
     fireEvent.click(await screen.findByRole('tab', { name: 'Code findings' }));
     expect(screen.getByText(/has no code findings/)).toBeInTheDocument();
+  });
+
+  it('shows the exceptions: invalid ones with why, active ones until when, and the ones expired since', async () => {
+    await renderInTestApp(<ExceptionsTab part={exceptionsPart as never} today="2026-12-15" />);
+    expect(screen.getByText('Invalid exceptions (they do not apply)')).toBeInTheDocument();
+    expect(screen.getByText(/file is required for a sast \/ secret exception/)).toBeInTheDocument();
+    const rows = screen.getAllByRole('row').slice(1);
+    // CVE-2023-44487 applies until 2027-03-31; GET /api/info expires on 2026-12-31: soon; some-lib had expired
+    expect(rows[0]).toHaveTextContent('CVE-2023-44487');
+    expect(rows[0]).toHaveTextContent('applies');
+    expect(rows[0]).toHaveTextContent('image ghcr.io/javivillar/petstore-web');
+    expect(rows[1]).toHaveTextContent('GET /api/info');
+    expect(rows[1]).toHaveTextContent('expires soon');
+    expect(rows[2]).toHaveTextContent('some-lib');
+    expect(rows[2]).toHaveTextContent('expired: the finding counts again');
+  });
+
+  it('an exception that expired after the CI accepted it no longer applies', async () => {
+    await renderInTestApp(<ExceptionsTab part={exceptionsPart as never} today="2027-01-15" />);
+    expect(screen.getAllByText('expired: the finding counts again')).toHaveLength(2);
   });
 
   it('says when a report has only the totals', async () => {

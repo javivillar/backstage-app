@@ -99,6 +99,8 @@ export interface Vulnerability {
   kev_ransomware?: boolean;
   first_seen?: string;
   age_days?: number;
+  /** a kernel package of the image: does not apply to a container (wazuh-oneke 0.22.0) */
+  not_applicable?: string;
   /** wazuh-oneke 0.20.0, USE-CASES.md I7: os (distribution package) | lang; CVSS attack vector; loaded or not */
   cls?: 'os' | 'lang';
   av?: 'N' | 'A' | 'L' | 'P' | '';
@@ -277,6 +279,24 @@ export interface QualityPart {
   detail?: { tests?: TestCase[]; coverage?: FileCoverage[]; endpoints?: Endpoint[]; findings?: CodeFinding[] };
 }
 
+/** platform/security-exceptions.yaml of the application, as its CI validated it (part exceptions) */
+export interface SecurityException {
+  check: 'vulnerability' | 'endpoint' | 'sast' | 'secret' | 'license' | 'os-eol';
+  id: string;
+  file?: string;
+  image?: string;
+  reason?: string;
+  approvedBy?: string;
+  expires?: string;
+}
+
+export interface ExceptionsPart {
+  active: SecurityException[];
+  expired: SecurityException[];
+  invalid: Array<Partial<SecurityException> & { entry?: number; why: string }>;
+  file?: boolean;
+}
+
 export interface SecretsPart {
   repo?: number;
   images?: number;
@@ -290,6 +310,7 @@ export interface QualityReport {
   backend?: QualityPart;
   frontend?: QualityPart;
   secrets?: SecretsPart;
+  exceptions?: ExceptionsPart;
 }
 
 export interface ImageQuality {
