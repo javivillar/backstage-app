@@ -73,6 +73,56 @@ export interface Vulnerability {
   ver?: string;
   fix?: string;
   title?: string;
+  /** context added by Wazuh (wazuh-oneke 0.20.0): EPSS, CISA KEV (absent = unknown), days in its image repository */
+  epss?: number;
+  epss_pct?: number;
+  kev?: boolean;
+  kev_added?: string;
+  kev_due?: string;
+  kev_ransomware?: boolean;
+  first_seen?: string;
+  age_days?: number;
+  /** wazuh-oneke 0.20.0, USE-CASES.md I7: os (distribution package) | lang; CVSS attack vector; loaded or not */
+  cls?: 'os' | 'lang';
+  av?: 'N' | 'A' | 'L' | 'P' | '';
+  in_use?: 'yes' | 'no' | 'unknown';
+}
+
+export interface ScanContext {
+  /** null: the KEV feed was not available */
+  kev: number | null;
+  kev_ids?: string[];
+  kev_ransomware?: number | null;
+  epss_max?: number | null;
+  epss_max_id?: string | null;
+  critical_fix_max_days?: number;
+  high_fix_max_days?: number;
+  kev_max_days?: number | null;
+  /** in use (unknown counts as in use) and exposure */
+  in_use_known?: boolean;
+  critical_in_use?: number;
+  critical_not_in_use?: number;
+  critical_fix_inuse_max_days?: number;
+  high_fix_inuse_max_days?: number;
+  kev_in_use?: number | null;
+  exposure?: Exposure['level'] | null;
+  critical_network_exposed?: number;
+}
+
+/** what can reach the pods of the image (Ingress / IngressRoute / NodePort / LoadBalancer, hostNetwork, a Service) */
+export interface Exposure {
+  level: 'external' | 'host' | 'internal' | 'none';
+  via?: string[];
+  segment?: string | null;
+}
+
+export interface Feed {
+  status: 'fresh' | 'cached' | 'missing' | 'disabled';
+  version?: string;
+  model?: string;
+  date?: string;
+  age_days?: number;
+  error?: string;
 }
 
 /** The last scan of an image by Wazuh's daily image scan (Trivy), through the security exporter of wazuh-oneke. */
@@ -85,8 +135,11 @@ export interface ImageScan {
   message?: string | null;
   counts: Record<string, number>;
   os?: string | null;
-  /** CRITICAL and HIGH only */
+  /** CRITICAL and HIGH, plus any severity that is in CISA KEV */
   vulns: Vulnerability[];
+  context?: ScanContext | null;
+  feeds?: { kev?: Feed; epss?: Feed; inuse?: Feed; tracking_since?: string } | null;
+  exposure?: Exposure | null;
 }
 
 export interface ImageVulnerabilities {

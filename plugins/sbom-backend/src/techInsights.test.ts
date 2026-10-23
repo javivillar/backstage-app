@@ -115,6 +115,96 @@ describe('facts of an application', () => {
   });
 });
 
+describe('context of the vulnerabilities (Wazuh)', () => {
+  const withContext = (vulns: ImageScan['vulns'], context: ImageScan['context']) => ({
+    configured: true,
+    scan: { digest: 'sha256:1', status: 'scanned' as const, counts: {}, vulns, context },
+  });
+
+  it('known exploited CVEs once across images, the maximum of the ages and of EPSS', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      {
+        ref: 'api',
+        scan: withContext(
+          [
+            { id: 'CVE-2023-44487', sev: 'HIGH', fix: '1.1', kev: true, epss: 0.99, age_days: 12 },
+            { id: 'CVE-1', sev: 'CRITICAL', fix: '2', kev: false, age_days: 3 },
+          ],
+          { kev: 1, epss_max: 0.99, critical_fix_max_days: 3, high_fix_max_days: 12 },
+        ),
+      },
+      {
+        ref: 'web',
+        scan: withContext(
+          [
+            { id: 'CVE-2023-44487', sev: 'LOW', kev: true, kev_ransomware: true },
+            { id: 'CVE-2', sev: 'CRITICAL', fix: '3', kev: false, age_days: 9 },
+          ],
+          { kev: 1, epss_max: 0.5, critical_fix_max_days: 9, high_fix_max_days: -1 },
+        ),
+      },
+    ]);
+    expect(facts).toMatchObject({
+      vulnContext: true,
+      knownExploited: 1,
+      knownExploitedRansomware: 1,
+      knownExploitedIds: 'CVE-2023-44487',
+      epssMax: 0.99,
+      criticalFixMaxDays: 9,
+      highFixMaxDays: 12,
+    });
+  });
+
+  it('in use and exposure: the short SLA only for what is in use (or unknown), the most exposed image', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      {
+        ref: 'api',
+        scan: {
+          configured: true,
+          scan: {
+            digest: 'sha256:1', status: 'scanned', counts: {},
+            vulns: [
+              { id: 'CVE-1', sev: 'CRITICAL', fix: '2', kev: false, in_use: 'no', age_days: 40 },
+              { id: 'CVE-2', sev: 'CRITICAL', fix: '2', kev: true, in_use: 'yes', age_days: 3 },
+            ],
+            context: { kev: 1, critical_fix_max_days: 40, high_fix_max_days: -1, critical_fix_inuse_max_days: 3,
+                       high_fix_inuse_max_days: -1, critical_network_exposed: 1 },
+            exposure: { level: 'external', via: ['ingress a/b'] },
+          },
+        },
+      },
+      { ref: 'web', scan: withContext([{ id: 'CVE-3', sev: 'CRITICAL', kev: false, in_use: 'no' }], { kev: 0, critical_fix_max_days: -1, exposure: 'internal' }) },
+    ]);
+    expect(facts).toMatchObject({
+      criticalFixMaxDays: 40,
+      criticalFixInUseMaxDays: 3,
+      knownExploitedInUse: 1,
+      criticalNotInUse: 2,
+      criticalNetworkExposed: 1,
+      exposure: 'external',
+    });
+  });
+
+  it('nothing open: no KEV and -1 days', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      { ref: 'api', scan: withContext([], { kev: 0, epss_max: null, critical_fix_max_days: -1, high_fix_max_days: -1 }) },
+    ]);
+    expect(facts).toMatchObject({ vulnContext: true, knownExploited: 0, epssMax: -1, criticalFixMaxDays: -1 });
+  });
+
+  it('unknown when the KEV feed was missing, a scan has no context or an image is not scanned', () => {
+    const missing = applicationFacts(app, ['3.1'], [{ ref: 'api', scan: withContext([], { kev: null }) }]);
+    const old = applicationFacts(app, ['3.1'], [{ ref: 'api', scan: scan([{ id: 'CVE-1', sev: 'HIGH' }]) }]);
+    const notScanned = applicationFacts(app, ['3.1'], [
+      { ref: 'api', scan: withContext([], { kev: 0 }) },
+      { ref: 'web', scan: { configured: true, scan: null } },
+    ]);
+    for (const facts of [missing, old, notScanned]) {
+      expect(facts).toMatchObject({ vulnContext: false, knownExploited: -1, criticalFixMaxDays: -1 });
+    }
+  });
+});
+
 describe('quality report', () => {
   const report: QualityReport = {
     schema: 'refresquito.quality/v1',

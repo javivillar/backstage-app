@@ -105,14 +105,58 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
     // the images carry the line the application says it is on (the packages of the framework in their SBOM)
     imagesMatchFrameworkLine: !!line && framework.length > 0 && framework.every(c => lineOf(c.version) === line),
     frameworkInImages: [...new Set(framework.map(c => `${c.name} ${c.version ?? '?'}`))].sort().join(', '),
+    ...contextFacts(scans, images.length),
     // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
     ...qualityFacts(images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined),
   };
 }
 
+/**
+ * The context of its vulnerabilities, as Wazuh computes it (wazuh-oneke 0.20.0, USE-CASES.md I6): CVEs in CISA KEV,
+ * highest EPSS, and the days the oldest fixable CRITICAL / HIGH has been open in its image repositories. Nothing is
+ * computed here but the maximum over its images; the SLA thresholds are the checks (app-config). vulnContext false
+ * (an image not scanned, a scan without context or without the KEV feed): the numbers are -1 and the checks fail.
+ */
+const EXPOSURE_RANK: Record<string, number> = { none: 0, internal: 1, host: 2, external: 3 };
+
+export function contextFacts(scans: ImageScan[], imageCount: number) {
+  const known = imageCount > 0 && scans.length === imageCount && scans.every(s => s.context && s.context.kev !== null && s.context.kev !== undefined);
+  if (!known) {
+    return {
+      vulnContext: false, knownExploited: -1, knownExploitedRansomware: -1, knownExploitedIds: '', epssMax: -1,
+      criticalFixMaxDays: -1, highFixMaxDays: -1, criticalFixInUseMaxDays: -1, highFixInUseMaxDays: -1,
+      knownExploitedInUse: -1, criticalNotInUse: -1, criticalNetworkExposed: -1, exposure: '',
+    };
+  }
+  const vulns = scans.flatMap(s => s.vulns ?? []);
+  const kev = [...new Set(vulns.filter(v => v.kev).map(v => v.id))].sort();
+  const max = (pick: (s: ImageScan) => number | null | undefined) =>
+    Math.max(-1, ...scans.map(s => pick(s) ?? -1));
+  return {
+    vulnContext: true,
+    knownExploited: kev.length,
+    knownExploitedRansomware: new Set(vulns.filter(v => v.kev_ransomware).map(v => v.id)).size,
+    knownExploitedIds: kev.join(', '),
+    epssMax: max(s => s.context?.epss_max),
+    criticalFixMaxDays: max(s => s.context?.critical_fix_max_days),
+    highFixMaxDays: max(s => s.context?.high_fix_max_days),
+    // in use (USE-CASES.md I7 of wazuh-oneke): Wazuh counts unknown as in use; a scan without these fields
+    // (no in-use data at all) falls back to every finding
+    criticalFixInUseMaxDays: max(s => s.context?.critical_fix_inuse_max_days ?? s.context?.critical_fix_max_days),
+    highFixInUseMaxDays: max(s => s.context?.high_fix_inuse_max_days ?? s.context?.high_fix_max_days),
+    knownExploitedInUse: new Set(vulns.filter(v => v.kev && v.in_use !== 'no').map(v => v.id)).size,
+    criticalNotInUse: new Set(vulns.filter(v => v.sev?.toUpperCase() === 'CRITICAL' && v.in_use === 'no').map(v => v.id)).size,
+    criticalNetworkExposed: scans.reduce((n, s) => n + (s.context?.critical_network_exposed ?? 0), 0),
+    // the most exposed of its images
+    exposure: scans
+      .map(s => s.exposure?.level ?? s.context?.exposure ?? '')
+      .reduce((a, b) => (EXPOSURE_RANK[b] ?? -1) > (EXPOSURE_RANK[a] ?? -1) ? b : a, ''),
+  };
+}
+
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.2.0',
+  version: '0.3.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -125,6 +169,37 @@ export const supplyChainFactRetriever: FactRetriever = {
     criticalWithFix: { type: 'integer', description: 'CRITICAL vulnerabilities with a fixed version available' },
     high: { type: 'integer', description: 'HIGH vulnerabilities of its images' },
     highWithFix: { type: 'integer', description: 'HIGH vulnerabilities with a fixed version available' },
+    vulnContext: {
+      type: 'boolean',
+      description: 'Every image is scanned and Wazuh gave the context of its vulnerabilities (EPSS, KEV, age)',
+    },
+    knownExploited: { type: 'integer', description: 'CVEs of CISA KEV (exploited in the wild) in its images; -1: unknown' },
+    knownExploitedRansomware: { type: 'integer', description: 'Of them, used by ransomware campaigns; -1: unknown' },
+    knownExploitedIds: { type: 'string', description: 'The CVEs of CISA KEV in its images' },
+    epssMax: { type: 'float', description: 'Highest EPSS score (probability of exploitation) of its vulnerabilities; -1: unknown' },
+    criticalFixMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable CRITICAL has been open in its image repositories; -1: none (or unknown)',
+    },
+    highFixMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable HIGH has been open in its image repositories; -1: none (or unknown)',
+    },
+    criticalFixInUseMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable CRITICAL whose package is in use (or unknown) has been open; -1: none',
+    },
+    highFixInUseMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable HIGH whose package is in use (or unknown) has been open; -1: none',
+    },
+    knownExploitedInUse: { type: 'integer', description: 'CVEs of CISA KEV whose package is in use (or unknown); -1: unknown' },
+    criticalNotInUse: { type: 'integer', description: 'CRITICAL CVEs whose package no process of its images has loaded' },
+    criticalNetworkExposed: {
+      type: 'integer',
+      description: 'CRITICAL CVEs attackable over the network, in use, on images reachable from outside the cluster',
+    },
+    exposure: { type: 'string', description: 'The most exposed of its images: external, host, internal or none' },
     frameworkLine: { type: 'string', description: 'Line of the Python Framework it is built on' },
     latestFrameworkLine: { type: 'string', description: 'Latest line of the Python Framework in the catalog' },
     onLatestFrameworkLine: { type: 'boolean', description: 'It is built on the latest line' },
