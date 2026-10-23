@@ -12,9 +12,12 @@ import Typography from '@mui/material/Typography';
 type Message = { role: 'user' | 'assistant'; parts: Array<{ type: string; text?: string }> };
 type ToolCall = { name: string; input: Record<string, unknown>; isError: boolean; chars: number };
 type Exchange = { question: string; answer?: string; toolCalls?: ToolCall[]; model?: string; usage?: Record<string, number>; error?: string; ms?: number };
+type JobProgress = { toolCalls: ToolCall[]; elapsedMs: number };
 type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: number };
 
 const STORE = 'ops-assistant-conversation';
+const POLL_MS = 2000;
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const EXAMPLES = [
   'How is the platform? Anything I should look at now?',
   'Why is Loki restarting and how do I fix it?',
@@ -60,6 +63,7 @@ export const OpsAssistantPage = () => {
   const [state, setState] = useState(load);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<JobProgress | undefined>();
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -87,18 +91,34 @@ export const OpsAssistantPage = () => {
     let messages = state.messages;
     try {
       const base = await discovery.getBaseUrl('ops-assistant');
+      // the backend starts the work and answers at once; the answer is collected below (a question can take minutes,
+      // longer than the proxies keep a request open)
       const res = await fetch(`${base}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: text, messages: state.messages }),
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-      messages = body.messages;
-      done = { ...done, answer: body.answer, toolCalls: body.toolCalls, model: body.model, usage: body.usage, ms: Date.now() - started };
+      const begun = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(begun.error ?? `${res.status} ${res.statusText}`);
+      for (;;) {
+        await sleep(POLL_MS);
+        const poll = await fetch(`${base}/chat/${begun.id}`);
+        const job = await poll.json().catch(() => ({}));
+        if (!poll.ok) throw new Error(job.error ?? `${poll.status} ${poll.statusText}`);
+        if (job.status === 'running') {
+          setProgress({ toolCalls: job.toolCalls ?? [], elapsedMs: job.elapsedMs ?? Date.now() - started });
+          continue;
+        }
+        if (job.status === 'error') throw new Error(job.error ?? 'The model could not answer');
+        const turn = job.turn;
+        messages = turn.messages;
+        done = { ...done, answer: turn.answer, toolCalls: turn.toolCalls, model: turn.model, usage: turn.usage, ms: job.elapsedMs };
+        break;
+      }
     } catch (e) {
       done = { ...done, error: (e as Error).message };
     }
+    setProgress(undefined);
     setState(s => ({ messages, exchanges: [...s.exchanges.slice(0, -1), done] }));
     setBusy(false);
   };
@@ -129,7 +149,23 @@ export const OpsAssistantPage = () => {
             <Paper variant="outlined" sx={{ p: 1.5, mb: 1, bgcolor: 'action.hover' }}>
               <Typography sx={{ whiteSpace: 'pre-wrap' }}>{x.question}</Typography>
             </Paper>
-            {!x.answer && !x.error && <Progress />}
+            {!x.answer && !x.error && (
+              <Box>
+                <Progress />
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                  {progress
+                    ? `Looking at the cluster… ${(progress.elapsedMs / 1000).toFixed(0)} s, ${progress.toolCalls.length} tools called`
+                    : 'Thinking…'}
+                </Typography>
+                {!!progress?.toolCalls.length && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                    {progress.toolCalls.map((t, j) => (
+                      <Chip key={j} size="small" variant="outlined" label={describe(t)} color={t.isError ? 'warning' : 'default'} />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
             {x.error && <WarningPanel severity="error" title="No answer" message={x.error} />}
             {x.answer && (
               <Paper variant="outlined" sx={{ p: 2 }}>

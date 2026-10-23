@@ -35,6 +35,8 @@ export async function runTurn(options: {
   history: Message[];
   question: string;
   maxSteps?: number;
+  /** told of each tool call as soon as it returns (the page shows them while the model works) */
+  onToolCall?: (call: ToolCallRecord) => void;
 }): Promise<Turn> {
   const { provider, tools, system, question } = options;
   const maxSteps = options.maxSteps ?? 12;
@@ -56,7 +58,14 @@ export async function runTurn(options: {
     const calls = completion.parts.filter((p): p is Extract<Part, { type: 'tool_call' }> => p.type === 'tool_call');
     if (!calls.length) break;
     // in parallel, and every result in ONE message
-    const results = await Promise.all(calls.map(c => tools.call(c.name, c.input)));
+    const results = await Promise.all(
+      calls.map(c =>
+        tools.call(c.name, c.input).then(r => {
+          options.onToolCall?.({ name: c.name, input: c.input, isError: r.isError, chars: r.text.length });
+          return r;
+        }),
+      ),
+    );
     messages.push({
       role: 'user',
       parts: calls.map((c, i) => ({ type: 'tool_result', id: c.id, content: results[i].text, isError: results[i].isError })),
