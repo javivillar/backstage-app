@@ -15,7 +15,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { sbomImages } from '../annotations';
-import { CodeFinding, Endpoint, FileCoverage, QualityPart, QualityReport, TestCase, useQuality } from '../api';
+import { CodeFinding, Endpoint, ExceptionsPart, FileCoverage, QualityPart, QualityReport, SecurityException, TestCase, useQuality } from '../api';
 
 const STATUS_COLOR: Record<TestCase['status'], string> = {
   passed: '#2e7d32',
@@ -363,6 +363,79 @@ export function CodeFindings({ report }: { report: QualityReport }) {
   );
 }
 
+const scopeOf = (e: Partial<SecurityException>) => [e.image && `image ${e.image}`, e.file && `file ${e.file}`].filter(Boolean).join(', ');
+
+/** The approved exceptions of the commit, with their expiry checked today (an image runs long after its CI). */
+export function ExceptionsTab({ part, today = new Date().toISOString().slice(0, 10) }: { part?: ExceptionsPart; today?: string }) {
+  if (!part) {
+    return (
+      <Typography variant="body2">
+        This report has no security exceptions: it was made before the CI of the application validated
+        <code> platform/security-exceptions.yaml</code>. The next image its CI publishes will have them.
+      </Typography>
+    );
+  }
+  const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+  const active = part.active.filter(e => !e.expires || e.expires >= today);
+  const expired = [...part.expired, ...part.active.filter(e => e.expires && e.expires < today)];
+  const rows = [
+    ...active.map(e => ({ e, state: e.expires && e.expires <= soon ? 'expires soon' : 'applies', color: e.expires && e.expires <= soon ? '#ef6c00' : '#2e7d32' })),
+    ...expired.map(e => ({ e, state: 'expired: the finding counts again', color: '#757575' })),
+  ];
+  return (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Typography variant="body2" sx={{ opacity: 0.8 }}>
+        Findings accepted in <code>platform/security-exceptions.yaml</code>, approved by its CODEOWNERS (the security
+        approvers). An exception takes its finding out of its check until it expires.
+      </Typography>
+      {part.invalid.length > 0 && (
+        <Box sx={{ display: 'grid', gap: 0.5 }}>
+          <Typography variant="subtitle2" color="error">
+            Invalid exceptions (they do not apply)
+          </Typography>
+          {part.invalid.map((e, i) => (
+            <Typography key={i} variant="body2" color="error">
+              entry {e.entry ?? '?'}
+              {e.check ? ` (${e.check} ${e.id ?? ''})` : ''}: {e.why}
+            </Typography>
+          ))}
+        </Box>
+      )}
+      {rows.length === 0 ? (
+        <Typography variant="body2">No exception: every finding counts.</Typography>
+      ) : (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Check</TableCell>
+              <TableCell>Finding</TableCell>
+              <TableCell>Why</TableCell>
+              <TableCell>Approved by</TableCell>
+              <TableCell>Until</TableCell>
+              <TableCell>State</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map(({ e, state, color }, i) => (
+              <TableRow key={`${e.check}-${e.id}-${i}`} hover>
+                <TableCell>{e.check}</TableCell>
+                <TableCell>
+                  <code>{e.id}</code>
+                  {scopeOf(e) && <span style={{ opacity: 0.7 }}> · {scopeOf(e)}</span>}
+                </TableCell>
+                <TableCell>{e.reason}</TableCell>
+                <TableCell>{e.approvedBy}</TableCell>
+                <TableCell>{e.expires}</TableCell>
+                <TableCell sx={{ color, fontWeight: 600 }}>{state}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Box>
+  );
+}
+
 /**
  * Tests & coverage of an application: every test of its last CI run and the coverage of each file, from the quality
  * report its CI attaches to its images (the same report on each image: the first one is read).
@@ -396,7 +469,7 @@ export function EntityQualityDetailContent() {
   }
   const parts = (['backend', 'frontend'] as const).filter(p => report[p]);
   // a last tab with the code findings (endpoints, static analysis, secrets)
-  const tabs = [...parts.map(p => (p === 'backend' ? 'Backend' : 'Frontend')), 'Code findings'];
+  const tabs = [...parts.map(p => (p === 'backend' ? 'Backend' : 'Frontend')), 'Code findings', 'Exceptions'];
   const index = Math.min(current, tabs.length - 1);
   const revision = report.revision || data?.attached?.revision;
   return (
@@ -410,7 +483,9 @@ export function EntityQualityDetailContent() {
             <Tab key={t} label={t} />
           ))}
         </Tabs>
-        {index < parts.length ? <Part key={parts[index]} part={report[parts[index]]!} /> : <CodeFindings report={report} />}
+        {index < parts.length && <Part key={parts[index]} part={report[parts[index]]!} />}
+        {index === parts.length && <CodeFindings report={report} />}
+        {index === parts.length + 1 && <ExceptionsTab part={report.exceptions} />}
       </Box>
     </InfoCard>
   );

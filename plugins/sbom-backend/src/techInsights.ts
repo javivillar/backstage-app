@@ -11,6 +11,7 @@ import type { Component, SbomSummary } from './cyclonedx';
 import type { ImageScan } from './vulnerabilities';
 import { QualityReport, qualityFacts } from './quality';
 import { governanceFactRetriever } from './governance';
+import { Exceptions } from './exceptions';
 
 /**
  * Facts of the scorecard "Quality & Security" (Tech Insights) about what an application of the platform runs: the
@@ -86,7 +87,16 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
   const latest = lines[lines.length - 1] ?? '';
   const withSbom = images.filter(i => i.sbom);
   const framework: Component[] = withSbom.flatMap(i => i.sbom!.frameworks ?? []).filter(c => FRAMEWORK_PACKAGES.includes(c.name));
-  const scans = images.map(i => i.scan?.scan).filter((s): s is ImageScan => !!s && s.status === 'scanned');
+  // the approved exceptions of its commit (quality report, part exceptions): their findings leave the checks
+  const report = images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined;
+  const exc = new Exceptions(report?.exceptions);
+  // the findings that count: not a kernel package of the image (Wazuh: not_applicable), not excepted for that image
+  const counted = images.flatMap(i => {
+    const s = i.scan?.scan;
+    if (!s || s.status !== 'scanned') return [];
+    return [{ ref: i.ref, scan: { ...s, vulns: (s.vulns ?? []).filter(v => !v.not_applicable && !exc.vulnerability(v.id, i.ref)) } }];
+  });
+  const scans = counted.map(c => c.scan);
   const vulns = scans.flatMap(s => s.vulns ?? []);
   const count = (sev: string, fixable: boolean) =>
     vulns.filter(v => v.sev?.toUpperCase() === sev && (!fixable || !!v.fix)).length;
@@ -110,12 +120,13 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
     // does not say it
     osEndOfLife:
       images.length > 0 && scans.length === images.length && scans.every(s => typeof s.os_eol === 'boolean')
-        ? scans.filter(s => s.os_eol).length
+        ? counted.filter(c => c.scan.os_eol && !exc.osEol(c.ref)).length
         : -1,
     // the license policy on the dependencies of its images (SBOM): distinct packages; -1 when an image has no SBOM
-    ...licenseFacts(images),
+    ...licenseFacts(images, exc),
     // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
-    ...qualityFacts(images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined),
+    ...qualityFacts(report, exc),
+    ...exceptionFacts(exc, report),
   };
 }
 
@@ -136,25 +147,30 @@ export function contextFacts(scans: ImageScan[], imageCount: number) {
       knownExploitedInUse: -1, criticalNotInUse: -1, criticalNetworkExposed: -1, exposure: '',
     };
   }
+  // From the findings Wazuh gives (their age, fix, in use, attack vector): the ones of applicationFacts, that is without
+  // the kernel packages and the excepted ones. Nothing is judged here but the maximum and the count.
   const vulns = scans.flatMap(s => s.vulns ?? []);
+  const sev = (v: { sev?: string }, s: string) => v.sev?.toUpperCase() === s;
   const kev = [...new Set(vulns.filter(v => v.kev).map(v => v.id))].sort();
-  const max = (pick: (s: ImageScan) => number | null | undefined) =>
-    Math.max(-1, ...scans.map(s => pick(s) ?? -1));
+  const oldest = (pred: (v: (typeof vulns)[number]) => boolean) => Math.max(-1, ...vulns.filter(pred).map(v => v.age_days ?? 0));
+  const inUse = (v: { in_use?: string }) => v.in_use !== 'no';
+  const outside = (s: ImageScan) => ['external', 'host'].includes(s.exposure?.level ?? s.context?.exposure ?? '');
   return {
     vulnContext: true,
     knownExploited: kev.length,
     knownExploitedRansomware: new Set(vulns.filter(v => v.kev_ransomware).map(v => v.id)).size,
     knownExploitedIds: kev.join(', '),
-    epssMax: max(s => s.context?.epss_max),
-    criticalFixMaxDays: max(s => s.context?.critical_fix_max_days),
-    highFixMaxDays: max(s => s.context?.high_fix_max_days),
-    // in use (USE-CASES.md I7 of wazuh-oneke): Wazuh counts unknown as in use; a scan without these fields
-    // (no in-use data at all) falls back to every finding
-    criticalFixInUseMaxDays: max(s => s.context?.critical_fix_inuse_max_days ?? s.context?.critical_fix_max_days),
-    highFixInUseMaxDays: max(s => s.context?.high_fix_inuse_max_days ?? s.context?.high_fix_max_days),
-    knownExploitedInUse: new Set(vulns.filter(v => v.kev && v.in_use !== 'no').map(v => v.id)).size,
-    criticalNotInUse: new Set(vulns.filter(v => v.sev?.toUpperCase() === 'CRITICAL' && v.in_use === 'no').map(v => v.id)).size,
-    criticalNetworkExposed: scans.reduce((n, s) => n + (s.context?.critical_network_exposed ?? 0), 0),
+    epssMax: Math.max(-1, ...vulns.map(v => v.epss ?? -1)),
+    criticalFixMaxDays: oldest(v => sev(v, 'CRITICAL') && !!v.fix),
+    highFixMaxDays: oldest(v => sev(v, 'HIGH') && !!v.fix),
+    // in use (USE-CASES.md I7 of wazuh-oneke): unknown counts as in use
+    criticalFixInUseMaxDays: oldest(v => sev(v, 'CRITICAL') && !!v.fix && inUse(v)),
+    highFixInUseMaxDays: oldest(v => sev(v, 'HIGH') && !!v.fix && inUse(v)),
+    knownExploitedInUse: new Set(vulns.filter(v => v.kev && inUse(v)).map(v => v.id)).size,
+    criticalNotInUse: new Set(vulns.filter(v => sev(v, 'CRITICAL') && v.in_use === 'no').map(v => v.id)).size,
+    criticalNetworkExposed: new Set(
+      scans.filter(outside).flatMap(s => (s.vulns ?? []).filter(v => sev(v, 'CRITICAL') && v.av === 'N' && inUse(v)).map(v => v.id)),
+    ).size,
     // the most exposed of its images
     exposure: scans
       .map(s => s.exposure?.level ?? s.context?.exposure ?? '')
@@ -162,12 +178,13 @@ export function contextFacts(scans: ImageScan[], imageCount: number) {
   };
 }
 
-export function licenseFacts(images: ImageFacts[]) {
+export function licenseFacts(images: ImageFacts[], exc: Exceptions = new Exceptions(undefined)) {
   const reports = images.map(i => i.sbom?.licensePolicy);
   if (!images.length || reports.some(r => !r)) return { deniedLicenses: -1, unknownLicenses: -1, deniedLicenseIds: '' };
   const key = (f: { ecosystem: string; name: string; version?: string }) => `${f.ecosystem}:${f.name}@${f.version ?? ''}`;
-  const denied = new Map(reports.flatMap(r => r!.denied).map(f => [key(f), f]));
-  const unknown = new Set(reports.flatMap(r => r!.unknown).map(key));
+  const keep = (f: { name: string }) => !exc.license(f.name);
+  const denied = new Map(reports.flatMap(r => r!.denied).filter(keep).map(f => [key(f), f]));
+  const unknown = new Set(reports.flatMap(r => r!.unknown).filter(keep).map(key));
   return {
     deniedLicenses: denied.size,
     unknownLicenses: unknown.size,
@@ -175,9 +192,20 @@ export function licenseFacts(images: ImageFacts[]) {
   };
 }
 
+/** The exceptions themselves: how many apply, how many are invalid, how many expire within 30 days. */
+export function exceptionFacts(exc: Exceptions, report: QualityReport | undefined) {
+  if (!report) return { securityExceptions: -1, securityExceptionsInvalid: -1, securityExceptionsExpiring: -1, securityExceptionIds: '' };
+  return {
+    securityExceptions: exc.active.length,
+    securityExceptionsInvalid: exc.invalid.length,
+    securityExceptionsExpiring: exc.expiring().length,
+    securityExceptionIds: exc.active.map(e => `${e.check} ${e.id} (until ${e.expires})`).join('; '),
+  };
+}
+
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.5.0',
+  version: '0.6.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -241,6 +269,10 @@ export const supplyChainFactRetriever: FactRetriever = {
     },
     unknownLicenses: { type: 'integer', description: 'Dependencies of the application with no license in the SBOM; -1: an image has no SBOM' },
     deniedLicenseIds: { type: 'string', description: 'The dependencies with a denied license, and which' },
+    securityExceptions: { type: 'integer', description: 'Approved security exceptions that apply now; -1: no quality report' },
+    securityExceptionsInvalid: { type: 'integer', description: 'Invalid entries of platform/security-exceptions.yaml (they do not apply); -1: no quality report' },
+    securityExceptionsExpiring: { type: 'integer', description: 'Security exceptions that expire within 30 days; -1: no quality report' },
+    securityExceptionIds: { type: 'string', description: 'The security exceptions that apply, and until when' },
     unauthenticatedEndpoints: {
       type: 'integer',
       description: 'Operations of the API with no authentication that are not declared public; -1: not reported',

@@ -165,7 +165,7 @@ describe('context of the vulnerabilities (Wazuh)', () => {
             digest: 'sha256:1', status: 'scanned', counts: {},
             vulns: [
               { id: 'CVE-1', sev: 'CRITICAL', fix: '2', kev: false, in_use: 'no', age_days: 40 },
-              { id: 'CVE-2', sev: 'CRITICAL', fix: '2', kev: true, in_use: 'yes', age_days: 3 },
+              { id: 'CVE-2', sev: 'CRITICAL', fix: '2', kev: true, in_use: 'yes', age_days: 3, av: 'N' },
             ],
             context: { kev: 1, critical_fix_max_days: 40, high_fix_max_days: -1, critical_fix_inuse_max_days: 3,
                        high_fix_inuse_max_days: -1, critical_network_exposed: 1 },

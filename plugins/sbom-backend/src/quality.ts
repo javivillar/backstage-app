@@ -1,3 +1,5 @@
+import { Exceptions, ExceptionsPart } from './exceptions';
+
 /**
  * The quality report the CI of an application attaches to its images (quality.json, schema refresquito.quality/v1,
  * written by .github/quality.py of the application): what its tests, coverage and linters said for that commit.
@@ -92,6 +94,8 @@ export interface QualityReport {
   backend?: QualityPart;
   frontend?: QualityPart;
   secrets?: SecretsPart;
+  /** the approved exceptions of platform/security-exceptions.yaml, validated by the CI (exceptions.ts applies them) */
+  exceptions?: ExceptionsPart;
 }
 
 export const QUALITY_SCHEMA = 'refresquito.quality/v1';
@@ -107,8 +111,25 @@ export function parseQuality(content: unknown): QualityReport | undefined {
  * The numbers the scorecard checks; -1 when the report does not say it (a missing number fails its check rather than
  * passing it). An application without frontend has no frontend numbers to fail: -1 only when the part exists.
  */
-export function qualityFacts(report: QualityReport | undefined) {
+export function qualityFacts(report: QualityReport | undefined, exc: Exceptions = new Exceptions(undefined)) {
   const n = (v: number | undefined) => (typeof v === 'number' ? v : -1);
+  // With the detail (every operation, every finding), the excepted ones are left out; without it, the totals
+  const endpoints = report?.backend?.detail?.endpoints;
+  const unauthenticated = endpoints
+    ? endpoints.filter(e => e.owner === 'app' && e.auth === 'none' && !exc.endpoint(e.method, e.path)).length
+    : n(report?.backend?.endpoints?.unauthenticated);
+  const bandit = report?.backend?.bandit;
+  const banditFindings = report?.backend?.detail?.findings;
+  const banditCount = banditFindings
+    ? banditFindings.filter(f => ['HIGH', 'MEDIUM'].includes(f.severity ?? '') && !exc.sast(f.rule, f.file)).length
+    : (bandit?.high ?? 0) + (bandit?.medium ?? 0);
+  const eslintFindings = report?.frontend?.detail?.findings;
+  const eslintCount = eslintFindings ? eslintFindings.filter(f => !exc.sast(f.rule, f.file)).length : report?.frontend?.security?.errors ?? 0;
+  const secretFindings = report?.secrets?.detail?.findings;
+  const secrets =
+    typeof report?.secrets?.repo === 'number' && typeof report.secrets.images === 'number'
+      ? report.secrets.repo + report.secrets.images - (secretFindings ?? []).filter(f => exc.secret(f.rule, f.file)).length
+      : -1;
   const parts = [report?.backend, report?.frontend].filter((p): p is QualityPart => !!p);
   const tests = parts.map(p => p.tests);
   return {
@@ -123,15 +144,10 @@ export function qualityFacts(report: QualityReport | undefined) {
     typeErrors: n(report?.backend?.mypy?.errors),
     // code findings: operations without authentication not declared public; Bandit HIGH + MEDIUM and the eslint rules
     // of security; secrets in the history and in the images. -1: the report does not say it (the check then fails)
-    unauthenticatedEndpoints: n(report?.backend?.endpoints?.unauthenticated),
-    sastIssues:
-      report?.backend?.bandit && (!report.frontend || report.frontend.security)
-        ? report.backend.bandit.high + report.backend.bandit.medium + (report.frontend?.security?.errors ?? 0)
-        : -1,
-    secretsFound:
-      typeof report?.secrets?.repo === 'number' && typeof report.secrets.images === 'number'
-        ? report.secrets.repo + report.secrets.images
-        : -1,
+    // (approved security exceptions left out: exceptions.ts)
+    unauthenticatedEndpoints: report?.backend?.endpoints ? unauthenticated : -1,
+    sastIssues: bandit && (!report?.frontend || report.frontend.security) ? banditCount + eslintCount : -1,
+    secretsFound: secrets,
     qualityRevision: report?.revision ?? '',
   };
 }

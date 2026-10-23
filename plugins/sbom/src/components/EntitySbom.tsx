@@ -208,6 +208,7 @@ function ExposureChip({ exposure }: { exposure: Exposure }) {
 
 /** the In use cell: yes, no, or ? with why it is not known */
 function InUseCell({ v }: { v: Vulnerability }) {
+  if (v.not_applicable) return <span title={v.not_applicable} style={{ opacity: 0.6 }}>n/a (kernel)</span>;
   if (v.in_use === 'yes') return <span style={{ fontWeight: 600 }}>yes</span>;
   if (v.in_use === 'no') return <span style={{ opacity: 0.6 }}>no</span>;
   if (v.in_use === 'unknown') {
