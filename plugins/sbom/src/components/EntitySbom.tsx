@@ -17,7 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Download from '@mui/icons-material/Download';
 import { SbomSource, sbomSources } from '../annotations';
-import { Component, Feed, ImageSbom, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
+import { Component, Exposure, Feed, ImageSbom, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
 
 const ECOSYSTEM_LABEL: Record<string, string> = {
   pypi: 'Python',
@@ -142,12 +142,47 @@ function KevCell({ v }: { v: Vulnerability }) {
     </a>
   );
 }
-/** most urgent first: known exploited, severity, probability of exploitation, then the id */
+const notInUse = (v: Vulnerability) => v.in_use === 'no';
+/** most urgent first: known exploited, in use (or unknown) before not in use, severity, EPSS, then the id */
 export const byUrgency = (a: Vulnerability, b: Vulnerability) =>
   Number(!!b.kev) - Number(!!a.kev) ||
+  Number(notInUse(a)) - Number(notInUse(b)) ||
   SEVERITIES.indexOf(a.sev) - SEVERITIES.indexOf(b.sev) ||
   (b.epss ?? -1) - (a.epss ?? -1) ||
   a.id.localeCompare(b.id);
+
+const AV_TEXT: Record<string, string> = { N: 'network', A: 'adjacent', L: 'local', P: 'physical' };
+const EXPOSURE_TEXT: Record<string, string> = {
+  external: 'reachable from outside the cluster',
+  host: 'on the network of the node (hostNetwork)',
+  internal: 'reachable inside the cluster only (a Service)',
+  none: 'not exposed (no Service)',
+};
+
+function ExposureChip({ exposure }: { exposure: Exposure }) {
+  const outside = exposure.level === 'external' || exposure.level === 'host';
+  const via = exposure.via?.length ? ` — ${exposure.via.join(', ')}` : '';
+  return (
+    <Chip
+      size="small"
+      label={`${EXPOSURE_TEXT[exposure.level] ?? exposure.level}${exposure.segment ? ` · segment ${exposure.segment}` : ''}`}
+      title={`Exposure of the image${via}`}
+      sx={outside ? { bgcolor: '#e65100', color: '#fff' } : { opacity: 0.8 }}
+      variant={outside ? 'filled' : 'outlined'}
+    />
+  );
+}
+
+/** the In use cell: yes, no, or ? with why it is not known */
+function InUseCell({ v }: { v: Vulnerability }) {
+  if (v.in_use === 'yes') return <span style={{ fontWeight: 600 }}>yes</span>;
+  if (v.in_use === 'no') return <span style={{ opacity: 0.6 }}>no</span>;
+  if (v.in_use === 'unknown') {
+    const why = v.cls === 'lang' ? 'a language package: not observed yet' : 'not observed long enough, or no package database';
+    return <span title={why} style={{ opacity: 0.6 }}>?</span>;
+  }
+  return null;
+}
 
 /** "KEV catalogue 2026.10.21 · EPSS of 2026-10-22", with what is wrong with a feed */
 function feedText(name: string, f?: Feed) {
@@ -163,15 +198,21 @@ export function Vulnerabilities({ image }: { image: string }) {
   const { loading, error, data } = useVulnerabilities(image);
   const [severity, setSeverity] = useState('all');
   const [fixable, setFixable] = useState(false);
+  const [use, setUse] = useState('all');
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(25);
   const vulns = useMemo(() => data?.scan?.vulns ?? [], [data]);
   const rows = useMemo(
     () =>
       vulns
-        .filter(v => (severity === 'all' || (severity === 'KEV' ? !!v.kev : v.sev === severity)) && (!fixable || !!v.fix))
+        .filter(
+          v =>
+            (severity === 'all' || (severity === 'KEV' ? !!v.kev : v.sev === severity)) &&
+            (!fixable || !!v.fix) &&
+            (use === 'all' || (use === 'no' ? notInUse(v) : !notInUse(v))),
+        )
         .sort(byUrgency),
-    [vulns, severity, fixable],
+    [vulns, severity, fixable, use],
   );
   const title = 'Vulnerabilities';
   if (loading) return <InfoCard title={title}><Progress /></InfoCard>;
@@ -242,6 +283,14 @@ export function Vulnerabilities({ image }: { image: string }) {
             {(ctx.kev_ransomware ?? 0) > 0 && (
               <Chip size="small" label={`used by ransomware ${ctx.kev_ransomware}`} sx={{ bgcolor: KEV_COLOR, color: '#fff' }} />
             )}
+            {scan.exposure && <ExposureChip exposure={scan.exposure} />}
+            {ctx.in_use_known !== undefined && (
+              <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                {ctx.in_use_known
+                  ? `${ctx.critical_in_use ?? 0} critical in packages in use, ${ctx.critical_not_in_use ?? 0} in packages never loaded ·`
+                  : 'packages in use not known yet (observed for less than a day, or no package database) ·'}
+              </Typography>
+            )}
             <Typography variant="body2" sx={{ opacity: 0.75 }}>
               highest EPSS {ctx.epss_max !== null && ctx.epss_max !== undefined ? `${epssText(ctx.epss_max)} (${ctx.epss_max_id})` : 'none'} ·
               oldest fixable critical open {days(ctx.critical_fix_max_days)}, high {days(ctx.high_fix_max_days)}
@@ -255,6 +304,7 @@ export function Vulnerabilities({ image }: { image: string }) {
         {scan.feeds && (
           <Typography variant="caption" sx={{ opacity: 0.7 }}>
             Context by Wazuh: {feedText('CISA KEV', scan.feeds.kev)} · {feedText('EPSS', scan.feeds.epss)}
+            {scan.feeds.inuse ? ` · ${feedText('packages in use', scan.feeds.inuse)}` : ''}
             {scan.feeds.tracking_since ? ` · days counted since ${scan.feeds.tracking_since}` : ''}
           </Typography>
         )}
@@ -293,6 +343,21 @@ export function Vulnerabilities({ image }: { image: string }) {
                 <MenuItem value="all">All</MenuItem>
                 <MenuItem value="yes">With a fix</MenuItem>
               </TextField>
+              <TextField
+                select
+                size="small"
+                label="In use"
+                value={use}
+                onChange={e => {
+                  setUse(e.target.value);
+                  setPage(0);
+                }}
+                sx={{ minWidth: 200 }}
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="yes">In use (or unknown)</MenuItem>
+                <MenuItem value="no">Never loaded</MenuItem>
+              </TextField>
             </Box>
             <Table size="small">
               <TableHead>
@@ -302,6 +367,8 @@ export function Vulnerabilities({ image }: { image: string }) {
                   <TableCell title="CISA Known Exploited Vulnerabilities: exploited in the wild">KEV</TableCell>
                   <TableCell title="FIRST EPSS: probability of exploitation in the next 30 days">EPSS</TableCell>
                   <TableCell title="Days since its image repository first had it (Wazuh)">Open</TableCell>
+                  <TableCell title="A process of the image has loaded the package (Wazuh agents of the nodes)">In use</TableCell>
+                  <TableCell title="CVSS attack vector">Attack</TableCell>
                   <TableCell>Package</TableCell>
                   <TableCell>Installed</TableCell>
                   <TableCell>Fixed in</TableCell>
@@ -326,6 +393,10 @@ export function Vulnerabilities({ image }: { image: string }) {
                     <TableCell title={v.first_seen ? `first seen ${v.first_seen}` : undefined}>
                       {v.age_days !== undefined ? `${v.age_days} d` : ''}
                     </TableCell>
+                    <TableCell>
+                      <InUseCell v={v} />
+                    </TableCell>
+                    <TableCell>{v.av ? AV_TEXT[v.av] ?? v.av : ''}</TableCell>
                     <TableCell>{v.pkg}</TableCell>
                     <TableCell>{v.ver}</TableCell>
                     <TableCell>{v.fix || <span style={{ opacity: 0.6 }}>no fix yet</span>}</TableCell>

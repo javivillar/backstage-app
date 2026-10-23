@@ -3,7 +3,8 @@ import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { TestApiProvider, renderInTestApp } from '@backstage/test-utils';
 import { Vulnerabilities, byUrgency, epssText } from './EntitySbom';
 import type { Vulnerability } from '../api';
-// the answer of the security exporter of wazuh-oneke 0.20.0 for nginx:1.25.2 (local run of 2026-10-23, trimmed)
+// the answer of the security exporter of wazuh-oneke 0.20.0 for nginx:1.25.2 (local run of 2026-10-23, trimmed):
+// behind an Ingress, 2 CRITICAL in packages in use and 15 in packages never loaded
 import fixture from './vulnerabilities.fixture.json';
 
 function render(body: unknown) {
@@ -21,18 +22,32 @@ function render(body: unknown) {
 }
 
 describe('Vulnerabilities card', () => {
-  it('shows the context Wazuh gives: KEV first, EPSS, days open, the feeds', async () => {
+  it('shows the context Wazuh gives: KEV first, EPSS, days open, in use, exposure, the feeds', async () => {
     await render(fixture);
     expect(await screen.findByText('known exploited (CISA KEV) 2')).toBeInTheDocument();
     expect(screen.getByText(/highest EPSS 100 % \(CVE-2023-44487\)/)).toBeInTheDocument();
-    expect(screen.getByText(/oldest fixable critical open 10 days, high 10 days/)).toBeInTheDocument();
-    expect(screen.getByText(/CISA KEV 2026.10.21, 12 days old/)).toBeInTheDocument();
+    expect(screen.getByText(/oldest fixable critical open 0 days, high 0 days/)).toBeInTheDocument();
+    expect(screen.getByText(/2 critical in packages in use, 15 in packages never loaded/)).toBeInTheDocument();
+    expect(screen.getByText('reachable from outside the cluster · segment apps')).toBeInTheDocument();
+    expect(screen.getByText(/CISA KEV 2026.10.21 · EPSS of 2026-10-22 · packages in use of 2026-10-23/)).toBeInTheDocument();
     expect(screen.getByText(/days counted since 2026-10-23/)).toBeInTheDocument();
     const rows = screen.getAllByRole('row').slice(1);
-    // the known exploited come first, whatever their severity (CVE-2023-44487 is also a LOW of nginx)
+    // the known exploited come first, in use before never loaded (CVE-2023-44487 is in use through the nginx package)
     expect(within(rows[0]).getByText('KEV')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('10 d')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('CVE-2023-44487')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('yes')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('network')).toBeInTheDocument();
     expect(rows.filter(r => within(r).queryByText('KEV'))).toHaveLength(3);
+  });
+
+  it('filters the findings in packages never loaded', async () => {
+    await render(fixture);
+    fireEvent.mouseDown((await screen.findAllByRole('combobox'))[2]);
+    fireEvent.click(await screen.findByText('Never loaded'));
+    const column = screen.getAllByRole('columnheader').findIndex(h => h.textContent === 'In use');
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(within(row).getAllByRole('cell')[column]).toHaveTextContent('no');
   });
 
   it('filters the known exploited', async () => {
@@ -70,8 +85,10 @@ describe('helpers', () => {
       { id: 'CVE-2', sev: 'CRITICAL', epss: 0.5 },
       { id: 'CVE-4', sev: 'LOW', kev: true },
       { id: 'CVE-5', sev: 'HIGH' },
+      { id: 'CVE-6', sev: 'CRITICAL', epss: 0.9, in_use: 'no' },
+      { id: 'CVE-7', sev: 'HIGH', kev: true, in_use: 'no' },
     ];
-    expect([...vulns].sort(byUrgency).map(v => v.id)).toEqual(['CVE-4', 'CVE-2', 'CVE-1', 'CVE-3', 'CVE-5']);
+    expect([...vulns].sort(byUrgency).map(v => v.id)).toEqual(['CVE-4', 'CVE-7', 'CVE-2', 'CVE-1', 'CVE-3', 'CVE-5', 'CVE-6']);
   });
 
   it('shows EPSS as a percentage', () => {

@@ -17,3 +17,9 @@ CISA's entry), its **EPSS** (probability of exploitation in the next 30 days, pe
 severity: a known-exploited MEDIUM or LOW is listed too), then severity, then EPSS — and can be filtered to the
 known exploited. Above it: how many KEV CVEs, the highest EPSS, the oldest fixable CRITICAL / HIGH, and the date of the
 two feeds (a cached or stale feed says so; with the KEV feed missing the card says *unknown*, never 0).
+
+It also shows whether each finding is **in use** — its package has been loaded by a process of the image, as the
+Wazuh agents of the nodes saw it (*yes*, *no*, *?* for language packages or images not observed long enough) — its
+CVSS **attack** vector, and the **exposure** of the image (reachable from outside the cluster through an Ingress /
+IngressRoute / NodePort, on the network of the node, inside the cluster only, or not exposed). Findings in packages
+never loaded are listed after the ones in use and can be filtered (*In use*: never loaded).

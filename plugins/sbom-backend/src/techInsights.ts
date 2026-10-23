@@ -117,10 +117,16 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
  * computed here but the maximum over its images; the SLA thresholds are the checks (app-config). vulnContext false
  * (an image not scanned, a scan without context or without the KEV feed): the numbers are -1 and the checks fail.
  */
+const EXPOSURE_RANK: Record<string, number> = { none: 0, internal: 1, host: 2, external: 3 };
+
 export function contextFacts(scans: ImageScan[], imageCount: number) {
   const known = imageCount > 0 && scans.length === imageCount && scans.every(s => s.context && s.context.kev !== null && s.context.kev !== undefined);
   if (!known) {
-    return { vulnContext: false, knownExploited: -1, knownExploitedRansomware: -1, knownExploitedIds: '', epssMax: -1, criticalFixMaxDays: -1, highFixMaxDays: -1 };
+    return {
+      vulnContext: false, knownExploited: -1, knownExploitedRansomware: -1, knownExploitedIds: '', epssMax: -1,
+      criticalFixMaxDays: -1, highFixMaxDays: -1, criticalFixInUseMaxDays: -1, highFixInUseMaxDays: -1,
+      knownExploitedInUse: -1, criticalNotInUse: -1, criticalNetworkExposed: -1, exposure: '',
+    };
   }
   const vulns = scans.flatMap(s => s.vulns ?? []);
   const kev = [...new Set(vulns.filter(v => v.kev).map(v => v.id))].sort();
@@ -134,6 +140,17 @@ export function contextFacts(scans: ImageScan[], imageCount: number) {
     epssMax: max(s => s.context?.epss_max),
     criticalFixMaxDays: max(s => s.context?.critical_fix_max_days),
     highFixMaxDays: max(s => s.context?.high_fix_max_days),
+    // in use (USE-CASES.md I7 of wazuh-oneke): Wazuh counts unknown as in use; a scan without these fields
+    // (no in-use data at all) falls back to every finding
+    criticalFixInUseMaxDays: max(s => s.context?.critical_fix_inuse_max_days ?? s.context?.critical_fix_max_days),
+    highFixInUseMaxDays: max(s => s.context?.high_fix_inuse_max_days ?? s.context?.high_fix_max_days),
+    knownExploitedInUse: new Set(vulns.filter(v => v.kev && v.in_use !== 'no').map(v => v.id)).size,
+    criticalNotInUse: new Set(vulns.filter(v => v.sev?.toUpperCase() === 'CRITICAL' && v.in_use === 'no').map(v => v.id)).size,
+    criticalNetworkExposed: scans.reduce((n, s) => n + (s.context?.critical_network_exposed ?? 0), 0),
+    // the most exposed of its images
+    exposure: scans
+      .map(s => s.exposure?.level ?? s.context?.exposure ?? '')
+      .reduce((a, b) => (EXPOSURE_RANK[b] ?? -1) > (EXPOSURE_RANK[a] ?? -1) ? b : a, ''),
   };
 }
 
@@ -168,6 +185,21 @@ export const supplyChainFactRetriever: FactRetriever = {
       type: 'integer',
       description: 'Days the oldest fixable HIGH has been open in its image repositories; -1: none (or unknown)',
     },
+    criticalFixInUseMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable CRITICAL whose package is in use (or unknown) has been open; -1: none',
+    },
+    highFixInUseMaxDays: {
+      type: 'integer',
+      description: 'Days the oldest fixable HIGH whose package is in use (or unknown) has been open; -1: none',
+    },
+    knownExploitedInUse: { type: 'integer', description: 'CVEs of CISA KEV whose package is in use (or unknown); -1: unknown' },
+    criticalNotInUse: { type: 'integer', description: 'CRITICAL CVEs whose package no process of its images has loaded' },
+    criticalNetworkExposed: {
+      type: 'integer',
+      description: 'CRITICAL CVEs attackable over the network, in use, on images reachable from outside the cluster',
+    },
+    exposure: { type: 'string', description: 'The most exposed of its images: external, host, internal or none' },
     frameworkLine: { type: 'string', description: 'Line of the Python Framework it is built on' },
     latestFrameworkLine: { type: 'string', description: 'Latest line of the Python Framework in the catalog' },
     onLatestFrameworkLine: { type: 'boolean', description: 'It is built on the latest line' },

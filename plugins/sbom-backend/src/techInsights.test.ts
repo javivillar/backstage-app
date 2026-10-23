@@ -155,6 +155,36 @@ describe('context of the vulnerabilities (Wazuh)', () => {
     });
   });
 
+  it('in use and exposure: the short SLA only for what is in use (or unknown), the most exposed image', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      {
+        ref: 'api',
+        scan: {
+          configured: true,
+          scan: {
+            digest: 'sha256:1', status: 'scanned', counts: {},
+            vulns: [
+              { id: 'CVE-1', sev: 'CRITICAL', fix: '2', kev: false, in_use: 'no', age_days: 40 },
+              { id: 'CVE-2', sev: 'CRITICAL', fix: '2', kev: true, in_use: 'yes', age_days: 3 },
+            ],
+            context: { kev: 1, critical_fix_max_days: 40, high_fix_max_days: -1, critical_fix_inuse_max_days: 3,
+                       high_fix_inuse_max_days: -1, critical_network_exposed: 1 },
+            exposure: { level: 'external', via: ['ingress a/b'] },
+          },
+        },
+      },
+      { ref: 'web', scan: withContext([{ id: 'CVE-3', sev: 'CRITICAL', kev: false, in_use: 'no' }], { kev: 0, critical_fix_max_days: -1, exposure: 'internal' }) },
+    ]);
+    expect(facts).toMatchObject({
+      criticalFixMaxDays: 40,
+      criticalFixInUseMaxDays: 3,
+      knownExploitedInUse: 1,
+      criticalNotInUse: 2,
+      criticalNetworkExposed: 1,
+      exposure: 'external',
+    });
+  });
+
   it('nothing open: no KEV and -1 days', () => {
     const facts = applicationFacts(app, ['3.1'], [
       { ref: 'api', scan: withContext([], { kev: 0, epss_max: null, critical_fix_max_days: -1, high_fix_max_days: -1 }) },

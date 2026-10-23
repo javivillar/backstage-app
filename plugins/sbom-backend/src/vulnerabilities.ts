@@ -22,6 +22,10 @@ export interface Vulnerability {
   kev_ransomware?: boolean;
   first_seen?: string;
   age_days?: number;
+  /** wazuh-oneke 0.20.0, USE-CASES.md I7: os (distribution package) | lang; CVSS attack vector; loaded or not */
+  cls?: 'os' | 'lang';
+  av?: 'N' | 'A' | 'L' | 'P' | '';
+  in_use?: 'yes' | 'no' | 'unknown';
 }
 
 /** Per image, computed by Wazuh. kev null: the KEV feed was not available. *_max_days -1: none open. */
@@ -34,6 +38,22 @@ export interface ScanContext {
   critical_fix_max_days?: number;
   high_fix_max_days?: number;
   kev_max_days?: number | null;
+  /** in use (unknown counts as in use) and exposure */
+  in_use_known?: boolean;
+  critical_in_use?: number;
+  critical_not_in_use?: number;
+  critical_fix_inuse_max_days?: number;
+  high_fix_inuse_max_days?: number;
+  kev_in_use?: number | null;
+  exposure?: Exposure['level'] | null;
+  critical_network_exposed?: number;
+}
+
+/** what can reach the pods of the image (Ingress / IngressRoute / NodePort / LoadBalancer, hostNetwork, a Service) */
+export interface Exposure {
+  level: 'external' | 'host' | 'internal' | 'none';
+  via?: string[];
+  segment?: string | null;
 }
 
 export interface Feed {
@@ -70,6 +90,7 @@ export interface ImageScan {
   /** wazuh-oneke 0.20.0+ */
   context?: ScanContext | null;
   feeds?: ScanFeeds | null;
+  exposure?: Exposure | null;
 }
 
 /**

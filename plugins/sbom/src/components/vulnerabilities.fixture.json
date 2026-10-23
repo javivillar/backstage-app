@@ -1,12 +1,12 @@
 {
  "image": "docker.io/library/nginx:1.25.2",
  "configured": true,
- "digest": "sha256:b4af4f8b0000beef45dc10f564551af682a802eda1743055a7dfc8332dffa595",
+ "digest": "sha256:b4af4f8b6470febf45dc10f564551af682a802eda1743055a7dfc8332dffa595",
  "scan": {
-  "digest": "sha256:b4af4f8b0000beef45dc10f564551af682a802eda1743055a7dfc8332dffa595",
+  "digest": "sha256:b4af4f8b6470febf45dc10f564551af682a802eda1743055a7dfc8332dffa595",
   "image": "docker.io/library/nginx:1.25.2",
   "namespace": "test-ns",
-  "run": "2026-11-02T03:10:00Z",
+  "run": "2026-10-23T05:52:42Z",
   "db": "2026-10-23T01:18:09.482141619Z",
   "status": "scanned",
   "message": null,
@@ -20,6 +20,8 @@
   "os": "/sboms/b4af4f8b6470febf45dc10f564551af682a802eda1743055a7dfc8332dffa595.cdx.json (debian 12.2)",
   "vulns": [
    {
+    "av": "N",
+    "cls": "os",
     "fix": "2.12.1+dfsg-5+deb12u4",
     "id": "CVE-2025-27363",
     "pkg": "libfreetype6",
@@ -33,9 +35,12 @@
     "kev_due": "2025-05-27",
     "kev_ransomware": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
+    "av": "N",
+    "cls": "os",
     "fix": "1.52.0-1+deb12u1",
     "id": "CVE-2023-44487",
     "pkg": "libnghttp2-14",
@@ -49,9 +54,12 @@
     "kev_due": "2023-10-31",
     "kev_ransomware": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
+    "av": "N",
+    "cls": "os",
     "fix": "",
     "id": "CVE-2023-44487",
     "pkg": "nginx",
@@ -64,9 +72,44 @@
     "kev_due": "2023-10-31",
     "kev_ransomware": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "yes"
    },
    {
+    "av": "N",
+    "cls": "os",
+    "fix": "3.0.19-1~deb12u2",
+    "id": "CVE-2026-31789",
+    "pkg": "libssl3",
+    "sev": "CRITICAL",
+    "title": "openssl: OpenSSL: Heap buffer overflow on 32-bit systems from large X.509 certificate processing",
+    "ver": "3.0.11-1~deb12u1",
+    "epss": 0.00243,
+    "epss_pct": 0.14646,
+    "kev": false,
+    "first_seen": "2026-10-23",
+    "age_days": 0,
+    "in_use": "yes"
+   },
+   {
+    "av": "N",
+    "cls": "os",
+    "fix": "",
+    "id": "CVE-2023-45853",
+    "pkg": "zlib1g",
+    "sev": "CRITICAL",
+    "title": "zlib: integer overflow and resultant heap-based buffer overflow in zipOpenNewFileInZip4_6",
+    "ver": "1:1.2.13.dfsg-1",
+    "epss": 0.03448,
+    "epss_pct": 0.88942,
+    "kev": false,
+    "first_seen": "2026-10-23",
+    "age_days": 0,
+    "in_use": "yes"
+   },
+   {
+    "av": "N",
+    "cls": "os",
     "fix": "20220623.1-1+deb12u1",
     "id": "CVE-2025-0838",
     "pkg": "libabsl20220623",
@@ -77,9 +120,12 @@
     "epss_pct": 0.49371,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
+    "av": "N",
+    "cls": "os",
     "fix": "",
     "id": "CVE-2023-6879",
     "pkg": "libaom3",
@@ -90,9 +136,12 @@
     "epss_pct": 0.67311,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
+    "av": "N",
+    "cls": "os",
     "fix": "3.6.0-1+deb12u1",
     "id": "CVE-2024-5171",
     "pkg": "libaom3",
@@ -103,9 +152,12 @@
     "epss_pct": 0.69487,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
+    "av": "N",
+    "cls": "os",
     "fix": "0.11.1-1+deb12u1",
     "id": "CVE-2025-48174",
     "pkg": "libavif15",
@@ -116,72 +168,72 @@
     "epss_pct": 0.3029,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
-    "fix": "2.5.0-1+deb12u1",
-    "id": "CVE-2024-45491",
-    "pkg": "libexpat1",
-    "sev": "CRITICAL",
-    "title": "libexpat: Integer Overflow or Wraparound",
-    "ver": "2.5.0-1",
-    "epss": 0.0113,
-    "epss_pct": 0.66121,
+    "av": "L",
+    "cls": "os",
+    "fix": "",
+    "id": "CVE-2026-53613",
+    "pkg": "bsdutils",
+    "sev": "HIGH",
+    "title": "util-linux: util-linux: TOCTOU in the mount program via ancestor directory swap on target path",
+    "ver": "1:2.38.1-5+b1",
+    "epss": 0.00128,
+    "epss_pct": 0.02215,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
-    "fix": "2.5.0-1+deb12u1",
-    "id": "CVE-2024-45492",
-    "pkg": "libexpat1",
-    "sev": "CRITICAL",
-    "title": "libexpat: integer overflow",
-    "ver": "2.5.0-1",
-    "epss": 0.01393,
-    "epss_pct": 0.72145,
+    "av": "L",
+    "cls": "os",
+    "fix": "",
+    "id": "CVE-2026-53615",
+    "pkg": "bsdutils",
+    "sev": "HIGH",
+    "title": "util-linux: util-linux: Partition metadata compromise via integer overflow in DOS partition parser",
+    "ver": "1:2.38.1-5+b1",
+    "epss": 0.00178,
+    "epss_pct": 0.06957,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
-    "fix": "3.7.9-2+deb12u7",
-    "id": "CVE-2026-33845",
-    "pkg": "libgnutls30",
-    "sev": "CRITICAL",
-    "title": "gnutls: GnuTLS: Denial of Service via DTLS zero-length fragment",
-    "ver": "3.7.9-2",
-    "epss": 0.00886,
-    "epss_pct": 0.58869,
+    "av": "L",
+    "cls": "os",
+    "fix": "",
+    "id": "CVE-2026-76642",
+    "pkg": "bsdutils",
+    "sev": "HIGH",
+    "title": "util-linux: util-linux: failed external mount helper still runs privileged X-mount post-hooks",
+    "ver": "1:2.38.1-5+b1",
+    "epss": 0.00216,
+    "epss_pct": 0.11367,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    },
    {
-    "fix": "3.7.9-2+deb12u7",
-    "id": "CVE-2026-42010",
-    "pkg": "libgnutls30",
-    "sev": "CRITICAL",
-    "title": "gnutls: gnutls: Authentication Bypass via NUL Character in Username",
-    "ver": "3.7.9-2",
-    "epss": 0.00944,
-    "epss_pct": 0.60677,
+    "av": "L",
+    "cls": "os",
+    "fix": "",
+    "id": "CVE-2026-78408",
+    "pkg": "bsdutils",
+    "sev": "HIGH",
+    "title": "util-linux: util-linux: nsenter --join-cgroup leaks root cgroup migration authority",
+    "ver": "1:2.38.1-5+b1",
+    "epss": 0.00186,
+    "epss_pct": 0.07815,
     "kev": false,
     "first_seen": "2026-10-23",
-    "age_days": 10
-   },
-   {
-    "fix": "1.20.1-2+deb12u2",
-    "id": "CVE-2024-37371",
-    "pkg": "libgssapi-krb5-2",
-    "sev": "CRITICAL",
-    "title": "krb5: GSS message token handling",
-    "ver": "1.20.1-2+deb12u1",
-    "epss": 0.01863,
-    "epss_pct": 0.79104,
-    "kev": false,
-    "first_seen": "2026-10-23",
-    "age_days": 10
+    "age_days": 0,
+    "in_use": "no"
    }
   ],
   "context": {
@@ -193,9 +245,17 @@
    "kev_ransomware": 0,
    "epss_max": 0.99999,
    "epss_max_id": "CVE-2023-44487",
-   "critical_fix_max_days": 10,
-   "high_fix_max_days": 10,
-   "kev_max_days": 10
+   "critical_fix_max_days": 0,
+   "high_fix_max_days": 0,
+   "kev_max_days": 0,
+   "in_use_known": true,
+   "critical_in_use": 2,
+   "critical_not_in_use": 15,
+   "critical_fix_inuse_max_days": 0,
+   "high_fix_inuse_max_days": 0,
+   "kev_in_use": 1,
+   "exposure": "external",
+   "critical_network_exposed": 2
   },
   "feeds": {
    "kev": {
@@ -203,16 +263,30 @@
     "version": "2026.10.21",
     "date": "2026-10-21",
     "entries": 1754,
-    "age_days": 12
+    "age_days": 2
    },
    "epss": {
     "status": "fresh",
     "model": "v2026.06.15",
     "date": "2026-10-22",
     "entries": 394415,
-    "age_days": 11
+    "age_days": 1
+   },
+   "inuse": {
+    "status": "fresh",
+    "date": "2026-10-23",
+    "window": "now-30d",
+    "entries": 2,
+    "age_days": 0
    },
    "tracking_since": "2026-10-23"
+  },
+  "exposure": {
+   "level": "external",
+   "via": [
+    "ingress web/site"
+   ],
+   "segment": "apps"
   }
  }
 }
