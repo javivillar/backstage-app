@@ -106,6 +106,14 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
     imagesMatchFrameworkLine: !!line && framework.length > 0 && framework.every(c => lineOf(c.version) === line),
     frameworkInImages: [...new Set(framework.map(c => `${c.name} ${c.version ?? '?'}`))].sort().join(', '),
     ...contextFacts(scans, images.length),
+    // the OS of its images (Wazuh, wazuh-oneke 0.21.0: Trivy EOSL): -1 when an image is not scanned or its scan
+    // does not say it
+    osEndOfLife:
+      images.length > 0 && scans.length === images.length && scans.every(s => typeof s.os_eol === 'boolean')
+        ? scans.filter(s => s.os_eol).length
+        : -1,
+    // the license policy on the dependencies of its images (SBOM): distinct packages; -1 when an image has no SBOM
+    ...licenseFacts(images),
     // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
     ...qualityFacts(images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined),
   };
@@ -154,9 +162,22 @@ export function contextFacts(scans: ImageScan[], imageCount: number) {
   };
 }
 
+export function licenseFacts(images: ImageFacts[]) {
+  const reports = images.map(i => i.sbom?.licensePolicy);
+  if (!images.length || reports.some(r => !r)) return { deniedLicenses: -1, unknownLicenses: -1, deniedLicenseIds: '' };
+  const key = (f: { ecosystem: string; name: string; version?: string }) => `${f.ecosystem}:${f.name}@${f.version ?? ''}`;
+  const denied = new Map(reports.flatMap(r => r!.denied).map(f => [key(f), f]));
+  const unknown = new Set(reports.flatMap(r => r!.unknown).map(key));
+  return {
+    deniedLicenses: denied.size,
+    unknownLicenses: unknown.size,
+    deniedLicenseIds: [...denied.values()].map(f => `${f.name} ${f.version ?? ''} (${(f.denied ?? []).join(', ')})`).join('; '),
+  };
+}
+
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.4.0',
+  version: '0.5.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -213,6 +234,13 @@ export const supplyChainFactRetriever: FactRetriever = {
     lintIssues: { type: 'integer', description: 'ruff issues plus eslint errors; -1: not reported' },
     typeErrors: { type: 'integer', description: 'mypy errors of the backend; -1: not reported' },
     qualityRevision: { type: 'string', description: 'Commit of the quality report' },
+    osEndOfLife: { type: 'integer', description: 'Images whose OS is out of support (no more security fixes); -1: unknown' },
+    deniedLicenses: {
+      type: 'integer',
+      description: 'Dependencies of the application with a license the policy denies (GPL, AGPL...); -1: an image has no SBOM',
+    },
+    unknownLicenses: { type: 'integer', description: 'Dependencies of the application with no license in the SBOM; -1: an image has no SBOM' },
+    deniedLicenseIds: { type: 'string', description: 'The dependencies with a denied license, and which' },
     unauthenticatedEndpoints: {
       type: 'integer',
       description: 'Operations of the API with no authentication that are not declared public; -1: not reported',

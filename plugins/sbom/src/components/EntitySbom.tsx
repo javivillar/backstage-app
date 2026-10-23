@@ -17,7 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Download from '@mui/icons-material/Download';
 import { SbomSource, sbomSources } from '../annotations';
-import { Component, Exposure, Feed, ImageSbom, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
+import { Component, Exposure, Feed, ImageSbom, LicenseReport, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
 
 const ECOSYSTEM_LABEL: Record<string, string> = {
   pypi: 'Python',
@@ -40,6 +40,38 @@ const sourceName = ({ kind, ref }: SbomSource) => {
   const [name, tag] = last.split(/[:@]/);
   return tag ? `${name}:${tag.replace(/^sha256-?/, '').slice(0, 7)}` : name;
 };
+
+/** The license policy on the dependencies of the application: what it denies, and what says no license. */
+export function LicensePolicy({ report }: { report: LicenseReport }) {
+  const bad = report.denied.length > 0;
+  return (
+    <Box sx={{ display: 'grid', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          License policy
+        </Typography>
+        <Chip
+          size="small"
+          label={bad ? `${report.denied.length} with a denied license` : 'no denied license'}
+          sx={bad ? { bgcolor: '#c62828', color: '#fff', fontWeight: 600 } : { bgcolor: '#2e7d32', color: '#fff' }}
+        />
+        {report.unknown.length > 0 && <Chip size="small" variant="outlined" label={`${report.unknown.length} without a license`} />}
+        <Typography variant="body2" sx={{ opacity: 0.7 }} title={`denied: ${report.policy.denied.join(', ')}`}>
+          {report.checked} dependencies of the application ({report.policy.ecosystems.join(', ')}); the packages of the OS
+          are not checked
+        </Typography>
+      </Box>
+      {[...report.denied.map(f => ({ ...f, why: `denied: ${(f.denied ?? []).join(', ')}` })), ...report.unknown.map(f => ({ ...f, why: 'no license in the SBOM' }))].map(f => (
+        <Typography key={`${f.ecosystem}:${f.name}@${f.version}:${f.why}`} variant="body2" sx={{ color: f.denied ? '#c62828' : undefined }}>
+          <code>
+            {f.name} {f.version}
+          </code>{' '}
+          ({label(f.ecosystem)}) {f.licenses.length ? `— ${f.licenses.join(', ')} ` : ''}— {f.why}
+        </Typography>
+      ))}
+    </Box>
+  );
+}
 
 function Summary({ data }: { data: ImageSbom }) {
   const download = useDownload();
@@ -107,6 +139,7 @@ function Summary({ data }: { data: ImageSbom }) {
               <Chip key={lic} size="small" variant="outlined" label={`${lic} ${n}`} />
             ))}
         </Box>
+        {s.licensePolicy && <LicensePolicy report={s.licensePolicy} />}
       </Box>
     </InfoCard>
   );
@@ -282,6 +315,14 @@ export function Vulnerabilities({ image }: { image: string }) {
             />
             {(ctx.kev_ransomware ?? 0) > 0 && (
               <Chip size="small" label={`used by ransomware ${ctx.kev_ransomware}`} sx={{ bgcolor: KEV_COLOR, color: '#fff' }} />
+            )}
+            {scan.os_eol && (
+              <Chip
+                size="small"
+                label="OS out of support: no more security fixes"
+                title="The distribution of the base image publishes no more security fixes (Trivy): rebuild it on a supported one"
+                sx={{ bgcolor: '#c62828', color: '#fff', fontWeight: 600 }}
+              />
             )}
             {scan.exposure && <ExposureChip exposure={scan.exposure} />}
             {ctx.in_use_known !== undefined && (
