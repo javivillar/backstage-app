@@ -246,6 +246,28 @@ describe('quality report', () => {
     expect(facts).toMatchObject({ qualityReport: false, testsFailed: -1, backendCoverage: -1, lintIssues: -1, typeErrors: -1 });
   });
 
+  it('code findings: operations without authentication, static analysis, secrets', () => {
+    const findings: QualityReport = {
+      ...report,
+      backend: { ...report.backend, endpoints: { total: 23, unauthenticated: 1, public: 1, custom: 0, with_roles: 20, flow: 1 }, bandit: { high: 2, medium: 1, low: 2 } },
+      frontend: { ...report.frontend, security: { errors: 2 } },
+      secrets: { repo: 1, images: 2 },
+    };
+    expect(applicationFacts(app, ['3.1'], [{ ref: 'api', quality: findings }])).toMatchObject({
+      unauthenticatedEndpoints: 1,
+      sastIssues: 5,
+      secretsFound: 3,
+    });
+    // a report made before them, or images not scanned for secrets: -1, and their checks fail
+    expect(applicationFacts(app, ['3.1'], [{ ref: 'api', quality: report }])).toMatchObject({
+      unauthenticatedEndpoints: -1,
+      sastIssues: -1,
+      secretsFound: -1,
+    });
+    const noImages: QualityReport = { ...findings, secrets: { repo: 0 } };
+    expect(applicationFacts(app, ['3.1'], [{ ref: 'api', quality: noImages }])).toMatchObject({ secretsFound: -1 });
+  });
+
   it('a report without the numbers of a tool says -1 for them', () => {
     const facts = applicationFacts(app, ['3.1'], [
       { ref: 'api', quality: { schema: 'refresquito.quality/v1', backend: { coverage: { lines: 90 } } } },

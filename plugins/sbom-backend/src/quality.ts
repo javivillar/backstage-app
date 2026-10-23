@@ -27,6 +27,42 @@ export interface FileCoverage {
   missing?: string;
 }
 
+/** Who can call an operation (detail.endpoints, .github/endpoints.py of the application). */
+export interface Endpoint {
+  method: string;
+  path: string;
+  /** none: no authentication and not declared public, the finding */
+  auth: 'roles' | 'user' | 'flow' | 'custom' | 'public' | 'none';
+  owner: 'app' | 'framework';
+  operation?: string;
+  roles?: string[];
+  /** why it is public (openapi_extra x-refresquito-public) */
+  reason?: string;
+}
+
+/** A finding of a tool on the code (detail.findings): Bandit, eslint (security), gitleaks, Trivy. Never the secret. */
+export interface CodeFinding {
+  tool: 'bandit' | 'eslint' | 'gitleaks' | 'trivy' | string;
+  rule?: string;
+  severity?: string;
+  confidence?: string;
+  file?: string;
+  line?: number;
+  message?: string;
+  /** secrets: repository, or image <name>; and the commit for the history */
+  where?: string;
+  commit?: string;
+}
+
+export interface EndpointCounts {
+  total: number;
+  unauthenticated: number;
+  public: number;
+  custom: number;
+  with_roles: number;
+  flow?: number;
+}
+
 export interface QualityPart {
   tests?: TestRun;
   /** percentages */
@@ -34,8 +70,19 @@ export interface QualityPart {
   ruff?: { issues: number };
   mypy?: { errors: number };
   eslint?: { errors: number; warnings: number };
+  /** code findings (quality.py with endpoints, Bandit and the eslint rules of security) */
+  endpoints?: EndpointCounts;
+  bandit?: { high: number; medium: number; low: number };
+  security?: { errors: number };
   /** every test and every file (reports since quality.py with detail; older ones lack it) */
-  detail?: { tests?: TestCase[]; coverage?: FileCoverage[] };
+  detail?: { tests?: TestCase[]; coverage?: FileCoverage[]; endpoints?: Endpoint[]; findings?: CodeFinding[] };
+}
+
+/** Secrets in the whole git history (gitleaks) and in the images (Trivy); absent number: not scanned. */
+export interface SecretsPart {
+  repo?: number;
+  images?: number;
+  detail?: { findings?: CodeFinding[] };
 }
 
 export interface QualityReport {
@@ -44,6 +91,7 @@ export interface QualityReport {
   generated?: string;
   backend?: QualityPart;
   frontend?: QualityPart;
+  secrets?: SecretsPart;
 }
 
 export const QUALITY_SCHEMA = 'refresquito.quality/v1';
@@ -73,6 +121,17 @@ export function qualityFacts(report: QualityReport | undefined) {
         ? report.backend.ruff.issues + (report.frontend?.eslint?.errors ?? 0)
         : -1,
     typeErrors: n(report?.backend?.mypy?.errors),
+    // code findings: operations without authentication not declared public; Bandit HIGH + MEDIUM and the eslint rules
+    // of security; secrets in the history and in the images. -1: the report does not say it (the check then fails)
+    unauthenticatedEndpoints: n(report?.backend?.endpoints?.unauthenticated),
+    sastIssues:
+      report?.backend?.bandit && (!report.frontend || report.frontend.security)
+        ? report.backend.bandit.high + report.backend.bandit.medium + (report.frontend?.security?.errors ?? 0)
+        : -1,
+    secretsFound:
+      typeof report?.secrets?.repo === 'number' && typeof report.secrets.images === 'number'
+        ? report.secrets.repo + report.secrets.images
+        : -1,
     qualityRevision: report?.revision ?? '',
   };
 }

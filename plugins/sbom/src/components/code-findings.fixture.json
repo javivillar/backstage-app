@@ -1,0 +1,440 @@
+{
+ "schema": "refresquito.quality/v1",
+ "revision": "0123456789abcdef",
+ "generated": "2026-10-23T09:00:00Z",
+ "backend": {
+  "endpoints": {
+   "total": 23,
+   "unauthenticated": 1,
+   "public": 1,
+   "custom": 0,
+   "with_roles": 20,
+   "flow": 1
+  },
+  "bandit": {
+   "high": 2,
+   "medium": 1,
+   "low": 2
+  },
+  "detail": {
+   "endpoints": [
+    {
+     "method": "GET",
+     "path": "/api/pets/export",
+     "auth": "none",
+     "owner": "app",
+     "operation": "export"
+    },
+    {
+     "method": "GET",
+     "path": "/api/info",
+     "auth": "public",
+     "owner": "app",
+     "operation": "info",
+     "reason": "version shown on the sign-in page"
+    },
+    {
+     "method": "GET",
+     "path": "/api/dashboards",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "list_dashboards",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/dashboards/{name}/guest-token",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "guest_token",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "list_pets",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "create_pet",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "DELETE",
+     "path": "/api/pets/{pet_id}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "delete_pet",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets/{pet_id}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "get_pet",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "PUT",
+     "path": "/api/pets/{pet_id}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "update_pet",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets/{pet_id}/documents",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "list_documents",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets/{pet_id}/documents",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "add_document",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "DELETE",
+     "path": "/api/pets/{pet_id}/documents/{document_id}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "delete_document",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets/{pet_id}/documents/{document_id}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "download_document",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets/{pet_id}/files",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "list_files",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets/{pet_id}/files",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "add_file",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "DELETE",
+     "path": "/api/pets/{pet_id}/files/{name}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "delete_file",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/pets/{pet_id}/files/{name}",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "download_file",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets/{pet_id}/review",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "ask_for_review",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets/{pet_id}/status",
+     "auth": "flow",
+     "owner": "app",
+     "operation": "set_status"
+    },
+    {
+     "method": "POST",
+     "path": "/api/pets/{pet_id}/welcome",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "welcome",
+     "roles": [
+      "petstore-admin"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/stats/pets-by-status",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "pets_by_status",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "my_tasks",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/tasks/{task_id}/complete",
+     "auth": "roles",
+     "owner": "app",
+     "operation": "complete_task",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/api/docs",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "swagger_ui_html"
+    },
+    {
+     "method": "GET",
+     "path": "/api/flow-runs",
+     "auth": "roles",
+     "owner": "framework",
+     "operation": "list_flow_runs",
+     "roles": [
+      "petstore-admin",
+      "petstore-viewer"
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/api/flow-runs/{run_id}",
+     "auth": "flow",
+     "owner": "framework",
+     "operation": "report_flow_run"
+    },
+    {
+     "method": "GET",
+     "path": "/api/openapi.json",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "openapi"
+    },
+    {
+     "method": "GET",
+     "path": "/docs/oauth2-redirect",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "swagger_ui_redirect"
+    },
+    {
+     "method": "GET",
+     "path": "/health/live",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "live"
+    },
+    {
+     "method": "GET",
+     "path": "/health/platform",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "platform_blocks"
+    },
+    {
+     "method": "GET",
+     "path": "/health/ready",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "ready"
+    },
+    {
+     "method": "GET",
+     "path": "/metrics",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "metrics"
+    },
+    {
+     "method": "GET",
+     "path": "/redoc",
+     "auth": "none",
+     "owner": "framework",
+     "operation": "redoc_html"
+    }
+   ],
+   "findings": [
+    {
+     "tool": "bandit",
+     "rule": "B602 subprocess_popen_with_shell_equals_true",
+     "severity": "HIGH",
+     "confidence": "HIGH",
+     "file": "src/petstore/bad.py",
+     "line": 2,
+     "message": "subprocess call with shell=True identified, security issue."
+    },
+    {
+     "tool": "bandit",
+     "rule": "B324 hashlib",
+     "severity": "HIGH",
+     "confidence": "HIGH",
+     "file": "src/petstore/bad.py",
+     "line": 3,
+     "message": "Use of weak MD5 hash for security. Consider usedforsecurity=False"
+    },
+    {
+     "tool": "bandit",
+     "rule": "B608 hardcoded_sql_expressions",
+     "severity": "MEDIUM",
+     "confidence": "MEDIUM",
+     "file": "src/petstore/bad.py",
+     "line": 5,
+     "message": "Possible SQL injection vector through string-based query construction."
+    },
+    {
+     "tool": "bandit",
+     "rule": "B404 blacklist",
+     "severity": "LOW",
+     "confidence": "HIGH",
+     "file": "src/petstore/bad.py",
+     "line": 1,
+     "message": "Consider possible security implications associated with the subprocess module."
+    },
+    {
+     "tool": "bandit",
+     "rule": "B105 hardcoded_password_string",
+     "severity": "LOW",
+     "confidence": "MEDIUM",
+     "file": "src/petstore/bad.py",
+     "line": 4,
+     "message": "Possible hardcoded password: 'hunter2'"
+    }
+   ]
+  }
+ },
+ "frontend": {
+  "eslint": {
+   "errors": 2,
+   "warnings": 0
+  },
+  "security": {
+   "errors": 2
+  },
+  "detail": {
+   "findings": [
+    {
+     "tool": "eslint",
+     "rule": "no-restricted-syntax",
+     "severity": "MEDIUM",
+     "file": "src/app/zz-probe.ts",
+     "line": 3,
+     "message": "[security] HTML written by hand is not sanitized: bind it in the template instead"
+    },
+    {
+     "tool": "eslint",
+     "rule": "no-restricted-syntax",
+     "severity": "MEDIUM",
+     "file": "src/app/zz-probe.ts",
+     "line": 4,
+     "message": "[security] DomSanitizer.bypassSecurityTrust* turns off Angular's sanitization of that value"
+    }
+   ]
+  }
+ },
+ "secrets": {
+  "repo": 1,
+  "images": 2,
+  "detail": {
+   "findings": [
+    {
+     "tool": "gitleaks",
+     "where": "repository",
+     "rule": "generic-api-key",
+     "severity": "HIGH",
+     "file": "settings.py",
+     "line": 2,
+     "commit": "c5df61fb8b29"
+    },
+    {
+     "tool": "trivy",
+     "where": "image web",
+     "rule": "github-pat",
+     "severity": "CRITICAL",
+     "file": "/app/.env",
+     "line": 1
+    },
+    {
+     "tool": "trivy",
+     "where": "image web",
+     "rule": "private-key",
+     "severity": "HIGH",
+     "file": "/app/key.pem",
+     "line": 2
+    }
+   ]
+  }
+ }
+}
