@@ -156,7 +156,7 @@ export function contextFacts(scans: ImageScan[], imageCount: number) {
 
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.3.0',
+  version: '0.4.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -213,6 +213,18 @@ export const supplyChainFactRetriever: FactRetriever = {
     lintIssues: { type: 'integer', description: 'ruff issues plus eslint errors; -1: not reported' },
     typeErrors: { type: 'integer', description: 'mypy errors of the backend; -1: not reported' },
     qualityRevision: { type: 'string', description: 'Commit of the quality report' },
+    unauthenticatedEndpoints: {
+      type: 'integer',
+      description: 'Operations of the API with no authentication that are not declared public; -1: not reported',
+    },
+    sastIssues: {
+      type: 'integer',
+      description: 'Static analysis of the code: Bandit HIGH and MEDIUM plus the eslint rules of security; -1: not reported',
+    },
+    secretsFound: {
+      type: 'integer',
+      description: 'Secrets in the git history (gitleaks) and in the images (Trivy); -1: not reported',
+    },
   },
   async handler(ctx: FactRetrieverContext): Promise<TechInsightFact[]> {
     const { discovery, auth, logger } = ctx;

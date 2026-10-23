@@ -15,7 +15,7 @@ import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { sbomImages } from '../annotations';
-import { FileCoverage, QualityPart, TestCase, useQuality } from '../api';
+import { CodeFinding, Endpoint, FileCoverage, QualityPart, QualityReport, TestCase, useQuality } from '../api';
 
 const STATUS_COLOR: Record<TestCase['status'], string> = {
   passed: '#2e7d32',
@@ -201,6 +201,168 @@ function Part({ part }: { part: QualityPart }) {
   );
 }
 
+const AUTH_COLOR: Record<Endpoint['auth'], string> = {
+  none: '#c62828',
+  custom: '#ef6c00',
+  public: '#ef6c00',
+  flow: '#2e7d32',
+  user: '#2e7d32',
+  roles: '#2e7d32',
+};
+const AUTH_TEXT: Record<Endpoint['auth'], string> = {
+  none: 'none',
+  custom: 'own scheme',
+  public: 'public (declared)',
+  flow: 'flows of the app',
+  user: 'any signed-in user',
+  roles: 'roles',
+};
+const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+const SEVERITY_COLOR: Record<string, string> = { CRITICAL: '#c62828', HIGH: '#c62828', MEDIUM: '#ef6c00', LOW: '#757575' };
+
+/** Every finding of the report: Bandit and eslint (code), gitleaks and Trivy (secrets), the worst first. */
+export function allFindings(report: QualityReport): Array<CodeFinding & { part: string }> {
+  const parts: Array<[string, CodeFinding[] | undefined]> = [
+    ['backend', report.backend?.detail?.findings],
+    ['frontend', report.frontend?.detail?.findings],
+    ['secrets', report.secrets?.detail?.findings],
+  ];
+  return parts
+    .flatMap(([part, list]) => (list ?? []).map(f => ({ ...f, part })))
+    .sort(
+      (a, b) =>
+        (SEVERITY_ORDER[a.severity ?? ''] ?? 9) - (SEVERITY_ORDER[b.severity ?? ''] ?? 9) ||
+        (a.file ?? '').localeCompare(b.file ?? '') ||
+        (a.line ?? 0) - (b.line ?? 0),
+    );
+}
+
+function Endpoints({ endpoints }: { endpoints: Endpoint[] }) {
+  const [framework, setFramework] = useState(false);
+  const rows = endpoints
+    .filter(e => framework || e.owner === 'app')
+    .sort((a, b) => Number(a.auth !== 'none') - Number(b.auth !== 'none') || a.path.localeCompare(b.path));
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }}>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <Typography variant="subtitle2">Who can call each operation</Typography>
+        <TextField
+          select
+          size="small"
+          label="Operations"
+          value={framework ? 'all' : 'app'}
+          onChange={e => setFramework(e.target.value === 'all')}
+          sx={{ minWidth: 220 }}
+        >
+          <MenuItem value="app">Of the application</MenuItem>
+          <MenuItem value="all">Also of the framework</MenuItem>
+        </TextField>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Operation</TableCell>
+            <TableCell>Authentication</TableCell>
+            <TableCell>Roles / why public</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map(e => (
+            <TableRow key={`${e.method} ${e.path}`} hover>
+              <TableCell>
+                <code>
+                  {e.method} {e.path}
+                </code>
+                {e.owner === 'framework' && <span style={{ opacity: 0.6 }}> · framework</span>}
+              </TableCell>
+              <TableCell sx={{ color: e.owner === 'app' ? AUTH_COLOR[e.auth] : undefined, fontWeight: 600 }}>
+                {AUTH_TEXT[e.auth] ?? e.auth}
+              </TableCell>
+              <TableCell>{e.roles?.length ? e.roles.join(', ') : e.reason ?? ''}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function Findings({ findings }: { findings: Array<CodeFinding & { part: string }> }) {
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }}>
+      <Typography variant="subtitle2">Findings (the worst first; never the secret itself)</Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Severity</TableCell>
+            <TableCell>Tool</TableCell>
+            <TableCell>Rule</TableCell>
+            <TableCell>Where</TableCell>
+            <TableCell>What</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {findings.map((f, i) => (
+            <TableRow key={`${f.tool}-${f.file}-${f.line}-${i}`} hover>
+              <TableCell sx={{ color: SEVERITY_COLOR[f.severity ?? ''], fontWeight: 600 }}>{(f.severity ?? '').toLowerCase()}</TableCell>
+              <TableCell>{f.tool}</TableCell>
+              <TableCell>
+                <code>{f.rule}</code>
+              </TableCell>
+              <TableCell>
+                {f.where && f.where !== 'repository' ? `${f.where}: ` : ''}
+                <code>
+                  {f.file}
+                  {f.line ? `:${f.line}` : ''}
+                </code>
+                {f.commit ? <span style={{ opacity: 0.7 }}> · commit {f.commit.slice(0, 7)}</span> : ''}
+              </TableCell>
+              <TableCell>{f.message ?? (f.tool === 'gitleaks' || f.tool === 'trivy' ? 'a secret: revoke it where it was issued' : '')}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+/** Code findings of the report: endpoints without authentication, static analysis, secrets. */
+export function CodeFindings({ report }: { report: QualityReport }) {
+  const endpoints = report.backend?.detail?.endpoints;
+  const counts = report.backend?.endpoints;
+  const findings = allFindings(report);
+  const bandit = report.backend?.bandit;
+  const security = report.frontend?.security;
+  const secrets = report.secrets;
+  const sast = bandit ? bandit.high + bandit.medium + (security?.errors ?? 0) : undefined;
+  const leaks = secrets && typeof secrets.repo === 'number' ? secrets.repo + (secrets.images ?? 0) : undefined;
+  const chip = (label: string, bad: boolean) => (
+    <Chip key={label} size="small" label={label} sx={bad ? { bgcolor: STATUS_COLOR.failed, color: '#fff' } : { bgcolor: STATUS_COLOR.passed, color: '#fff' }} />
+  );
+  if (!counts && !bandit && !secrets) {
+    return (
+      <Typography variant="body2">
+        This report has no code findings: it was made before the CI of the application looked at its endpoints, its code
+        and its secrets (template line 3.1, <code>.github/endpoints.py</code>). The next image its CI publishes will have them.
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {counts && chip(`${counts.unauthenticated} operations without authentication`, counts.unauthenticated > 0)}
+        {counts && counts.public > 0 && <Chip size="small" variant="outlined" label={`${counts.public} declared public`} />}
+        {sast !== undefined && chip(`${sast} static analysis findings`, sast > 0)}
+        {bandit && bandit.low > 0 && <Chip size="small" variant="outlined" label={`${bandit.low} low (not counted)`} />}
+        {leaks !== undefined && chip(`${leaks} secrets`, leaks > 0)}
+        {secrets && typeof secrets.images !== 'number' && <Chip size="small" variant="outlined" label="images not scanned for secrets" />}
+      </Box>
+      {endpoints && <Endpoints endpoints={endpoints} />}
+      {findings.length > 0 && <Findings findings={findings} />}
+    </Box>
+  );
+}
+
 /**
  * Tests & coverage of an application: every test of its last CI run and the coverage of each file, from the quality
  * report its CI attaches to its images (the same report on each image: the first one is read).
@@ -212,7 +374,7 @@ export function EntityQualityDetailContent() {
   const [current, setCurrent] = useState(0);
   if (!image) return null;
   if (loading) return <Progress />;
-  const title = 'Tests & coverage';
+  const title = 'Tests, coverage & code findings';
   if (error) {
     return (
       <InfoCard title={title}>
@@ -233,7 +395,9 @@ export function EntityQualityDetailContent() {
     );
   }
   const parts = (['backend', 'frontend'] as const).filter(p => report[p]);
-  const index = Math.min(current, parts.length - 1);
+  // a last tab with the code findings (endpoints, static analysis, secrets)
+  const tabs = [...parts.map(p => (p === 'backend' ? 'Backend' : 'Frontend')), 'Code findings'];
+  const index = Math.min(current, tabs.length - 1);
   const revision = report.revision || data?.attached?.revision;
   return (
     <InfoCard
@@ -241,14 +405,12 @@ export function EntityQualityDetailContent() {
       subheader={`The last CI run of the image${revision ? ` · commit ${revision.slice(0, 7)}` : ''}${report.generated ? ` · ${new Date(report.generated).toLocaleString()}` : ''}`}
     >
       <Box sx={{ display: 'grid', gap: 2 }}>
-        {parts.length > 1 && (
-          <Tabs value={index} onChange={(_e, v) => setCurrent(v)}>
-            {parts.map(p => (
-              <Tab key={p} label={p === 'backend' ? 'Backend' : 'Frontend'} />
-            ))}
-          </Tabs>
-        )}
-        {parts.length > 0 ? <Part key={parts[index]} part={report[parts[index]]!} /> : <Typography variant="body2">The report has no parts.</Typography>}
+        <Tabs value={index} onChange={(_e, v) => setCurrent(v)}>
+          {tabs.map(t => (
+            <Tab key={t} label={t} />
+          ))}
+        </Tabs>
+        {index < parts.length ? <Part key={parts[index]} part={report[parts[index]]!} /> : <CodeFindings report={report} />}
       </Box>
     </InfoCard>
   );

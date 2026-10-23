@@ -23,3 +23,9 @@ Wazuh agents of the nodes saw it (*yes*, *no*, *?* for language packages or imag
 CVSS **attack** vector, and the **exposure** of the image (reachable from outside the cluster through an Ingress /
 IngressRoute / NodePort, on the network of the node, inside the cluster only, or not exposed). Findings in packages
 never loaded are listed after the ones in use and can be filtered (*In use*: never loaded).
+
+The card *Tests, coverage & code findings* has a last tab, **Code findings**, from the same quality report (template
+line 3.1, `.github/endpoints.py`): who can call each operation of the API (the ones with no authentication that are not
+declared public first, in red; the operations of the framework on demand), and every finding of Bandit, of the eslint
+rules of security, of gitleaks (git history) and of Trivy (images), the worst first — rule, file and line, never the
+secret.

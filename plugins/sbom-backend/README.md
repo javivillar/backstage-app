@@ -22,7 +22,9 @@ endpoints. From the context of Wazuh it only takes the maximum over the images o
 `knownExploitedRansomware`, `knownExploitedIds`, `epssMax`, `criticalFixMaxDays`, `highFixMaxDays` (days the oldest
 fixable one has been open, -1 none), and from the packages in use and the exposure of each image (wazuh-oneke I7):
 `criticalFixInUseMaxDays`, `highFixInUseMaxDays` (only the findings in use or unknown), `knownExploitedInUse`,
-`criticalNotInUse`, `criticalNetworkExposed`, `exposure` (the most exposed image). The SLA thresholds are checks of app-config (cnoe-oneke
+`criticalNotInUse`, `criticalNetworkExposed`, `exposure` (the most exposed image). From the quality report it also takes the code findings: `unauthenticatedEndpoints` (operations with no
+authentication not declared public), `sastIssues` (Bandit HIGH + MEDIUM and the eslint rules of security) and
+`secretsFound` (git history + images); -1 when the report does not say it. The SLA thresholds are checks of app-config (cnoe-oneke
 `backstage.techInsights.sla`), not code.
 
 It finds the SBOM with the referrers API of the registry, or in the tag `sha256-<hex>` that oras writes on a registry

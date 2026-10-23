@@ -210,13 +210,58 @@ export interface FileCoverage {
   missing?: string;
 }
 
+/** Who can call an operation (detail.endpoints, .github/endpoints.py of the application). */
+export interface Endpoint {
+  method: string;
+  path: string;
+  /** none: no authentication and not declared public, the finding */
+  auth: 'roles' | 'user' | 'flow' | 'custom' | 'public' | 'none';
+  owner: 'app' | 'framework';
+  operation?: string;
+  roles?: string[];
+  /** why it is public (openapi_extra x-refresquito-public) */
+  reason?: string;
+}
+
+/** A finding of a tool on the code (detail.findings): Bandit, eslint (security), gitleaks, Trivy. Never the secret. */
+export interface CodeFinding {
+  tool: 'bandit' | 'eslint' | 'gitleaks' | 'trivy' | string;
+  rule?: string;
+  severity?: string;
+  confidence?: string;
+  file?: string;
+  line?: number;
+  message?: string;
+  /** secrets: repository, or image <name>; and the commit for the history */
+  where?: string;
+  commit?: string;
+}
+
+export interface EndpointCounts {
+  total: number;
+  unauthenticated: number;
+  public: number;
+  custom: number;
+  with_roles: number;
+  flow?: number;
+}
+
 export interface QualityPart {
   tests?: { total: number; failures: number; errors: number; skipped: number };
   coverage?: { lines?: number; branches?: number; statements?: number; functions?: number };
   ruff?: { issues: number };
   mypy?: { errors: number };
   eslint?: { errors: number; warnings: number };
-  detail?: { tests?: TestCase[]; coverage?: FileCoverage[] };
+  endpoints?: EndpointCounts;
+  bandit?: { high: number; medium: number; low: number };
+  security?: { errors: number };
+  detail?: { tests?: TestCase[]; coverage?: FileCoverage[]; endpoints?: Endpoint[]; findings?: CodeFinding[] };
+}
+
+export interface SecretsPart {
+  repo?: number;
+  images?: number;
+  detail?: { findings?: CodeFinding[] };
 }
 
 export interface QualityReport {
@@ -225,6 +270,7 @@ export interface QualityReport {
   generated?: string;
   backend?: QualityPart;
   frontend?: QualityPart;
+  secrets?: SecretsPart;
 }
 
 export interface ImageQuality {

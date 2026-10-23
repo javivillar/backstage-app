@@ -4,6 +4,9 @@ import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { TestApiProvider, renderInTestApp } from '@backstage/test-utils';
 import { EntityQualityDetailContent } from './EntityQualityDetail';
 import report from './quality.fixture.json';
+// quality.py of petstore#21 on real tool outputs: the endpoints of the petstore plus one without authentication and one
+// declared public, Bandit and eslint on probe files, gitleaks and Trivy on probe secrets
+import codeFindings from './code-findings.fixture.json';
 
 const entity = {
   apiVersion: 'backstage.io/v1alpha1',
@@ -36,7 +39,7 @@ describe('EntityQualityDetailContent', () => {
     const { fetch, view } = render({ image: 'x', attached: null, report });
     await view;
     expect(fetch.mock.calls[0][0]).toBe('http://backstage/api/sbom/quality?ref=ghcr.io%2Fjavivillar%2Fpetstore-api%3A5ba9326');
-    expect(await screen.findByText('Tests & coverage')).toBeInTheDocument();
+    expect(await screen.findByText('Tests, coverage & code findings')).toBeInTheDocument();
     expect(screen.getByText('27 passed')).toBeInTheDocument();
     expect(screen.getByText('1 failed')).toBeInTheDocument();
     // the failed test is the first row, with why
@@ -50,6 +53,37 @@ describe('EntityQualityDetailContent', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Frontend' }));
     expect(screen.getByText('Branches')).toBeInTheDocument();
     expect(screen.getByText('src/app/pets/pet-welcome.ts')).toBeInTheDocument();
+  });
+
+  it('shows the code findings: the operation without authentication first, the worst findings first, no secret', async () => {
+    const { view } = render({ image: 'x', attached: null, report: codeFindings });
+    await view;
+    fireEvent.click(await screen.findByRole('tab', { name: 'Code findings' }));
+    expect(screen.getByText('1 operations without authentication')).toBeInTheDocument();
+    expect(screen.getByText('5 static analysis findings')).toBeInTheDocument();
+    expect(screen.getByText('3 secrets')).toBeInTheDocument();
+    expect(screen.getByText('2 low (not counted)')).toBeInTheDocument();
+    const rows = screen.getAllByRole('row');
+    // endpoints: the one without authentication first, then the declared public with its reason
+    expect(rows[1]).toHaveTextContent('GET /api/pets/export');
+    expect(rows[1]).toHaveTextContent('none');
+    expect(screen.getByText('version shown on the sign-in page')).toBeInTheDocument();
+    expect(screen.queryByText(/\/health\/live/)).not.toBeInTheDocument();
+    // findings: the critical secret of an image first; the secret itself is nowhere
+    const findings = rows.filter(r => /bandit|eslint|gitleaks|trivy/.test(r.textContent ?? ''));
+    expect(findings[0]).toHaveTextContent('critical');
+    expect(findings[0]).toHaveTextContent('github-pat');
+    expect(findings[0]).toHaveTextContent('image web: /app/.env:1');
+    expect(screen.getByText(/B602/)).toBeInTheDocument();
+    expect(screen.getByText(/bypassSecurityTrust/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/ghp_|BEGIN .*PRIVATE KEY/);
+  });
+
+  it('says when a report has no code findings yet', async () => {
+    const { view } = render({ image: 'x', attached: null, report });
+    await view;
+    fireEvent.click(await screen.findByRole('tab', { name: 'Code findings' }));
+    expect(screen.getByText(/has no code findings/)).toBeInTheDocument();
   });
 
   it('says when a report has only the totals', async () => {
