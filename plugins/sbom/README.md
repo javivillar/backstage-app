@@ -29,3 +29,9 @@ line 3.1, `.github/endpoints.py`): who can call each operation of the API (the o
 declared public first, in red; the operations of the framework on demand), and every finding of Bandit, of the eslint
 rules of security, of gitleaks (git history) and of Trivy (images), the worst first — rule, file and line, never the
 secret.
+
+The SBOM card of each image also applies the **license policy** of the platform to the dependencies of the application
+(pypi, npm, maven... — not the packages of the OS of the image, where GPL programs are normal): the ones with a
+license the policy denies (GPL, AGPL, SSPL..., `sbom.licenses.denied`) in red, and the ones that say no license at all.
+A license expression is denied only when no allowed license can satisfy it (`MIT OR GPL-3.0` is allowed). The
+Vulnerabilities card says when the **OS of the image is out of support** (no more security fixes; wazuh-oneke 0.21.0).

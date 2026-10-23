@@ -1,6 +1,7 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Response, Router } from 'express';
 import { SbomSummary, summarize } from './cyclonedx';
+import { evaluateLicenses, policyFrom } from './licenses';
 import { QualityReport, parseQuality } from './quality';
 import {
   FoundSbom,
@@ -35,6 +36,10 @@ import { ImageScan, findImageScan } from './vulnerabilities';
  *     allowedReleases: ['javivillar/']           # only releases of repositories under these prefixes
  *     vulnerabilitiesUrl: http://wazuh-oneke-security-exporter.<ns>:9950   # the security exporter of wazuh-oneke
  *                                                  # (its last image scan); empty: the tab shows no vulnerabilities
+ *     licenses:                                    # the license policy (licenses.ts; defaults: DEFAULT_POLICY)
+ *       denied: ['AGPL-*', 'GPL-*', 'SSPL-*']      # SPDX ids, * = any version; applied to the dependencies of the
+ *       ecosystems: [pypi, npm, maven, ...]        # application (not to the OS packages of the image)
+ *       ignore: ['pkg:nuget/Simple%20Launcher@']   # purl prefixes that are not dependencies
  * The releases are read with the token of integrations.github (github.com).
  */
 export const sbomPlugin = createBackendPlugin({
@@ -52,6 +57,12 @@ export const sbomPlugin = createBackendPlugin({
         const allowed = settings?.getOptionalStringArray('allowedImages') ?? [];
         const dockerConfig = settings?.getOptionalString('dockerConfig');
         const allowedReleases = settings?.getOptionalStringArray('allowedReleases') ?? [];
+        const licensePolicy = policyFrom(settings?.getOptionalConfig('licenses'));
+        // the summary of an SBOM, with the license policy applied to its components
+        const summaryOf = (bom: unknown): SbomSummary => {
+          const summary = summarize(bom);
+          return { ...summary, licensePolicy: evaluateLicenses(summary.components, licensePolicy) };
+        };
         const vulnerabilitiesUrl = settings?.getOptionalString('vulnerabilitiesUrl') ?? '';
         const githubToken = (config.getOptionalConfigArray('integrations.github') ?? [])
           .find(c => (c.getOptionalString('host') ?? 'github.com') === 'github.com')
@@ -72,7 +83,7 @@ export const sbomPlugin = createBackendPlugin({
           const hit = cache.get(ref);
           if (hit && Date.now() - hit.at < TTL) return hit;
           const found = await findSbom(client, ref);
-          const entry = { at: Date.now(), found, summary: found ? summarize(found.bom) : undefined };
+          const entry = { at: Date.now(), found, summary: found ? summaryOf(found.bom) : undefined };
           cache.set(ref, entry);
           if (cache.size > 200) cache.delete(cache.keys().next().value as string);
           return entry;
@@ -84,7 +95,7 @@ export const sbomPlugin = createBackendPlugin({
           const hit = releases.get(ref);
           if (hit && Date.now() - hit.at < TTL) return hit;
           const found = await findReleaseSbom(ref, githubToken);
-          const entry = { at: Date.now(), found, summary: found ? summarize(found.bom) : undefined };
+          const entry = { at: Date.now(), found, summary: found ? summaryOf(found.bom) : undefined };
           releases.set(ref, entry);
           if (releases.size > 200) releases.delete(releases.keys().next().value as string);
           return entry;

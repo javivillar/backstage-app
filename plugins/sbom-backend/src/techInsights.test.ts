@@ -205,6 +205,33 @@ describe('context of the vulnerabilities (Wazuh)', () => {
   });
 });
 
+describe('OS support and licenses', () => {
+  const policy = (denied: string[], unknown: string[]) => ({
+    checked: 10,
+    policy: { denied: ['GPL-*'], ecosystems: ['pypi'], ignore: [] },
+    denied: denied.map(name => ({ name, version: '1', ecosystem: 'pypi', licenses: ['GPL-3.0-only'], denied: ['GPL-3.0-only'] })),
+    unknown: unknown.map(name => ({ name, version: '1', ecosystem: 'pypi', licenses: [] })),
+  });
+  const withPolicy = (denied: string[], unknown: string[]) => ({ ...sbom([]), licensePolicy: policy(denied, unknown) });
+  const eolScan = (os_eol: boolean | undefined) => ({ configured: true, scan: { digest: 'sha256:1', status: 'scanned' as const, counts: {}, vulns: [], os_eol } });
+
+  it('counts distinct packages with a denied or no license across the images, and images out of support', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      { ref: 'api', sbom: withPolicy(['gpl-lib'], ['mystery']), scan: eolScan(true) },
+      { ref: 'web', sbom: withPolicy(['gpl-lib'], []), scan: eolScan(false) },
+    ]);
+    expect(facts).toMatchObject({ deniedLicenses: 1, unknownLicenses: 1, deniedLicenseIds: 'gpl-lib 1 (GPL-3.0-only)', osEndOfLife: 1 });
+  });
+
+  it('unknown (-1) when an image has no SBOM or its scan does not say the OS support', () => {
+    const facts = applicationFacts(app, ['3.1'], [
+      { ref: 'api', sbom: withPolicy([], []), scan: eolScan(undefined) },
+      { ref: 'web', sbom: null, scan: eolScan(false) },
+    ]);
+    expect(facts).toMatchObject({ deniedLicenses: -1, unknownLicenses: -1, osEndOfLife: -1 });
+  });
+});
+
 describe('quality report', () => {
   const report: QualityReport = {
     schema: 'refresquito.quality/v1',

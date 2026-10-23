@@ -23,6 +23,8 @@ export interface SbomSummary {
   /** the packages of the Refresquito frameworks (refresquito-fastapi, refresquito-angular...) */
   frameworks: Component[];
   components: Component[];
+  /** the license policy applied to the dependencies of the application (licenses.ts; set by the plugin) */
+  licensePolicy?: import('./licenses').LicenseReport;
 }
 
 interface RawLicense {

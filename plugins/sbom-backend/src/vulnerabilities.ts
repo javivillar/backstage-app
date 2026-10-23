@@ -90,6 +90,8 @@ export interface ImageScan {
   /** wazuh-oneke 0.20.0+ */
   context?: ScanContext | null;
   feeds?: ScanFeeds | null;
+  /** the OS of the image is out of support (wazuh-oneke 0.21.0, Trivy EOSL); null/undefined: not said */
+  os_eol?: boolean | null;
   exposure?: Exposure | null;
 }
 

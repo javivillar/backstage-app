@@ -10,6 +10,22 @@ export interface Component {
   licenses: string[];
 }
 
+/** The license policy on the dependencies of the application (sbom-backend licenses.ts) */
+export interface LicenseFinding {
+  name: string;
+  version?: string;
+  ecosystem: string;
+  licenses: string[];
+  denied?: string[];
+}
+
+export interface LicenseReport {
+  checked: number;
+  denied: LicenseFinding[];
+  unknown: LicenseFinding[];
+  policy: { denied: string[]; ecosystems: string[]; ignore: string[] };
+}
+
 export interface SbomSummary {
   specVersion?: string;
   generatedAt?: string;
@@ -18,6 +34,7 @@ export interface SbomSummary {
   total: number;
   ecosystems: Record<string, number>;
   licenses: Record<string, number>;
+  licensePolicy?: LicenseReport;
   frameworks: Component[];
   components: Component[];
 }
@@ -138,6 +155,8 @@ export interface ImageScan {
   /** CRITICAL and HIGH, plus any severity that is in CISA KEV */
   vulns: Vulnerability[];
   context?: ScanContext | null;
+  /** the OS of the image is out of support (wazuh-oneke 0.21.0) */
+  os_eol?: boolean | null;
   feeds?: { kev?: Feed; epss?: Feed; inuse?: Feed; tracking_since?: string } | null;
   exposure?: Exposure | null;
 }

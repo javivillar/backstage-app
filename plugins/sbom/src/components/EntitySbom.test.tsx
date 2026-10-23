@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { TestApiProvider, renderInTestApp } from '@backstage/test-utils';
-import { Vulnerabilities, byUrgency, epssText } from './EntitySbom';
+import { LicensePolicy, Vulnerabilities, byUrgency, epssText } from './EntitySbom';
 import type { Vulnerability } from '../api';
 // the answer of the security exporter of wazuh-oneke 0.20.0 for nginx:1.25.2 (local run of 2026-10-23, trimmed):
 // behind an Ingress, 2 CRITICAL in packages in use and 15 in packages never loaded
@@ -74,6 +74,33 @@ describe('Vulnerabilities card', () => {
     delete old.scan.feeds;
     await render(old);
     expect(await screen.findByText(/No context \(EPSS, CISA KEV, age\) in this scan/)).toBeInTheDocument();
+  });
+});
+
+describe('OS support and license policy', () => {
+  it('says when the OS of the image is out of support', async () => {
+    const eol = JSON.parse(JSON.stringify(fixture));
+    eol.scan.os_eol = true;
+    await render(eol);
+    expect(await screen.findByText('OS out of support: no more security fixes')).toBeInTheDocument();
+  });
+
+  it('lists the dependencies with a denied license and the ones without a license', async () => {
+    await renderInTestApp(
+      <LicensePolicy
+        report={{
+          checked: 53,
+          policy: { denied: ['GPL-*'], ecosystems: ['pypi', 'npm'], ignore: [] },
+          denied: [{ name: 'gpl-lib', version: '1.0', ecosystem: 'pypi', licenses: ['GPL-3.0-only'], denied: ['GPL-3.0-only'] }],
+          unknown: [{ name: 'petstore', version: '0.7.1', ecosystem: 'pypi', licenses: [] }],
+        }}
+      />,
+    );
+    expect(screen.getByText('1 with a denied license')).toBeInTheDocument();
+    expect(screen.getByText('1 without a license')).toBeInTheDocument();
+    expect(screen.getByText(/denied: GPL-3.0-only/)).toBeInTheDocument();
+    expect(screen.getByText(/no license in the SBOM/)).toBeInTheDocument();
+    expect(screen.getByText(/53 dependencies of the application/)).toBeInTheDocument();
   });
 });
 
