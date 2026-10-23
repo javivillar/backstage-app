@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import { mayUse } from './access';
 import { runTurn } from './agent';
 import { MAX_QUESTION_CHARS, parseHistory } from './history';
+import { Jobs, MAX_RUNNING_PER_USER } from './jobs';
 import { McpClient } from './mcp';
 import { providerFromConfig } from './model';
 
@@ -14,8 +15,11 @@ import { providerFromConfig } from './model';
  * opsAssistant.systemPrompt (chart cnoe-oneke, provider-neutral text).
  *
  *   GET  /api/ops-assistant/info     {enabled, model, allowed}: what the page shows
- *   POST /api/ops-assistant/chat     {question, messages?} -> {answer, messages, toolCalls, stop, model, usage}
+ *   POST /api/ops-assistant/chat     {question, messages?} -> 202 {id}: the question is being answered
  *                                    messages: the conversation so far, as the last answer returned it
+ *   GET  /api/ops-assistant/chat/:id {status: running|done|error, toolCalls, elapsedMs, turn?, error?}
+ *                                    turn: {answer, messages, toolCalls, stop, model, usage}
+ *   (a question takes longer than a proxy keeps a request open: src/jobs.ts)
  *
  * Config (app-config):
  *   opsAssistant:
@@ -59,6 +63,7 @@ export const opsAssistantPlugin = createBackendPlugin({
           return { user: info.userEntityRef, allowed: mayUse(info.ownershipEntityRefs, allowedGroups) };
         };
 
+        const jobs = new Jobs();
         const router = express.Router();
         router.use(express.json({ limit: '4mb' }));
 
@@ -89,8 +94,7 @@ export const opsAssistantPlugin = createBackendPlugin({
             res.status(400).json({ error: (e as Error).message });
             return;
           }
-          const started = Date.now();
-          try {
+          const job = jobs.start(user, async j => {
             const turn = await runTurn({
               provider: provider!,
               system,
@@ -98,6 +102,7 @@ export const opsAssistantPlugin = createBackendPlugin({
               question,
               maxSteps,
               tools: { list: () => mcp!.listTools(), call: (name, input) => mcp!.callTool(name, input, user) },
+              onToolCall: call => j.toolCalls.push(call),
             });
             // one audit line per question: who, what was looked at, what it cost (never the answer or the data)
             logger.info('ops-assistant turn', {
@@ -105,14 +110,37 @@ export const opsAssistantPlugin = createBackendPlugin({
               model: turn.model ?? provider!.label,
               stop: turn.stop,
               tools: turn.toolCalls.map(t => `${t.name}${t.isError ? '!' : ''}`).join(','),
-              ms: Date.now() - started,
+              ms: Date.now() - j.startedAt,
               ...Object.fromEntries(Object.entries(turn.usage).map(([k, v]) => [`tokens_${k}`, v])),
             });
-            res.json(turn);
-          } catch (e) {
-            logger.warn(`ops-assistant: ${user}: ${(e as Error).message}`);
-            res.status(502).json({ error: `The model could not answer: ${(e as Error).message}` });
+            return turn;
+          });
+          if (!job) {
+            res.status(429).json({ error: `You already have ${MAX_RUNNING_PER_USER} questions being answered; wait for them.` });
+            return;
           }
+          res.status(202).json({ id: job.id });
+        });
+
+        router.get('/chat/:id', async (req: Request, res: Response) => {
+          const { user, allowed } = await caller(req);
+          if (!allowed) {
+            res.status(403).json({ error: 'Not allowed.' });
+            return;
+          }
+          const job = jobs.get(req.params.id, user);
+          if (!job) {
+            res.status(404).json({ error: 'This question is no longer here (Backstage restarted?): ask it again.' });
+            return;
+          }
+          if (job.status === 'error') logger.warn(`ops-assistant: ${user}: ${job.error}`);
+          res.json({
+            status: job.status,
+            toolCalls: job.toolCalls,
+            elapsedMs: (job.endedAt ?? Date.now()) - job.startedAt,
+            turn: job.turn,
+            error: job.error ? `The model could not answer: ${job.error}` : undefined,
+          });
         });
 
         httpRouter.use(router);

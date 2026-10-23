@@ -43,8 +43,12 @@ Inert (the page says "not configured") unless `mcpUrl`, `systemPrompt` and the m
 ## API
 
 - `GET /api/ops-assistant/info` → `{enabled, allowed, model, maxSteps}`
-- `POST /api/ops-assistant/chat` `{question, messages?}` → `{answer, messages, toolCalls, stop, model, usage}`.
-  The backend keeps no state: the page sends back `messages` as the last answer returned them.
+- `POST /api/ops-assistant/chat` `{question, messages?}` → `202 {id}`: the question is being answered.
+- `GET /api/ops-assistant/chat/:id` → `{status: running|done|error, toolCalls, elapsedMs, turn?, error?}`, where
+  `turn` is `{answer, messages, toolCalls, stop, model, usage}`. The page asks every 2 s and shows the tools called
+  meanwhile. A question takes up to minutes, longer than Traefik or HAProxy keep a request open (60 s), hence a job
+  (`src/jobs.ts`, in memory: one replica; at most 2 running per user; a finished one kept 30 min). The backend keeps
+  no conversation: the page sends back `messages` as the last answer returned them.
 
 Every question logs one audit line (user, model, tools called, tokens, time), never the answer or the data; the MCP
 server logs every tool call with the user (`X-Refresquito-User`).
