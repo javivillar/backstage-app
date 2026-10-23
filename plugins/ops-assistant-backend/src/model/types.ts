@@ -36,6 +36,8 @@ export interface CompletionRequest {
   system: string;
   messages: Message[];
   tools: ToolSpec[];
+  /** aborted when the operator cancels the question: the provider stops its request */
+  signal?: AbortSignal;
 }
 
 export interface Completion {

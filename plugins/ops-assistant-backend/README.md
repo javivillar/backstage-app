@@ -44,6 +44,8 @@ Inert (the page says "not configured") unless `mcpUrl`, `systemPrompt` and the m
 
 - `GET /api/ops-assistant/info` → `{enabled, allowed, model, maxSteps}`
 - `POST /api/ops-assistant/chat` `{question, messages?}` → `202 {id}`: the question is being answered.
+- `DELETE /api/ops-assistant/chat/:id` cancels it: the model request is aborted and the conversation stays as it
+  was before the question.
 - `GET /api/ops-assistant/chat/:id` → `{status: running|done|error, toolCalls, elapsedMs, turn?, error?}`, where
   `turn` is `{answer, messages, toolCalls, stop, model, usage}`. The page asks every 2 s and shows the tools called
   meanwhile. A question takes up to minutes, longer than Traefik or HAProxy keep a request open (60 s), hence a job

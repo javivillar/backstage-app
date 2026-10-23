@@ -6,12 +6,14 @@
  * In memory: Backstage runs one replica, and a job lost to a restart is simply asked again.
  */
 import { randomUUID } from 'node:crypto';
-import type { ToolCallRecord, Turn } from './agent';
+import { Cancelled, type ToolCallRecord, type Turn } from './agent';
 
 export interface Job {
   id: string;
   user: string;
-  status: 'running' | 'done' | 'error';
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  /** aborted by cancel(): the work stops */
+  signal: AbortSignal;
   startedAt: number;
   endedAt?: number;
   toolCalls: ToolCallRecord[];
@@ -25,6 +27,7 @@ export const KEEP_MS = 30 * 60 * 1000;
 
 export class Jobs {
   private readonly jobs = new Map<string, Job>();
+  private readonly aborts = new Map<string, AbortController>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -41,13 +44,30 @@ export class Jobs {
   start(user: string, work: (job: Job) => Promise<Turn>): Job | undefined {
     this.sweep();
     if (this.running(user) >= MAX_RUNNING_PER_USER) return undefined;
-    const job: Job = { id: randomUUID(), user, status: 'running', startedAt: this.now(), toolCalls: [] };
+    const abort = new AbortController();
+    const job: Job = { id: randomUUID(), user, status: 'running', startedAt: this.now(), toolCalls: [], signal: abort.signal };
     this.jobs.set(job.id, job);
+    this.aborts.set(job.id, abort);
     work(job).then(
-      turn => Object.assign(job, { status: 'done', turn, endedAt: this.now() }),
-      e => Object.assign(job, { status: 'error', error: (e as Error).message, endedAt: this.now() }),
-    );
+      turn => {
+        if (job.status === 'running') Object.assign(job, { status: 'done', turn, endedAt: this.now() });
+      },
+      e => {
+        if (job.status !== 'running') return;
+        if (e instanceof Cancelled || abort.signal.aborted) Object.assign(job, { status: 'cancelled', endedAt: this.now() });
+        else Object.assign(job, { status: 'error', error: (e as Error).message, endedAt: this.now() });
+      },
+    ).finally(() => this.aborts.delete(job.id));
     return job;
+  }
+
+  /** stops a running job of this user; false when there is no such job running */
+  cancel(id: string, user: string): boolean {
+    const job = this.get(id, user);
+    if (!job || job.status !== 'running') return false;
+    Object.assign(job, { status: 'cancelled', endedAt: this.now() });
+    this.aborts.get(id)?.abort();
+    return true;
   }
 
   /** only its own user sees a job */
