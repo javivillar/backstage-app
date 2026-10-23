@@ -50,6 +50,7 @@ import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { TopologyPage } from './components/topology/TopologyPage';
+import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
 
@@ -126,6 +127,7 @@ const routes = (
     />
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
     <Route path="/topology" element={<TopologyPage />} />
+    <Route path="/ops-assistant" element={<OpsAssistantPage />} />
     <Route path="/tech-insights" element={<TechInsightsScorecardPage />} />
     <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route path="/superset-manager" element={<SupersetManagerPage />} />

@@ -29,6 +29,7 @@ import {
   alfrescoScaffolderModule,
 } from '@internal/backstage-plugin-alfresco-backend';
 import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backend';
+import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-backend';
 
 const backend = createBackend();
 
@@ -203,6 +204,11 @@ backend.add(datahubScaffolderModule);
 // SBOM tab -- the CycloneDX SBOM the CI attached to each image a component runs (annotation
 // refresquito.io/sbom-images), read from the registry (sbom.allowedImages, sbom.dockerConfig). Read only.
 backend.add(sbomPlugin);
+
+// Operations assistant (page /ops-assistant): a model with the READ-ONLY tools of the MCP server opsassistant-oneke
+// (Kubernetes, Argo CD, logs, metrics, docs). The model is pluggable (plugins/ops-assistant-backend/src/model/:
+// Anthropic today, a local model tomorrow); inert unless opsAssistant is configured; only opsAssistant.allowedGroups.
+backend.add(opsAssistantPlugin);
 
 // Scorecard "Quality & Security" (Tech Insights): facts of the catalog (owner, description, TechDocs) and of what each
 // application runs (SBOM, Wazuh image scan, line of the Python Framework: plugins/sbom-backend/src/techInsights.ts),
