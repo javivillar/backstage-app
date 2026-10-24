@@ -116,12 +116,13 @@ if (process.env.GIT_HOSTNAME) {
   backend.add(import('@backstage/plugin-catalog-backend-module-gitlab'));
 }
 
-// Sync Keycloak users/groups into the catalog (Phase 2 of Keycloak identity
-// management — browse what the create-* scaffolder templates provisioned).
-// DISABLED BY DEFAULT (2026-09-03): broke the catalog plugin in production
-// (503 on /catalog and /create) in a way that couldn't be diagnosed live
-// (RKE2 apiserver<->kubelet tunnel down on 3/6 nodes, no log access). Opt in
-// only once the actual failure has been reproduced with logs.
+// Sync Keycloak users/groups into the catalog: every user and group of the realm becomes a User / Group entity with
+// its members, so a group page lists its people, "My Groups" shows the groups of who is logged in, and a person links
+// to what they own. Turned on by cnoe-oneke (backstage.keycloakCatalogSync, env KEYCLOAK_CATALOG_SYNC=true): off by
+// setting it false, without a new image. It was off from 2026-09-03 to 2026-10-24 after a 503 on /catalog when it was
+// turned on (not diagnosed then: no logs). On 2026-10-24 catalogModule.ts was found importing its extension point
+// from '@backstage/plugin-catalog-node/alpha', which plugin-catalog-node 2.x no longer exports (undefined: the catalog
+// plugin cannot start); fixed, with tests (catalogModule.test.ts, entityProvider.test.ts).
 if (process.env.KEYCLOAK_CATALOG_SYNC === 'true') {
   backend.add(catalogKeycloakModule);
 }

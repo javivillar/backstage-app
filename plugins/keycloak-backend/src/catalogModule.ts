@@ -1,5 +1,7 @@
 import { createBackendModule, coreServices } from '@backstage/backend-plugin-api';
-import { catalogProcessingExtensionPoint } from '@backstage/plugin-catalog-node/alpha';
+// Not from '/alpha': plugin-catalog-node 2.x exports it only from its main entry, and the alpha import is undefined
+// (the backend then cannot start the catalog: the 503 on /catalog seen when this module was turned on).
+import { catalogProcessingExtensionPoint } from '@backstage/plugin-catalog-node';
 import { KeycloakEntityProvider } from './entityProvider';
 
 /**

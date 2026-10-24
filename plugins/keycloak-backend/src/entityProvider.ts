@@ -33,6 +33,20 @@ function sanitizeName(raw: string): string {
 }
 
 /**
+ * The entity name of a group. A top-level group keeps its name: it is what the login puts in the token (claim
+ * `groups`), so `group:default/<name>` is the same ref the sign-in resolver gives the user. A subgroup is named by its
+ * path (`/atlas-admin/atlas-admin` → `atlas-admin.atlas-admin`): Keycloak lets a subgroup have the name of its
+ * parent, and two entities with one name would collide.
+ */
+export function groupEntityName(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return sanitizeName(parts.join('.'));
+}
+
+/** Keycloak pages every list (the children of a group: 10 by default); ask for this many at a time */
+const PAGE = 100;
+
+/**
  * Syncs Keycloak realm users and groups into the Backstage catalog as
  * User/Group entities, so what the keycloak:create-* scaffolder actions
  * create is browsable/searchable in Backstage afterwards.
@@ -68,19 +82,14 @@ export class KeycloakEntityProvider implements EntityProvider {
   }
 
   private async fetchAllGroups(): Promise<KcGroup[]> {
-    const roots = (await (
-      await kcAdminFetch(this.config, '/groups?briefRepresentation=true')
-    ).json()) as KcGroup[];
+    const roots = await this.fetchPaged<KcGroup>('/groups?briefRepresentation=true');
 
     const all: KcGroup[] = [];
     const walk = async (group: KcGroup) => {
       all.push(group);
-      const childrenRes = await kcAdminFetch(
-        this.config,
+      const children = await this.fetchPaged<KcGroup>(
         `/groups/${group.id}/children?briefRepresentation=true`,
       );
-      if (!childrenRes.ok) return;
-      const children = (await childrenRes.json()) as KcGroup[];
       for (const child of children) {
         await walk(child);
       }
@@ -89,6 +98,20 @@ export class KeycloakEntityProvider implements EntityProvider {
       await walk(root);
     }
     return all;
+  }
+
+  private async fetchPaged<T>(path: string): Promise<T[]> {
+    const all: T[] = [];
+    const sep = path.includes('?') ? '&' : '?';
+    for (let first = 0; ; first += PAGE) {
+      const res = await kcAdminFetch(this.config, `${path}${sep}first=${first}&max=${PAGE}`);
+      if (!res.ok) {
+        throw new Error(`Keycloak ${path.split('?')[0]}: ${res.status}`);
+      }
+      const page = (await res.json()) as T[];
+      all.push(...page);
+      if (page.length < PAGE) return all;
+    }
   }
 
   private async fetchAllUsers(): Promise<KcUser[]> {
@@ -147,7 +170,7 @@ export class KeycloakEntityProvider implements EntityProvider {
     for (const group of groups) {
       const members = await this.fetchGroupMembers(group.id);
       groupMembers.set(group.id, members);
-      const groupRef = `group:default/${sanitizeName(group.name)}`;
+      const groupRef = `group:default/${groupEntityName(group.path)}`;
       for (const username of members) {
         const list = userGroups.get(username) ?? [];
         list.push(groupRef);
@@ -167,7 +190,7 @@ export class KeycloakEntityProvider implements EntityProvider {
       const parent = groupByPath.get(parentPath);
       if (!parent) continue;
       const list = childrenOf.get(parent.id) ?? [];
-      list.push(`group:default/${sanitizeName(group.name)}`);
+      list.push(`group:default/${groupEntityName(group.path)}`);
       childrenOf.set(parent.id, list);
     }
 
@@ -178,14 +201,14 @@ export class KeycloakEntityProvider implements EntityProvider {
         apiVersion: 'backstage.io/v1alpha1',
         kind: 'Group',
         metadata: {
-          name: sanitizeName(group.name),
+          name: groupEntityName(group.path),
           title: group.name,
           annotations: { 'keycloak.org/id': group.id },
         },
         spec: {
           type: 'team',
           profile: { displayName: group.name },
-          parent: parent ? `group:default/${sanitizeName(parent.name)}` : undefined,
+          parent: parent ? `group:default/${groupEntityName(parent.path)}` : undefined,
           children: childrenOf.get(group.id) ?? [],
           members: (groupMembers.get(group.id) ?? []).map(
             u => `user:default/${sanitizeName(u)}`,
