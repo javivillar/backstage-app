@@ -8,8 +8,13 @@ import {
   configApiRef,
   createApiFactory,
   discoveryApiRef,
+  errorApiRef,
+  fetchApiRef,
   identityApiRef,
+  storageApiRef,
 } from '@backstage/core-plugin-api';
+import { UserSettingsStorage } from '@backstage/plugin-user-settings';
+import { VisitsStorageApi, visitsApiRef } from '@backstage/plugin-home';
 import {
   kubernetesApiRef,
   kubernetesAuthProvidersApiRef,
@@ -25,6 +30,19 @@ import { techRadarApiRef } from '@backstage-community/plugin-tech-radar';
 import { ConfigTechRadarApi } from './techRadar';
 
 export const apis: AnyApiFactory[] = [
+  // the settings of each user live in the database (user-settings backend), not in the browser:
+  // the layout of their home, their starred entities, follow them to any browser
+  createApiFactory({
+    api: storageApiRef,
+    deps: { discoveryApi: discoveryApiRef, fetchApi: fetchApiRef, errorApi: errorApiRef, identityApi: identityApiRef },
+    factory: deps => UserSettingsStorage.create(deps),
+  }),
+  // the pages each user visits, for the widgets "Recently visited" and "Top visited" of the home
+  createApiFactory({
+    api: visitsApiRef,
+    deps: { storageApi: storageApiRef, identityApi: identityApiRef },
+    factory: ({ storageApi, identityApi }) => VisitsStorageApi.create({ storageApi, identityApi }),
+  }),
   createApiFactory({
     api: scmIntegrationsApiRef,
     deps: { configApi: configApiRef },

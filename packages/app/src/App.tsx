@@ -48,6 +48,7 @@ import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
+import { VisitListener } from '@backstage/plugin-home';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { TopologyPage } from './components/topology/TopologyPage';
 import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
@@ -167,6 +168,7 @@ export default app.createRoot(
     <AlertDisplay />
     <OAuthRequestDialog />
     <AppRouter>
+      <VisitListener />
       <Root>{routes}</Root>
     </AppRouter>
   </>,
