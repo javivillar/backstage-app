@@ -1,11 +1,12 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Response } from 'express';
 import { mayUse } from './access';
-import { runTurn } from './agent';
+import { runTurn, type ToolCallRecord, type Turn } from './agent';
+import { ClaudeCodeRunner } from './claudeCode';
 import { MAX_QUESTION_CHARS, parseHistory } from './history';
 import { Jobs, MAX_RUNNING_PER_USER } from './jobs';
 import { McpClient } from './mcp';
-import { providerFromConfig } from './model';
+import { providerFromConfig, type Message } from './model';
 
 /**
  * Backend of the operations assistant (page /ops-assistant): answers questions about operating and troubleshooting
@@ -29,7 +30,11 @@ import { providerFromConfig } from './model';
  *     allowedGroups: [backstage-admin]   # who may use it (deny by default)
  *     maxSteps: 12                       # model calls per question at most
  *     systemPrompt: |                    # the instructions
- *     model: {provider, name, effort, apiKey, baseUrl}   (src/model/index.ts)
+ *     runner: api                        # api: our loop + the model of `model` (src/model/), billed by use;
+ *                                        # claude-code: Claude Code with the operator's Claude subscription
+ *     model: {provider, name, effort, apiKey, baseUrl}   (src/model/index.ts; claude-code uses name and effort)
+ *     claudeCode:
+ *       oauthToken: ${OPS_ASSISTANT_CLAUDE_CODE_TOKEN}   # `claude setup-token` (Pro/Max)
  */
 export const opsAssistantPlugin = createBackendPlugin({
   pluginId: 'ops-assistant',
@@ -48,15 +53,63 @@ export const opsAssistantPlugin = createBackendPlugin({
         const allowedGroups = settings?.getOptionalStringArray('allowedGroups') ?? [];
         const maxSteps = settings?.getOptionalNumber('maxSteps') ?? 12;
         const system = settings?.getOptionalString('systemPrompt') ?? '';
-        let provider;
+        const runnerName = settings?.getOptionalString('runner') ?? 'api';
+        const modelConfig = settings?.getOptionalConfig('model');
+        const mcpToken = settings?.getOptionalString('mcpToken');
+        const mcp = mcpUrl ? new McpClient({ url: mcpUrl, token: mcpToken }) : undefined;
+
+        type Run = (o: {
+          history: Message[];
+          question: string;
+          user: string;
+          onToolCall: (c: ToolCallRecord) => void;
+          signal: AbortSignal;
+        }) => Promise<Turn>;
+        let run: Run | undefined;
+        let label: string | undefined;
+        let needs = '';
         try {
-          provider = providerFromConfig(settings?.getOptionalConfig('model'));
+          if (runnerName === 'claude-code') {
+            const oauthToken = settings?.getOptionalString('claudeCode.oauthToken') ?? '';
+            needs = 'opsAssistant.claudeCode.oauthToken';
+            if (oauthToken && mcpUrl) {
+              const cc = new ClaudeCodeRunner({
+                oauthToken,
+                model: modelConfig?.getOptionalString('name') ?? 'claude-opus-5-5',
+                effort: modelConfig?.getOptionalString('effort'),
+                mcpUrl,
+                mcpToken,
+                bin: settings?.getOptionalString('claudeCode.bin'),
+              });
+              label = cc.label;
+              run = o => cc.run({ ...o, system, maxSteps });
+            }
+          } else if (runnerName === 'api') {
+            needs = 'opsAssistant.model.apiKey';
+            const provider = providerFromConfig(modelConfig);
+            if (provider && mcp) {
+              label = provider.label;
+              run = o =>
+                runTurn({
+                  provider,
+                  system,
+                  history: o.history,
+                  question: o.question,
+                  maxSteps,
+                  tools: { list: () => mcp.listTools(), call: (name, input) => mcp.callTool(name, input, o.user) },
+                  onToolCall: o.onToolCall,
+                  signal: o.signal,
+                });
+            }
+          } else {
+            throw new Error(`opsAssistant.runner ${runnerName}: api or claude-code`);
+          }
         } catch (e) {
           logger.error(`ops-assistant: ${(e as Error).message}`);
         }
-        const mcp = mcpUrl ? new McpClient({ url: mcpUrl, token: settings?.getOptionalString('mcpToken') }) : undefined;
-        const enabled = !!(provider && mcp && system);
-        if (!enabled) logger.info('ops-assistant: disabled (needs opsAssistant.mcpUrl, systemPrompt and model.apiKey)');
+        const enabled = !!(run && mcpUrl && system);
+        if (!enabled) logger.info(`ops-assistant: disabled (runner ${runnerName} needs opsAssistant.mcpUrl, systemPrompt and ${needs})`);
+        else logger.info(`ops-assistant: ${label}`);
 
         const caller = async (req: Request) => {
           const credentials = await httpAuth.credentials(req, { allow: ['user'] });
@@ -70,7 +123,7 @@ export const opsAssistantPlugin = createBackendPlugin({
 
         router.get('/info', async (req: Request, res: Response) => {
           const { allowed } = await caller(req);
-          res.json({ enabled, allowed, model: enabled ? provider!.label : undefined, maxSteps });
+          res.json({ enabled, allowed, model: enabled ? label : undefined, runner: runnerName, maxSteps });
         });
 
         router.post('/chat', async (req: Request, res: Response) => {
@@ -96,20 +149,18 @@ export const opsAssistantPlugin = createBackendPlugin({
             return;
           }
           const job = jobs.start(user, async j => {
-            const turn = await runTurn({
-              provider: provider!,
-              system,
+            const turn = await run!({
               history,
               question,
-              maxSteps,
-              tools: { list: () => mcp!.listTools(), call: (name, input) => mcp!.callTool(name, input, user) },
+              user,
               onToolCall: call => j.toolCalls.push(call),
               signal: j.signal,
             });
             // one audit line per question: who, what was looked at, what it cost (never the answer or the data)
             logger.info('ops-assistant turn', {
               user,
-              model: turn.model ?? provider!.label,
+              runner: runnerName,
+              model: turn.model ?? label,
               stop: turn.stop,
               tools: turn.toolCalls.map(t => `${t.name}${t.isError ? '!' : ''}`).join(','),
               ms: Date.now() - j.startedAt,

@@ -59,6 +59,12 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip3 install 'mkdocs-techdocs-core==1.4.2'
 
+# Claude Code, for the runner "claude-code" of the operations assistant (plugins/ops-assistant-backend/src/claudeCode.ts):
+# it answers with the operator's Claude subscription instead of the API. Pinned; it never updates itself
+# (DISABLE_AUTOUPDATER in the runner).
+ARG CLAUDE_CODE_VERSION=2.1.296
+RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && claude --version
+
 USER node
 WORKDIR /app
 
