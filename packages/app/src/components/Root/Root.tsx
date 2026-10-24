@@ -23,6 +23,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import GppGoodIcon from '@mui/icons-material/GppGood';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
+import CodeIcon from '@mui/icons-material/Code';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -148,6 +149,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
           <SidebarItem icon={GppGoodIcon} to="sec-assistant" text="Sec Assistant" />
           <SidebarItem icon={EditNoteIcon} to="functional-assistant" text="Functional Assistant" />
           <SidebarItem icon={ArchitectureIcon} to="architect-assistant" text="Architect Assistant" />
+          <SidebarItem icon={CodeIcon} to="developer-assistant" text="Developer Assistant" />
           <SidebarItem icon={VerifiedUserIcon} to="tech-insights" text="Quality & Security" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />

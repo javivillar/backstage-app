@@ -56,6 +56,7 @@ import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
 import { SecAssistantPage } from './components/opsassistant/SecAssistantPage';
 import { FunctionalAssistantPage } from './components/opsassistant/FunctionalAssistantPage';
 import { ArchitectAssistantPage } from './components/opsassistant/ArchitectAssistantPage';
+import { DeveloperAssistantPage } from './components/opsassistant/DeveloperAssistantPage';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
 
@@ -143,6 +144,7 @@ const routes = (
     <Route path="/sec-assistant" element={<SecAssistantPage />} />
     <Route path="/functional-assistant" element={<FunctionalAssistantPage />} />
     <Route path="/architect-assistant" element={<ArchitectAssistantPage />} />
+    <Route path="/developer-assistant" element={<DeveloperAssistantPage />} />
     <Route path="/tech-insights" element={<TechInsightsScorecardPage />} />
     <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route path="/superset-manager" element={<SupersetManagerPage />} />
