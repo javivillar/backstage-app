@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useFillViewport } from '../shared/useFillViewport';
 import { Content, Header, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { useTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Fullscreen from '@mui/icons-material/Fullscreen';
+import OpenInNew from '@mui/icons-material/OpenInNew';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
@@ -48,6 +52,9 @@ export const TopologyPage = () => {
   const mode = useTheme().palette.mode === 'dark' ? 'dark' : 'light';
   const { loading, src, error, updated } = useTopology(page, mode);
 
+  // the frame reaches the bottom of the window (a fixed height was cut on a laptop screen, with two scroll bars)
+  const { ref: frameRef, height } = useFillViewport<HTMLIFrameElement>([src]);
+
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.data?.rqTopology === 'network') setPage('network');
@@ -64,10 +71,23 @@ export const TopologyPage = () => {
       />
       <Content>
         <Box sx={{ display: 'grid', gap: 1 }}>
-          <Tabs value={page} onChange={(_e, v) => setPage(v)}>
-            <Tab value="topology" label="Deployed state" />
-            <Tab value="network" label="Design (network.toml)" />
-          </Tabs>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Tabs value={page} onChange={(_e, v) => setPage(v)} sx={{ flex: 1 }}>
+              <Tab value="topology" label="Deployed state" />
+              <Tab value="network" label="Design (network.toml)" />
+            </Tabs>
+            {src && !loading && (
+              <>
+                <Button size="small" startIcon={<Fullscreen />} onClick={() => frameRef.current?.requestFullscreen?.().catch(() => {})}>
+                  Full screen
+                </Button>
+                {/* the page itself, outside Backstage: the session cookie of the plugin opens it too */}
+                <Button size="small" startIcon={<OpenInNew />} href={src} target="_blank" rel="noopener noreferrer">
+                  Open in new tab
+                </Button>
+              </>
+            )}
+          </Box>
           {loading && <Progress />}
           {error && (
             <WarningPanel severity="info" title="The topology is not available" message={error}>
@@ -79,11 +99,13 @@ export const TopologyPage = () => {
           )}
           {src && !loading && (
             <iframe
+              ref={frameRef}
               title={page === 'topology' ? 'Live topology' : 'Network design'}
               src={src}
               // its scripts draw the diagrams and answer its tabs; no same-origin: it cannot read Backstage or its token
               sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-              style={{ width: '100%', height: 'calc(100vh - 230px)', minHeight: 600, border: 0, borderRadius: 4 }}
+              allow="fullscreen"
+              style={{ width: '100%', height, border: 0, borderRadius: 4, background: 'transparent' }}
             />
           )}
         </Box>
