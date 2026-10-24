@@ -76,6 +76,7 @@ import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
 import { TopologyPage } from '@backstage-community/plugin-topology';
+import { FillTopology } from './FillTopology';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
 import { EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
@@ -410,7 +411,9 @@ const serviceEntityPage = (
       title={tabLabel(<BubbleChart />, 'Topology')}
       if={isKubernetesAvailable}
     >
-      <TopologyPage />
+      <FillTopology>
+        <TopologyPage />
+      </FillTopology>
     </EntityLayout.Route>
     <EntityLayout.Route path="/kro" title={tabLabel(<AccountTree />, 'Kro Details')} if={isKroAvailable}>
       {kroDetailsContent}
@@ -481,7 +484,9 @@ const websiteEntityPage = (
       title={tabLabel(<BubbleChart />, 'Topology')}
       if={isKubernetesAvailable}
     >
-      <TopologyPage />
+      <FillTopology>
+        <TopologyPage />
+      </FillTopology>
     </EntityLayout.Route>
     <EntityLayout.Route path="/kro" title={tabLabel(<AccountTree />, 'Kro Details')} if={isKroAvailable}>
       {kroDetailsContent}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useFillViewport } from '../shared/useFillViewport';
 import { Content, Header, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { useTheme } from '@mui/material/styles';
@@ -51,19 +52,8 @@ export const TopologyPage = () => {
   const mode = useTheme().palette.mode === 'dark' ? 'dark' : 'light';
   const { loading, src, error, updated } = useTopology(page, mode);
 
-  // the frame fills the window down to its bottom edge (a fixed height cut it on a laptop screen and left two
-  // scroll bars, the page's and the frame's): measured from where it starts, again on every resize
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const [height, setHeight] = useState(600);
-  const fit = useCallback(() => {
-    const top = frameRef.current?.getBoundingClientRect().top;
-    if (top !== undefined) setHeight(Math.max(400, Math.floor(window.innerHeight - top - 24)));
-  }, []);
-  useEffect(() => {
-    fit();
-    window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
-  }, [fit, src]);
+  // the frame reaches the bottom of the window (a fixed height was cut on a laptop screen, with two scroll bars)
+  const { ref: frameRef, height } = useFillViewport<HTMLIFrameElement>([src]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
