@@ -37,7 +37,7 @@ export const CustomCatalogPage = () => (
     <Page themeId="home">
       <Content>
         <div style={contentWrapperStyle}>
-          <HeroHeader title="CNOE Catalog" subtitle="Discover and manage all your software components" />
+          <HeroHeader title="Refresquito Catalog" subtitle="Discover and manage all your software components" />
           <div className="cnoe-toolbar-card" style={toolbarCardStyle}>
             <div style={{ flex: 1 }}>
               <EntitySearchBar />
