@@ -99,7 +99,7 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   useEffect(() => {
     save(profile.store, state);
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state]);
+  }, [profile.store, state]);
 
   const ask = async (q: string) => {
     const text = q.trim();
