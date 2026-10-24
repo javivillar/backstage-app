@@ -107,7 +107,8 @@ const routes = (
     >
       {entityPage}
     </Route>
-    <Route path="/docs" element={<TechDocsIndexPage />} />
+    {/* every documentation of the catalog, not only what the user owns (the default of the plugin is "owned") */}
+    <Route path="/docs" element={<TechDocsIndexPage initialFilter="all" />} />
     <Route
       path="/docs/:namespace/:kind/:name/*"
       element={<TechDocsReaderPage />}
