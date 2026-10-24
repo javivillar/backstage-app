@@ -14,7 +14,7 @@ import { Cancelled, type ToolCallRecord, type Turn } from './agent';
 import type { Message, Part } from './model/types';
 
 export const PROVIDER = 'claude-code';
-/** the name of the MCP server for Claude Code: its tools are mcp__ops__<tool> */
+/** the name of the MCP server for Claude Code by default (the assistant ops): its tools are mcp__ops__<tool> */
 const SERVER = 'ops';
 
 export interface ClaudeCodeSettings {
@@ -25,8 +25,10 @@ export interface ClaudeCodeSettings {
   mcpToken?: string;
   /** the CLI (default: claude on the PATH) */
   bin?: string;
-  /** its config dir (sessions, settings): its own, never the operator's */
+  /** its config dir (sessions, settings): its own, never the operator's; one per assistant */
   configDir?: string;
+  /** the name of the MCP server, one per assistant (ops, sec): its tools are mcp__<server>__<tool> */
+  server?: string;
 }
 
 /** what one run of Claude Code did, from its stream-json lines */
@@ -40,14 +42,17 @@ export interface RunResult {
   error?: string;
 }
 
-const toolName = (name: string) => name.replace(`mcp__${SERVER}__`, '');
+const toolName = (name: string, server = SERVER) => name.replace(`mcp__${server}__`, '');
 
 /** Reads the stream-json lines of `claude -p --output-format stream-json --verbose` (pure, unit-tested). */
 export class StreamReader {
   readonly result: RunResult = { answer: '', toolCalls: [], stop: 'end', usage: {} };
   private pending = new Map<string, { name: string; input: Record<string, unknown> }>();
 
-  constructor(private readonly onToolCall?: (call: ToolCallRecord) => void) {}
+  constructor(
+    private readonly onToolCall?: (call: ToolCallRecord) => void,
+    private readonly server: string = SERVER,
+  ) {}
 
   line(raw: string) {
     let ev: any;
@@ -60,7 +65,7 @@ export class StreamReader {
     if (ev.type === 'system' && ev.subtype === 'init' && ev.model) this.result.model = ev.model;
     if (ev.type === 'assistant') {
       for (const c of ev.message?.content ?? []) {
-        if (c.type === 'tool_use') this.pending.set(c.id, { name: toolName(c.name), input: c.input ?? {} });
+        if (c.type === 'tool_use') this.pending.set(c.id, { name: toolName(c.name, this.server), input: c.input ?? {} });
       }
       if (ev.message?.model) this.result.model = ev.message.model;
     }
@@ -117,9 +122,10 @@ export function transcript(history: Message[]): string {
 }
 
 export function args(s: ClaudeCodeSettings, o: { system: string; user: string; maxSteps: number; resume?: string }) {
+  const server = s.server ?? SERVER;
   const mcp = {
     mcpServers: {
-      [SERVER]: {
+      [server]: {
         type: 'http',
         url: s.mcpUrl,
         headers: { ...(s.mcpToken ? { Authorization: `Bearer ${s.mcpToken}` } : {}), 'X-Refresquito-User': o.user },
@@ -137,7 +143,7 @@ export function args(s: ClaudeCodeSettings, o: { system: string; user: string; m
     '--strict-mcp-config',
     // no built-in tool (no shell, no files): only the read-only tools of the MCP server
     '--tools', '',
-    '--allowedTools', `mcp__${SERVER}__*`,
+    '--allowedTools', `mcp__${server}__*`,
     '--permission-mode', 'dontAsk',
     '--setting-sources', '',
     '--max-turns', String(o.maxSteps),
@@ -153,7 +159,7 @@ export class ClaudeCodeRunner {
   }
 
   private once(argv: string[], prompt: string, onToolCall?: (c: ToolCallRecord) => void, signal?: AbortSignal) {
-    const configDir = this.s.configDir ?? '/tmp/ops-assistant-claude';
+    const configDir = this.s.configDir ?? `/tmp/${this.s.server ?? SERVER}-assistant-claude`;
     mkdirSync(configDir, { recursive: true });
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
@@ -170,7 +176,7 @@ export class ClaudeCodeRunner {
         return;
       }
       const child = spawn(this.s.bin ?? 'claude', argv, { cwd: configDir, env, stdio: ['pipe', 'pipe', 'pipe'] });
-      const reader = new StreamReader(onToolCall);
+      const reader = new StreamReader(onToolCall, this.s.server ?? SERVER);
       let buf = '';
       let stderr = '';
       const onAbort = () => child.kill('SIGTERM');

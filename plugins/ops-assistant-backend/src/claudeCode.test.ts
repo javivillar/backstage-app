@@ -50,6 +50,17 @@ describe('conversation', () => {
     expect(mcp.mcpServers.ops.headers).toEqual({ Authorization: 'Bearer T', 'X-Refresquito-User': 'user:default/j' });
     expect(a[a.indexOf('--allowedTools') + 1]).toBe('mcp__ops__*');
   });
+  it('gives each assistant its own MCP server name', () => {
+    const a = args({ oauthToken: 'x', model: 'm', mcpUrl: 'http://sec', server: 'sec' }, { system: 'S', user: 'u', maxSteps: 5 });
+    const mcp = JSON.parse(a[a.indexOf('--mcp-config') + 1]);
+    expect(Object.keys(mcp.mcpServers)).toEqual(['sec']);
+    expect(mcp.mcpServers.sec.url).toBe('http://sec');
+    expect(a[a.indexOf('--allowedTools') + 1]).toBe('mcp__sec__*');
+    const r = new StreamReader(undefined, 'sec');
+    r.line(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'mcp__sec__get_licenses', input: {} }] } }));
+    r.line(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }] } }));
+    expect(r.result.toolCalls.map(c => c.name)).toEqual(['get_licenses']);
+  });
 });
 
 /** a fake claude: prints the lines of FAKE_LINES (or fails a --resume when FAIL_RESUME), echoes its env to a file */
