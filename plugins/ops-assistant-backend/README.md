@@ -20,6 +20,23 @@ To use another model (one on the operator's own machine, for instance): write `s
 `opsAssistant.model.provider: <id>`. Parts a provider does not understand (`opaque`, e.g. Claude's thinking) are kept
 for the provider that made them and left out for others, so a conversation survives a change of model.
 
+## Two runners: the API or the operator's Claude subscription
+
+`opsAssistant.runner` decides who answers. Switching is that one value plus its credential; tools, prompt, page and
+Cancel are the same.
+
+| runner | who runs the agent loop | billed | credential |
+|---|---|---|---|
+| `api` (default) | `src/agent.ts` with the model adapter of `opsAssistant.model` | by use, Anthropic Console credits | `opsAssistant.model.apiKey` |
+| `claude-code` | Claude Code (`claude -p`, in the image, `src/claudeCode.ts`), connected to the same MCP server | the operator's Claude plan (Pro/Max usage limits) | `opsAssistant.claudeCode.oauthToken`, from `claude setup-token` |
+
+With `claude-code`, Backstage starts Claude Code for each question with `--model` and `--effort` from
+`opsAssistant.model`. These only apply to that run: the operator's own Claude Code keeps its own model. Claude Code
+has no built-in tool here (`--tools ""`), only the MCP server (`--strict-mcp-config`). Its config dir is its own, in
+the pod. The conversation continues with `--resume`; after a restart of the pod, the earlier text is given to it
+instead. **Only for the operator's own use**: Anthropic does not allow offering claude.ai login to the users of a
+product. Keep `allowedGroups` to yourself.
+
 ## Config
 
 ```yaml
@@ -28,6 +45,7 @@ opsAssistant:
   mcpToken: ${OPS_ASSISTANT_MCP_TOKEN}
   allowedGroups: [backstage-admin]   # deny by default
   maxSteps: 12
+  runner: api                        # or claude-code
   systemPrompt: |
     ...
   model:
@@ -36,6 +54,8 @@ opsAssistant:
     effort: high
     apiKey: ${ANTHROPIC_API_KEY}
     baseUrl: ""                      # optional
+  claudeCode:
+    oauthToken: ${OPS_ASSISTANT_CLAUDE_CODE_TOKEN}   # runner claude-code: `claude setup-token`
 ```
 
 Inert (the page says "not configured") unless `mcpUrl`, `systemPrompt` and the model's key are set.
