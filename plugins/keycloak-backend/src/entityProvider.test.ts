@@ -85,6 +85,11 @@ describe('KeycloakEntityProvider', () => {
     const all = entities.map((e: any) => e.entity);
     const refs = all.map((e: any) => `${e.kind}:${e.metadata.name}`);
     expect(new Set(refs).size).toBe(refs.length); // no two entities with one name
+    // the catalog rejects an entity of a provider without where it comes from
+    for (const e of all) {
+      expect(e.metadata.annotations['backstage.io/managed-by-location']).toBe('url:http://kc/admin/realms/R');
+      expect(e.metadata.annotations['backstage.io/managed-by-origin-location']).toBe('url:http://kc/admin/realms/R');
+    }
     expect(all.filter((e: any) => e.kind === 'Group')).toHaveLength(4 + kids.length);
 
     const get = (kind: string, name: string) => all.find((e: any) => e.kind === kind && e.metadata.name === name);
