@@ -85,6 +85,17 @@ describe('OS support and license policy', () => {
     expect(await screen.findByText('OS out of support: no more security fixes')).toBeInTheDocument();
   });
 
+  it('shows the runtimes and servers of the image, the ones out of support in red', async () => {
+    const c = JSON.parse(JSON.stringify(fixture));
+    c.scan.components = [
+      { product: 'traefik', label: 'Traefik', version: '3.5.1', release: '3.5', eol_date: '2025-11-07', status: 'eol', source: 'label' },
+      { product: 'python', label: 'Python', version: '3.12.15', release: '3.12', eol_date: '2028-10-31', status: 'supported', source: 'env' },
+    ];
+    await render(c);
+    expect(await screen.findByText('Traefik 3.5.1: out of support')).toBeInTheDocument();
+    expect(screen.getByText('Python 3.12.15')).toBeInTheDocument();
+  });
+
   it('lists the dependencies with a denied license and the ones without a license', async () => {
     await renderInTestApp(
       <LicensePolicy

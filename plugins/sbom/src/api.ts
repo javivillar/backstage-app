@@ -145,6 +145,18 @@ export interface Feed {
 }
 
 /** The last scan of an image by Wazuh's daily image scan (Trivy), through the security exporter of wazuh-oneke. */
+/** A runtime or server of an image and its end of life (wazuh-oneke 0.23.0, endoflife.date). */
+export interface ImageComponent {
+  product: string;
+  label?: string;
+  version: string;
+  release?: string | null;
+  eol_date?: string | null;
+  latest?: string | null;
+  status: 'eol' | 'soon' | 'supported' | 'unknown';
+  source: 'env' | 'label' | 'image' | 'go';
+}
+
 export interface ImageScan {
   digest: string;
   namespace?: string;
@@ -159,6 +171,8 @@ export interface ImageScan {
   context?: ScanContext | null;
   /** the OS of the image is out of support (wazuh-oneke 0.21.0) */
   os_eol?: boolean | null;
+  /** its runtimes and servers (wazuh-oneke 0.23.0); null/undefined: not said */
+  components?: ImageComponent[] | null;
   feeds?: { kev?: Feed; epss?: Feed; inuse?: Feed; tracking_since?: string } | null;
   exposure?: Exposure | null;
 }

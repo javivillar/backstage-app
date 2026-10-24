@@ -94,7 +94,25 @@ export interface ImageScan {
   feeds?: ScanFeeds | null;
   /** the OS of the image is out of support (wazuh-oneke 0.21.0, Trivy EOSL); null/undefined: not said */
   os_eol?: boolean | null;
+  /** the runtimes and servers of the image and their end of life (wazuh-oneke 0.23.0, endoflife.date); null: not said */
+  components?: ImageComponent[] | null;
   exposure?: Exposure | null;
+}
+
+/** A runtime or server found in an image (wazuh-oneke 0.23.0, USE-CASES.md I10). */
+export interface ImageComponent {
+  /** id of endoflife.date (nodejs, python, postgresql...) and its name */
+  product: string;
+  label?: string;
+  version: string;
+  /** its release (cycle): 22, 3.12, 15... null when endoflife.date does not list that version */
+  release?: string | null;
+  eol_date?: string | null;
+  /** the latest version of that release */
+  latest?: string | null;
+  status: 'eol' | 'soon' | 'supported' | 'unknown';
+  /** env (ENV of the image) | label | image (its repository and tag) | go (the Go a binary was built with) */
+  source: 'env' | 'label' | 'image' | 'go';
 }
 
 /**
