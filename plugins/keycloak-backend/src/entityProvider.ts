@@ -2,7 +2,7 @@ import {
   EntityProvider,
   EntityProviderConnection,
 } from '@backstage/plugin-catalog-node';
-import { Entity } from '@backstage/catalog-model';
+import { ANNOTATION_LOCATION, ANNOTATION_ORIGIN_LOCATION, Entity } from '@backstage/catalog-model';
 import { Config } from '@backstage/config';
 import {
   LoggerService,
@@ -159,6 +159,11 @@ export class KeycloakEntityProvider implements EntityProvider {
     await getAdminToken(this.config);
 
     this.logger.info('Syncing Keycloak users and groups into the catalog');
+    // Every entity a provider gives the catalog says where it comes from: without these two annotations the catalog
+    // rejects it ("does not have the annotation backstage.io/managed-by-location") and it never shows.
+    const kc = this.config.getConfig('keycloakAdmin');
+    const location = `url:${kc.getString('baseUrl').replace(/\/$/, '')}/admin/realms/${kc.getString('realm')}`;
+    const managed = { [ANNOTATION_LOCATION]: location, [ANNOTATION_ORIGIN_LOCATION]: location };
 
     const [groups, users] = await Promise.all([
       this.fetchAllGroups(),
@@ -203,7 +208,7 @@ export class KeycloakEntityProvider implements EntityProvider {
         metadata: {
           name: groupEntityName(group.path),
           title: group.name,
-          annotations: { 'keycloak.org/id': group.id },
+          annotations: { ...managed, 'keycloak.org/id': group.id },
         },
         spec: {
           type: 'team',
@@ -223,7 +228,7 @@ export class KeycloakEntityProvider implements EntityProvider {
       metadata: {
         name: sanitizeName(user.username),
         title: user.username,
-        annotations: { 'keycloak.org/id': user.id },
+        annotations: { ...managed, 'keycloak.org/id': user.id },
       },
       spec: {
         profile: {
