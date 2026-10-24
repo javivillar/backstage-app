@@ -11,6 +11,8 @@ import Bolt from '@mui/icons-material/Bolt';
 import Storage from '@mui/icons-material/Storage';
 import Category from '@mui/icons-material/Category';
 import VerifiedUser from '@mui/icons-material/VerifiedUser';
+import Button from '@mui/material/Button';
+import { Link as RouterLink } from 'react-router-dom';
 import Schedule from '@mui/icons-material/Schedule';
 import Person from '@mui/icons-material/Person';
 import Schema from '@mui/icons-material/Schema';
@@ -357,8 +359,26 @@ const isApplication = (entity: Entity) =>
   (!!entity.metadata.annotations?.['refresquito.io/sbom-images'] ||
     !!entity.metadata.annotations?.['refresquito.io/framework-line']);
 
+/** the security assistant, about this project: its page with ?project=<name> (packages/app/.../SecAssistantPage.tsx) */
+const AskSecurityAssistant = () => {
+  const { entity } = useEntity();
+  return (
+    <div>
+      <Button
+        component={RouterLink}
+        to={`/sec-assistant?project=${encodeURIComponent(entity.metadata.name)}`}
+        variant="outlined"
+        startIcon={<VerifiedUser />}
+      >
+        Ask the security assistant about this project
+      </Button>
+    </div>
+  );
+};
+
 const qualityContent = (
   <div style={{ display: 'grid', gap: 16 }}>
+    <AskSecurityAssistant />
     <EntityTechInsightsScorecardContent
       title="Quality & Security"
       description="What this application runs and how it is maintained: its catalog entry, the SBOM and vulnerabilities of its images, and the line of the Python Framework it is built on. Refreshed every hour."
