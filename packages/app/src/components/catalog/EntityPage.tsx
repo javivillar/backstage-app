@@ -19,6 +19,7 @@ import Schema from '@mui/icons-material/Schema';
 import Dataset from '@mui/icons-material/Dataset';
 import GridView from '@mui/icons-material/GridView';
 import Inventory from '@mui/icons-material/Inventory2';
+import BubbleChart from '@mui/icons-material/BubbleChart';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
   EntityAboutCard,
@@ -74,6 +75,7 @@ import { TechDocsAddons } from '@backstage/plugin-techdocs-react';
 import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 
 import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugin-kubernetes';
+import { TopologyPage } from '@backstage-community/plugin-topology';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
 import { EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
@@ -403,6 +405,13 @@ const serviceEntityPage = (
     >
       {kubernetesContent}
     </EntityLayout.Route>
+    <EntityLayout.Route
+      path="/topology"
+      title={tabLabel(<BubbleChart />, 'Topology')}
+      if={isKubernetesAvailable}
+    >
+      <TopologyPage />
+    </EntityLayout.Route>
     <EntityLayout.Route path="/kro" title={tabLabel(<AccountTree />, 'Kro Details')} if={isKroAvailable}>
       {kroDetailsContent}
     </EntityLayout.Route>
@@ -466,6 +475,13 @@ const websiteEntityPage = (
       if={isKubernetesAvailable}
     >
       {kubernetesContent}
+    </EntityLayout.Route>
+    <EntityLayout.Route
+      path="/topology"
+      title={tabLabel(<BubbleChart />, 'Topology')}
+      if={isKubernetesAvailable}
+    >
+      <TopologyPage />
     </EntityLayout.Route>
     <EntityLayout.Route path="/kro" title={tabLabel(<AccountTree />, 'Kro Details')} if={isKroAvailable}>
       {kroDetailsContent}
