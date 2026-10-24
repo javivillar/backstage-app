@@ -464,9 +464,10 @@ const darkTheme = createUnifiedTheme({
 });
 
 // AppTheme exports for legacy createApp from @backstage/app-defaults
+// the ids stay cnoe-*: they are what each user's choice of theme is saved as
 export const cnoeVibrantLightAppTheme: AppTheme = {
   id: 'cnoe-light',
-  title: 'CNOE Light',
+  title: 'Refresquito Light',
   variant: 'light',
   Provider: ({ children }) =>
     createElement(UnifiedThemeProvider, { theme: lightTheme, children }),
@@ -474,7 +475,7 @@ export const cnoeVibrantLightAppTheme: AppTheme = {
 
 export const cnoeVibrantDarkAppTheme: AppTheme = {
   id: 'cnoe-dark',
-  title: 'CNOE Dark',
+  title: 'Refresquito Dark',
   variant: 'dark',
   Provider: ({ children }) =>
     createElement(UnifiedThemeProvider, { theme: darkTheme, children }),

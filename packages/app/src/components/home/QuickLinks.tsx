@@ -48,7 +48,8 @@ const toolCardBase: CSSProperties = {
   background: 'rgba(25, 118, 210, 0.04)',
   cursor: 'pointer',
   textDecoration: 'none',
-  color: 'var(--backstage-color-text-primary, #333)',
+  // the text colour of the theme: a fixed dark grey was unreadable in the dark theme
+  color: 'inherit',
   transition: 'all 0.2s ease',
   border: '1px solid transparent',
 };
@@ -72,7 +73,13 @@ interface ToolCardProps {
   isCatalog?: boolean;
 }
 
-const ToolCard = ({ url, label, iconSrc, iconAlt, isCatalog }: ToolCardProps) => {
+const ToolCard = ({
+  url,
+  label,
+  iconSrc,
+  iconAlt,
+  isCatalog,
+}: ToolCardProps) => {
   const [hovered, setHovered] = useState(false);
 
   const style: CSSProperties = {
@@ -87,29 +94,56 @@ const ToolCard = ({ url, label, iconSrc, iconAlt, isCatalog }: ToolCardProps) =>
       : {}),
   };
 
-  const iconElement = isCatalog ? (
-    <svg
-      width="40"
-      height="40"
-      viewBox="0 0 24 24"
-      fill="none"
-      style={{ color: '#1976d2' }}
-    >
-      <path
-        d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"
-        fill="currentColor"
+  const renderIcon = () => {
+    if (isCatalog) {
+      return (
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          style={{ color: '#1976d2' }}
+        >
+          <path
+            d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"
+            fill="currentColor"
+          />
+        </svg>
+      );
+    }
+    if (!iconSrc) {
+      return (
+        // no icon configured (homepage.quickLinks[].iconUrl): its initial in a circle, not a broken image
+        <span
+          aria-hidden
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(25, 118, 210, 0.15)',
+            color: '#1976d2',
+            fontWeight: 700,
+            fontSize: 18,
+          }}
+        >
+          {label.charAt(0).toUpperCase()}
+        </span>
+      );
+    }
+    return (
+      <img
+        src={iconSrc}
+        alt={iconAlt || label}
+        style={{ width: 40, height: 40, objectFit: 'contain' }}
       />
-    </svg>
-  ) : (
-    <img
-      src={iconSrc}
-      alt={iconAlt || label}
-      style={{ width: 40, height: 40, objectFit: 'contain' }}
-    />
-  );
+    );
+  };
+  const iconElement = renderIcon();
 
-  const isExternal =
-    url.startsWith('http://') || url.startsWith('https://');
+  const isExternal = url.startsWith('http://') || url.startsWith('https://');
 
   return (
     <a
@@ -151,22 +185,51 @@ export const QuickLinksContent = () => {
 
     const getGitLabUrl = () => {
       try {
-        const gitlabIntegrations = config.getOptionalConfigArray('integrations.gitlab');
+        const gitlabIntegrations = config.getOptionalConfigArray(
+          'integrations.gitlab',
+        );
         if (gitlabIntegrations && gitlabIntegrations.length > 0) {
           const baseUrl = gitlabIntegrations[0].getOptionalString('baseUrl');
           if (baseUrl) return baseUrl;
         }
-      } catch { /* fallback */ }
+      } catch {
+        /* fallback */
+      }
       return 'https://gitlab.com';
     };
 
     return [
       { url: '/catalog', label: 'Catalog', isCatalog: true },
-      { url: getGitLabUrl(), label: 'GitLab', iconSrc: `${basePath}/img/gitlab.png`, iconAlt: 'GitLab' },
-      { url: `${domainUrl}/argocd`, label: 'ArgoCD', iconSrc: `${basePath}/img/argocd.png`, iconAlt: 'ArgoCD' },
-      { url: `${domainUrl}/argo-workflows`, label: 'Argo Workflows', iconSrc: `${basePath}/img/argo-workflows.png`, iconAlt: 'Argo Workflows' },
-      { url: domainUrl, label: 'Kargo', iconSrc: `${basePath}/img/kargo.png`, iconAlt: 'Kargo' },
-      { url: `${domainUrl}/keycloak`, label: 'Keycloak', iconSrc: `${basePath}/img/keycloak.png`, iconAlt: 'Keycloak' },
+      {
+        url: getGitLabUrl(),
+        label: 'GitLab',
+        iconSrc: `${basePath}/img/gitlab.png`,
+        iconAlt: 'GitLab',
+      },
+      {
+        url: `${domainUrl}/argocd`,
+        label: 'ArgoCD',
+        iconSrc: `${basePath}/img/argocd.png`,
+        iconAlt: 'ArgoCD',
+      },
+      {
+        url: `${domainUrl}/argo-workflows`,
+        label: 'Argo Workflows',
+        iconSrc: `${basePath}/img/argo-workflows.png`,
+        iconAlt: 'Argo Workflows',
+      },
+      {
+        url: domainUrl,
+        label: 'Kargo',
+        iconSrc: `${basePath}/img/kargo.png`,
+        iconAlt: 'Kargo',
+      },
+      {
+        url: `${domainUrl}/keycloak`,
+        label: 'Keycloak',
+        iconSrc: `${basePath}/img/keycloak.png`,
+        iconAlt: 'Keycloak',
+      },
     ];
   })();
 

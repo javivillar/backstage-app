@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d3b8e" />
+    <meta name="description" content="Refresquito Platform: the developer portal of the platform" />
+    <!-- the icon of the browser tab: the glass of Refresquito (without this file the CLI template declares none) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="<%= publicPath %>/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="<%= publicPath %>/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="<%= publicPath %>/apple-touch-icon.png" />
+    <title><%= config.getOptionalString('app.title') ?? 'Refresquito' %></title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

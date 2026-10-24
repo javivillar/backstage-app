@@ -1,5 +1,5 @@
 app:
-  title: CNOE
+  title: Refresquito
   baseUrl: http://localhost:3000
   packages: all
   listen:
@@ -7,7 +7,8 @@ app:
     host: 0.0.0.0
 
 organization:
-  name: CNOE
+  # shown by TechDocs ("Documentation available in Refresquito") and other default pages
+  name: Refresquito
 
 homepage:
   quickLinks:
