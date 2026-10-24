@@ -46,6 +46,7 @@
     "@backstage/plugin-search-backend": "^2.1.0",
     "@backstage/plugin-search-backend-module-catalog": "^0.3.13",
     "@backstage/plugin-search-backend-module-techdocs": "^0.4.12",
+    "@backstage/plugin-user-settings-backend": "0.4.1",
     "@backstage/plugin-techdocs-backend": "^2.1.6",
     "@backstage/types": "^1.2.2",
     "@internal/backstage-plugin-activepieces-backend": "^0.1.0",

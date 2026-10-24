@@ -46,6 +46,8 @@ if (process.env.MOCK_MODE === 'true') {
   backend.add(import('@backstage/plugin-proxy-backend'));
 }
 backend.add(import('@backstage/plugin-techdocs-backend'));
+// settings of each user (its home layout, starred entities, recent visits) in the database of Backstage
+backend.add(import('@backstage/plugin-user-settings-backend'));
 // the live topology of the platform, published by the OpenNebula host (page Topology)
 backend.add(import('./plugins/topology'));
 
