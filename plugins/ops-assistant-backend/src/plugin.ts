@@ -70,8 +70,14 @@ export const opsAssistantPlugin = createBackendPlugin({
         let needs = '';
         try {
           if (runnerName === 'claude-code') {
-            const oauthToken = settings?.getOptionalString('claudeCode.oauthToken') ?? '';
             needs = 'opsAssistant.claudeCode.oauthToken';
+            // empty while the store key has no token yet: "needs …", not a config error
+            let oauthToken = '';
+            try {
+              oauthToken = settings?.getOptionalString('claudeCode.oauthToken') ?? '';
+            } catch {
+              oauthToken = '';
+            }
             if (oauthToken && mcpUrl) {
               const cc = new ClaudeCodeRunner({
                 oauthToken,
