@@ -17,7 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Download from '@mui/icons-material/Download';
 import { SbomSource, sbomSources } from '../annotations';
-import { Component, Exposure, Feed, ImageSbom, LicenseReport, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
+import { Component, Exposure, Feed, ImageComponent, ImageSbom, LicenseReport, Vulnerability, useDownload, useSbom, useVulnerabilities } from '../api';
 
 const ECOSYSTEM_LABEL: Record<string, string> = {
   pypi: 'Python',
@@ -192,6 +192,50 @@ const EXPOSURE_TEXT: Record<string, string> = {
   none: 'not exposed (no Service)',
 };
 
+/** The runtimes and servers of an image (wazuh-oneke 0.23.0): one chip each, red when its release is out of support. */
+const COMPONENT_STYLE: Record<ImageComponent['status'], object> = {
+  eol: { bgcolor: '#c62828', color: '#fff', fontWeight: 600 },
+  soon: { bgcolor: '#ef6c00', color: '#fff' },
+  supported: {},
+  unknown: { opacity: 0.6 },
+};
+const COMPONENT_TEXT: Record<ImageComponent['status'], string> = {
+  eol: 'out of support',
+  soon: 'support ends soon',
+  supported: 'supported',
+  unknown: 'support unknown',
+};
+const SOURCE_TEXT: Record<ImageComponent['source'], string> = {
+  env: 'from the ENV of the image',
+  label: 'from its OCI labels',
+  image: 'from the image name and tag',
+  go: 'the Go its binaries were built with',
+};
+
+function ComponentChips({ components }: { components: ImageComponent[] }) {
+  if (!components.length) return null;
+  return (
+    <>
+      {components.map(c => {
+        const name = `${c.label ?? c.product} ${c.version}`;
+        const dateText = c.eol_date ? ` (${c.status === 'eol' ? 'since' : 'until'} ${c.eol_date})` : '';
+        return (
+          <Chip
+            key={`${c.product}-${c.version}`}
+            size="small"
+            variant={c.status === 'eol' || c.status === 'soon' ? 'filled' : 'outlined'}
+            label={c.status === 'supported' || c.status === 'unknown' ? name : `${name}: ${COMPONENT_TEXT[c.status]}`}
+            title={`${name}, release ${c.release ?? '?'}: ${COMPONENT_TEXT[c.status]}${dateText}${
+              c.latest ? `; latest of that release ${c.latest}` : ''
+            } — ${SOURCE_TEXT[c.source]} (endoflife.date)`}
+            sx={COMPONENT_STYLE[c.status]}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 function ExposureChip({ exposure }: { exposure: Exposure }) {
   const outside = exposure.level === 'external' || exposure.level === 'host';
   const via = exposure.via?.length ? ` — ${exposure.via.join(', ')}` : '';
@@ -326,6 +370,7 @@ export function Vulnerabilities({ image }: { image: string }) {
               />
             )}
             {scan.exposure && <ExposureChip exposure={scan.exposure} />}
+            {scan.components && <ComponentChips components={scan.components} />}
             {ctx.in_use_known !== undefined && (
               <Typography variant="body2" sx={{ opacity: 0.75 }}>
                 {ctx.in_use_known

@@ -8,7 +8,7 @@ import {
   techInsightsFactRetrieversExtensionPoint,
 } from '@backstage-community/plugin-tech-insights-node';
 import type { Component, SbomSummary } from './cyclonedx';
-import type { ImageScan } from './vulnerabilities';
+import type { ImageComponent, ImageScan } from './vulnerabilities';
 import { QualityReport, qualityFacts } from './quality';
 import { governanceFactRetriever } from './governance';
 import { Exceptions } from './exceptions';
@@ -122,11 +122,35 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
       images.length > 0 && scans.length === images.length && scans.every(s => typeof s.os_eol === 'boolean')
         ? counted.filter(c => c.scan.os_eol && !exc.osEol(c.ref)).length
         : -1,
+    // the runtimes and servers of its images (Wazuh, wazuh-oneke 0.23.0: endoflife.date): -1 when an image is not
+    // scanned or its scan does not say them
+    ...componentFacts(scans, images.length),
     // the license policy on the dependencies of its images (SBOM): distinct packages; -1 when an image has no SBOM
     ...licenseFacts(images, exc),
     // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
     ...qualityFacts(report, exc),
     ...exceptionFacts(exc, report),
+  };
+}
+
+/**
+ * The runtimes and servers of its images out of support (wazuh-oneke 0.23.0, USE-CASES.md I10), distinct by product
+ * and release over its images: Node.js 18, Python 3.8, PostgreSQL 12... A Go toolchain (the Go a binary was built
+ * with) is counted apart: only the vendor of that binary can rebuild it.
+ */
+export function componentFacts(scans: ImageScan[], imageCount: number) {
+  const known = imageCount > 0 && scans.length === imageCount && scans.every(s => Array.isArray(s.components));
+  const all = scans.flatMap(s => s.components ?? []);
+  const distinct = (pred: (c: ImageComponent) => boolean) =>
+    new Set(all.filter(pred).map(c => `${c.label ?? c.product} ${c.release ?? c.version}`));
+  const eol = distinct(c => c.status === 'eol' && c.source !== 'go');
+  const soon = distinct(c => c.status === 'soon' && c.source !== 'go');
+  const toolchains = distinct(c => c.status === 'eol' && c.source === 'go');
+  return {
+    componentsEndOfLife: known ? eol.size : -1,
+    componentsEndingSoon: known ? soon.size : -1,
+    toolchainsEndOfLife: known ? toolchains.size : -1,
+    componentsOutOfSupport: [...eol].sort().join(', '),
   };
 }
 
@@ -205,7 +229,7 @@ export function exceptionFacts(exc: Exceptions, report: QualityReport | undefine
 
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
-  version: '0.6.0',
+  version: '0.7.0',
   title: 'Images and framework of the application',
   description:
     'SBOM and vulnerabilities (Wazuh image scan) of the images an application runs, and the line of the Python Framework it is built on',
@@ -263,6 +287,13 @@ export const supplyChainFactRetriever: FactRetriever = {
     typeErrors: { type: 'integer', description: 'mypy errors of the backend; -1: not reported' },
     qualityRevision: { type: 'string', description: 'Commit of the quality report' },
     osEndOfLife: { type: 'integer', description: 'Images whose OS is out of support (no more security fixes); -1: unknown' },
+    componentsEndOfLife: {
+      type: 'integer',
+      description: 'Runtimes and servers of its images out of support (Node.js, Python, PostgreSQL... of a release with no more fixes; endoflife.date); -1: unknown',
+    },
+    componentsEndingSoon: { type: 'integer', description: 'Runtimes and servers of its images whose support ends within 90 days; -1: unknown' },
+    toolchainsEndOfLife: { type: 'integer', description: 'Go toolchains out of support its binaries were built with; -1: unknown' },
+    componentsOutOfSupport: { type: 'string', description: 'The runtimes and servers out of support, with their release' },
     deniedLicenses: {
       type: 'integer',
       description: 'Dependencies of the application with a license the policy denies (GPL, AGPL...); -1: an image has no SBOM',
