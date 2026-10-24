@@ -48,7 +48,8 @@ const toolCardBase: CSSProperties = {
   background: 'rgba(25, 118, 210, 0.04)',
   cursor: 'pointer',
   textDecoration: 'none',
-  color: 'var(--backstage-color-text-primary, #333)',
+  // the text colour of the theme: a fixed dark grey was unreadable in the dark theme
+  color: 'inherit',
   transition: 'all 0.2s ease',
   border: '1px solid transparent',
 };
@@ -100,6 +101,17 @@ const ToolCard = ({ url, label, iconSrc, iconAlt, isCatalog }: ToolCardProps) =>
         fill="currentColor"
       />
     </svg>
+  ) : !iconSrc ? (
+    // no icon configured (homepage.quickLinks[].iconUrl): its initial in a circle, not a broken image
+    <span
+      aria-hidden
+      style={{
+        width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(25, 118, 210, 0.15)', color: '#1976d2', fontWeight: 700, fontSize: 18,
+      }}
+    >
+      {label.charAt(0).toUpperCase()}
+    </span>
   ) : (
     <img
       src={iconSrc}

@@ -48,6 +48,7 @@ import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { cnoeVibrantLightAppTheme, cnoeVibrantDarkAppTheme } from './theme';
 import { Homepage } from './components/home/Homepage';
+import { LogoInHeader } from './components/signin/LogoInHeader';
 import { VisitListener } from '@backstage/plugin-home';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { TopologyPage } from './components/topology/TopologyPage';
@@ -65,18 +66,24 @@ const app = createApp({
     SignInPage: props => {
       const configApi = useApi(configApiRef);
       if (configApi.getString('auth.environment') === 'local') {
-        return <SignInPage {...props} auto providers={['guest']} />;
+        return (
+          <LogoInHeader>
+            <SignInPage {...props} auto providers={['guest']} />
+          </LogoInHeader>
+        );
       }
       return (
-        <SignInPage
-          {...props}
-          provider={{
-            id: 'keycloak-oidc',
-            title: 'Keycloak',
-            message: 'Sign in using Keycloak',
-            apiRef: keycloakOIDCAuthApiRef,
-          }}
-        />
+        <LogoInHeader>
+          <SignInPage
+            {...props}
+            provider={{
+              id: 'keycloak-oidc',
+              title: 'Keycloak',
+              message: 'Sign in using Keycloak',
+              apiRef: keycloakOIDCAuthApiRef,
+            }}
+          />
+        </LogoInHeader>
       );
     },
   },

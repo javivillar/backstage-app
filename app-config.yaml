@@ -1,5 +1,5 @@
 app:
-  title: CNOE
+  title: Refresquito
   baseUrl: http://localhost:3000
   packages: all
   listen:
