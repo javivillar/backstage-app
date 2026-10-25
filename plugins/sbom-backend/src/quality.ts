@@ -111,6 +111,13 @@ export function parseQuality(content: unknown): QualityReport | undefined {
  * The numbers the scorecard checks; -1 when the report does not say it (a missing number fails its check rather than
  * passing it). An application without frontend has no frontend numbers to fail: -1 only when the part exists.
  */
+/** No frontend: nothing to cover (100); no report: unknown (-1), its check fails like the others. */
+function frontendCoverage(report: QualityReport | undefined): number {
+  if (!report) return -1;
+  if (!report.frontend) return 100;
+  return typeof report.frontend.coverage?.lines === 'number' ? report.frontend.coverage.lines : -1;
+}
+
 export function qualityFacts(report: QualityReport | undefined, exc: Exceptions = new Exceptions(undefined)) {
   const n = (v: number | undefined) => (typeof v === 'number' ? v : -1);
   // With the detail (every operation, every finding), the excepted ones are left out; without it, the totals
@@ -136,7 +143,7 @@ export function qualityFacts(report: QualityReport | undefined, exc: Exceptions 
     qualityReport: !!report,
     testsFailed: report && tests.every(Boolean) ? tests.reduce((acc, t) => acc + t!.failures + t!.errors, 0) : -1,
     backendCoverage: n(report?.backend?.coverage?.lines),
-    frontendCoverage: report?.frontend ? n(report.frontend.coverage?.lines) : 100,
+    frontendCoverage: frontendCoverage(report),
     lintIssues:
       report?.backend?.ruff && (!report.frontend || report.frontend.eslint)
         ? report.backend.ruff.issues + (report.frontend?.eslint?.errors ?? 0)
