@@ -270,7 +270,29 @@ describe('quality report', () => {
       { ref: 'api', quality: report },
       { ref: 'web', quality: null },
     ]);
-    expect(facts).toMatchObject({ qualityReport: false, testsFailed: -1, backendCoverage: -1, lintIssues: -1, typeErrors: -1 });
+    expect(facts).toMatchObject({ qualityReport: false, testsFailed: -1, backendCoverage: -1, frontendCoverage: -1, lintIssues: -1, typeErrors: -1 });
+  });
+
+  it('a platform image it also runs (refresquito-postgres) needs no report: only the images of its repository', () => {
+    const shelter = component('animalshelter-oneke', {
+      'refresquito.io/repository': 'javivillar/animalshelter',
+      'refresquito.io/framework-line': '3.1',
+    });
+    const images = [
+      { ref: 'ghcr.io/javivillar/animalshelter-api:abc', quality: report },
+      { ref: 'ghcr.io/javivillar/animalshelter-web:abc', quality: report },
+      { ref: 'ghcr.io/javivillar/refresquito-postgres:3.2.0', quality: null },
+    ];
+    expect(applicationFacts(shelter, ['3.1'], images)).toMatchObject({ qualityReport: true, backendCoverage: 96.9, qualityRevision: 'abc' });
+    // one of its own images without it: no report
+    const missing = [images[0], { ...images[1], quality: null }, images[2]];
+    expect(applicationFacts(shelter, ['3.1'], missing)).toMatchObject({ qualityReport: false, backendCoverage: -1 });
+    // without a repository, the application names its images; a digest instead of a tag
+    const byApp = component('animalshelter-oneke', { 'refresquito.io/application': 'animalshelter' });
+    expect(applicationFacts(byApp, ['3.1'], [
+      { ref: 'ghcr.io/javivillar/animalshelter-api@sha256:1', quality: report },
+      images[2],
+    ])).toMatchObject({ qualityReport: true });
   });
 
   it('code findings: operations without authentication, static analysis, secrets', () => {

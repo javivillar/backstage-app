@@ -81,14 +81,40 @@ export function normalizeLine(value?: string): string {
   return m ? `${m[1]}.${m[2]}` : '';
 }
 
+export const ANNOTATION_REPOSITORY = 'refresquito.io/repository';
+export const ANNOTATION_APPLICATION = 'refresquito.io/application';
+
+/** ghcr.io/o/petstore-api:abc (or @sha256:...) -> petstore-api */
+const imageName = (ref: string) => ref.split('@')[0].replace(/:[^/:]*$/, '').split('/').pop() ?? '';
+
+/**
+ * The images the application builds itself, where its CI attaches the quality report: the ones named after its
+ * repository (refresquito.io/repository javivillar/animalshelter: animalshelter-api, animalshelter-web), or after the
+ * application when it says no repository. The platform images it also runs (refresquito-postgres, a line of the
+ * framework) carry no report of the application; their SBOM and vulnerabilities still count. Without a name, or when
+ * none matches, every image.
+ */
+export function ownImages(entity: Entity, images: ImageFacts[]): ImageFacts[] {
+  const annotations = entity.metadata.annotations ?? {};
+  const name = (annotations[ANNOTATION_REPOSITORY] ?? '').split('/').pop()?.trim() || (annotations[ANNOTATION_APPLICATION] ?? '').trim();
+  if (!name) return images;
+  const own = images.filter(i => {
+    const image = imageName(i.ref);
+    return image === name || image.startsWith(`${name}-`);
+  });
+  return own.length ? own : images;
+}
+
 /** The facts of one application, from what its images say. */
 export function applicationFacts(entity: Entity, lines: string[], images: ImageFacts[]): TechInsightFact['facts'] {
   const line = normalizeLine(entity.metadata.annotations?.[ANNOTATION_FRAMEWORK_LINE]);
   const latest = lines[lines.length - 1] ?? '';
   const withSbom = images.filter(i => i.sbom);
   const framework: Component[] = withSbom.flatMap(i => i.sbom!.frameworks ?? []).filter(c => FRAMEWORK_PACKAGES.includes(c.name));
-  // the approved exceptions of its commit (quality report, part exceptions): their findings leave the checks
-  const report = images.length > 0 && images.every(i => i.quality) ? images[0].quality! : undefined;
+  // the approved exceptions of its commit (quality report, part exceptions): their findings leave the checks.
+  // The report is the one its CI attaches to the images it builds: a platform image it also runs has none
+  const own = ownImages(entity, images);
+  const report = own.length > 0 && own.every(i => i.quality) ? own[0].quality! : undefined;
   const exc = new Exceptions(report?.exceptions);
   // the findings that count: not a kernel package of the image (Wazuh: not_applicable), not excepted for that image
   const counted = images.flatMap(i => {
@@ -127,7 +153,7 @@ export function applicationFacts(entity: Entity, lines: string[], images: ImageF
     ...componentFacts(scans, images.length),
     // the license policy on the dependencies of its images (SBOM): distinct packages; -1 when an image has no SBOM
     ...licenseFacts(images, exc),
-    // the quality report of its commit (the CI attaches the same one to every image): it counts when every image has it
+    // the quality report of its commit (the CI attaches the same one to every image it builds): it counts when they all have it
     ...qualityFacts(report, exc),
     ...exceptionFacts(exc, report),
   };
@@ -279,7 +305,7 @@ export const supplyChainFactRetriever: FactRetriever = {
     frameworkLineMaintained: { type: 'boolean', description: 'Its line is still maintained (in the catalog)' },
     imagesMatchFrameworkLine: { type: 'boolean', description: 'The framework packages in its images are of its line' },
     frameworkInImages: { type: 'string', description: 'Framework packages found in the SBOMs of its images' },
-    qualityReport: { type: 'boolean', description: 'Every image has the quality report of its commit attached' },
+    qualityReport: { type: 'boolean', description: 'Every image the application builds has the quality report of its commit attached' },
     testsFailed: { type: 'integer', description: 'Tests that failed or errored (backend and frontend); -1: not reported' },
     backendCoverage: { type: 'float', description: 'Line coverage of the backend tests (%); -1: not reported' },
     frontendCoverage: { type: 'float', description: 'Line coverage of the frontend tests (%); -1: not reported' },
