@@ -12,7 +12,8 @@ import Typography from '@mui/material/Typography';
 /** The conversation as the backend returns it (plugins/ops-assistant-backend/src/model/types.ts). Opaque here. */
 type Message = { role: 'user' | 'assistant'; parts: Array<{ type: string; text?: string }> };
 type ToolCall = { name: string; input: Record<string, unknown>; isError: boolean; chars: number };
-type Exchange = { question: string; answer?: string; toolCalls?: ToolCall[]; model?: string; usage?: Record<string, number>; error?: string; ms?: number };
+/** job: the question being answered on the backend, kept so the page can collect it after being left or reloaded */
+type Exchange = { question: string; job?: string; answer?: string; toolCalls?: ToolCall[]; model?: string; usage?: Record<string, number>; error?: string; ms?: number };
 type JobProgress = { toolCalls: ToolCall[]; elapsedMs: number };
 type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: number; title?: string };
 
@@ -40,6 +41,9 @@ export interface AssistantProfile {
 
 const POLL_MS = 2000;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+/** the page was left while waiting: the job keeps going on the backend and the page collects it when it comes back */
+class Left extends Error {}
+const pending = (x?: Exchange) => !!x && !x.answer && !x.error;
 
 function load(store: string): { messages: Message[]; exchanges: Exchange[] } {
   try {
@@ -85,6 +89,15 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   const [progress, setProgress] = useState<JobProgress | undefined>();
   const current = useRef<string | undefined>();
   const bottom = useRef<HTMLDivElement>(null);
+  const mounted = useRef(true);
+  const resumed = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -101,6 +114,48 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [profile.store, state]);
 
+  /** waits for the job and returns the finished exchange and the conversation after it */
+  const collect = async (x: Exchange, id: string, started: number): Promise<{ done: Exchange; messages?: Message[] }> => {
+    const base = await api();
+    current.current = id;
+    for (;;) {
+      await sleep(POLL_MS);
+      if (!mounted.current) throw new Left();
+      const poll = await fetch(`${base}/chat/${id}`);
+      const job = await poll.json().catch(() => ({}));
+      if (!mounted.current) throw new Left();
+      if (!poll.ok) throw new Error(job.error ?? `${poll.status} ${poll.statusText}`);
+      if (job.status === 'running') {
+        setProgress({ toolCalls: job.toolCalls ?? [], elapsedMs: job.elapsedMs ?? Date.now() - started });
+        continue;
+      }
+      if (job.status === 'error') throw new Error(job.error ?? 'The model could not answer');
+      if (job.status === 'cancelled') throw new Error('Cancelled. The conversation stays as it was before this question.');
+      const turn = job.turn;
+      const { job: _, ...rest } = x;
+      return {
+        done: { ...rest, answer: turn.answer, toolCalls: turn.toolCalls, model: turn.model, usage: turn.usage, ms: job.elapsedMs },
+        messages: turn.messages,
+      };
+    }
+  };
+
+  /** the last exchange ends: answered, or with the error; on Left the page is gone and the exchange stays pending */
+  const follow = async (x: Exchange, work: () => Promise<{ done: Exchange; messages?: Message[] }>) => {
+    let result: { done: Exchange; messages?: Message[] };
+    try {
+      result = await work();
+    } catch (e) {
+      if (e instanceof Left) return;
+      const { job: _, ...rest } = x;
+      result = { done: { ...rest, error: (e as Error).message } };
+    }
+    current.current = undefined;
+    setProgress(undefined);
+    setState(s => ({ messages: result.messages ?? s.messages, exchanges: [...s.exchanges.slice(0, -1), result.done] }));
+    setBusy(false);
+  };
+
   const ask = async (q: string) => {
     const text = q.trim();
     if (!text || busy) return;
@@ -108,9 +163,7 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     setQuestion('');
     const started = Date.now();
     setState(s => ({ ...s, exchanges: [...s.exchanges, { question: text }] }));
-    let done: Exchange = { question: text };
-    let messages = state.messages;
-    try {
+    await follow({ question: text }, async () => {
       const base = await api();
       // the backend starts the work and answers at once; the answer is collected below (a question can take minutes,
       // longer than the proxies keep a request open)
@@ -121,31 +174,27 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
       });
       const begun = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(begun.error ?? `${res.status} ${res.statusText}`);
-      current.current = begun.id;
-      for (;;) {
-        await sleep(POLL_MS);
-        const poll = await fetch(`${base}/chat/${begun.id}`);
-        const job = await poll.json().catch(() => ({}));
-        if (!poll.ok) throw new Error(job.error ?? `${poll.status} ${poll.statusText}`);
-        if (job.status === 'running') {
-          setProgress({ toolCalls: job.toolCalls ?? [], elapsedMs: job.elapsedMs ?? Date.now() - started });
-          continue;
-        }
-        if (job.status === 'error') throw new Error(job.error ?? 'The model could not answer');
-        if (job.status === 'cancelled') throw new Error('Cancelled. The conversation stays as it was before this question.');
-        const turn = job.turn;
-        messages = turn.messages;
-        done = { ...done, answer: turn.answer, toolCalls: turn.toolCalls, model: turn.model, usage: turn.usage, ms: job.elapsedMs };
-        break;
-      }
-    } catch (e) {
-      done = { ...done, error: (e as Error).message };
-    }
-    current.current = undefined;
-    setProgress(undefined);
-    setState(s => ({ messages, exchanges: [...s.exchanges.slice(0, -1), done] }));
-    setBusy(false);
+      // kept with the question: if the page is left or reloaded now, it collects the answer when it comes back
+      const x = { question: text, job: begun.id as string };
+      setState(s => ({ ...s, exchanges: [...s.exchanges.slice(0, -1), x] }));
+      return collect(x, begun.id, started);
+    });
   };
+
+  // a question left waiting (page left or reloaded): collect its answer, or say why there is none
+  useEffect(() => {
+    const last = state.exchanges[state.exchanges.length - 1];
+    if (!pending(last) || resumed.current) return;
+    resumed.current = true;
+    const id = last.job;
+    setBusy(true);
+    follow(last, async () => {
+      if (!id) throw new Error('The page was left while this question was being answered and its answer was not kept: ask it again.');
+      return collect(last, id, Date.now());
+    });
+    // only when the page opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const reset = () => setState({ messages: [], exchanges: [] });
 
