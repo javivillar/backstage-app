@@ -1,0 +1,121 @@
+{
+ "generated": "2026-10-22T05:00:00Z",
+ "window": "now-3d",
+ "nodes": [
+  {
+   "node": "worker-1",
+   "agentId": "001",
+   "policy": "cis_ubuntu22-04",
+   "profile": "CIS Ubuntu 22.04 Level 1 Server (Refresquito OneKE node image)",
+   "scanEnd": "2026-10-22T03:00:00Z",
+   "score": 60.0,
+   "wazuhScore": 41.0,
+   "checks": 72,
+   "inScope": 5,
+   "passed": 3,
+   "failed": 2,
+   "invalid": 0,
+   "accepted": 1,
+   "acceptedFailing": 1,
+   "outOfScope": 38,
+   "notApplicable": 28,
+   "status": "failures",
+   "failures": [
+    {
+     "checkId": 28500,
+     "cis": "1.1.2.1.1",
+     "title": "Ensure /tmp is a separate partition",
+     "change": "new_fail",
+     "expired": false,
+     "review": null,
+     "rationale": "Making /tmp its own file system allows an administrator to set additional mount options such as the noexec option on the mount, making /tmp useless for an attacker to install executable code. It would also prevent an attacker from establishing a hard link to a system setuid program and wait for it to be updated. Once the program was updated, the hard link would be broken, and the attacker would ha",
+     "remediation": "First ensure that systemd is correctly configured to ensure that /tmp will be mounted at boot time. # systemctl unmask tmp.mount For specific configuration requirements of the /tmp mount for your environment, modify /etc/fstab. Example of using tmpfs with specific mount options: tmpfs /tmp 0 tmpfs defaults,rw,nosuid,nodev,noexec,relatime,size=2G 0 Note: the size=2G is an example of setting a speci"
+    },
+    {
+     "checkId": 28614,
+     "cis": "6.2.1.2.1",
+     "title": "Ensure systemd-journal-remote is installed",
+     "change": "still_fail",
+     "expired": false,
+     "review": null,
+     "rationale": "Storing log data on a remote host protects log integrity from local attacks. If an attacker gains root access on the local system, they could tamper with or remove log data that is stored on the local system.",
+     "remediation": "Run the following command to install systemd-journal-remote: # apt install systemd-journal-remote."
+    }
+   ],
+   "exceptions": [
+    {
+     "checkId": 28577,
+     "cis": "4.1.7",
+     "title": "Ensure ufw default deny firewall policy",
+     "result": "failed",
+     "review": "2027-04-28"
+    }
+   ]
+  },
+  {
+   "node": "storage-1",
+   "agentId": "003",
+   "policy": "cis_ubuntu22-04",
+   "profile": "CIS Ubuntu 22.04 Level 1 Server (Refresquito OneKE node image)",
+   "scanEnd": "2026-10-22T03:00:00Z",
+   "score": 100.0,
+   "wazuhScore": 44.0,
+   "checks": 72,
+   "inScope": 5,
+   "passed": 5,
+   "failed": 0,
+   "invalid": 0,
+   "accepted": 1,
+   "acceptedFailing": 1,
+   "outOfScope": 38,
+   "notApplicable": 28,
+   "status": "clean",
+   "failures": [],
+   "exceptions": [
+    {
+     "checkId": 28577,
+     "cis": "4.1.7",
+     "title": "Ensure ufw default deny firewall policy",
+     "result": "failed",
+     "review": "2027-04-28"
+    }
+   ]
+  }
+ ],
+ "stale": [],
+ "scope": {
+  "cis_ubuntu22-04": {
+   "profile": "CIS Ubuntu 22.04 Level 1 Server (Refresquito OneKE node image)",
+   "exceptionsRegister": "refresquito-images, docs/exceptions.md",
+   "outOfScope": {
+    "reason": "Level 2 of the benchmark; the node image applies Level 1 Server only",
+    "count": 38
+   },
+   "notApplicable": [
+    {
+     "reason": "ufw is the firewall of the image (CIS 4.1); CIS asks to configure one utility only, so the nftables (4.2) and iptables (4.3) checks do not apply",
+     "count": 13
+    },
+    {
+     "reason": "the time daemon of the image is systemd-timesyncd (CIS 2.3.2); the chrony checks (2.3.3) do not apply",
+     "count": 2
+    },
+    {
+     "reason": "one root filesystem (the separate partitions are Level 2); the mount options of /home, /var, /var/tmp, /var/log and /var/log/audit apply only when the partition exists",
+     "count": 13
+    }
+   ],
+   "accepted": [
+    {
+     "id": 28577,
+     "cis": "4.1.7",
+     "title": "ufw default deny firewall policy",
+     "reason": "Outgoing traffic is allowed: the nodes talk to the API server, etcd, VXLAN, registries, S3, DNS and OneGate on many ports, and a port list breaks the cluster (register: 4.1.4). Incoming is denied by default and routed traffic only allowed for the pod and service CIDRs.",
+     "compensating": "Egress controlled by the zone router and the Calico egress policies of each segment",
+     "review": "2027-04-28",
+     "expired": false
+    }
+   ]
+  }
+ }
+}

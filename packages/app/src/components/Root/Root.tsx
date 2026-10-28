@@ -24,6 +24,7 @@ import GppGoodIcon from '@mui/icons-material/GppGood';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import CodeIcon from '@mui/icons-material/Code';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -151,6 +152,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
           <SidebarItem icon={ArchitectureIcon} to="architect-assistant" text="Architect Assistant" />
           <SidebarItem icon={CodeIcon} to="developer-assistant" text="Developer Assistant" />
           <SidebarItem icon={VerifiedUserIcon} to="tech-insights" text="Quality & Security" />
+          <SidebarItem icon={FactCheckIcon} to="cis-nodes" text="CIS Nodes" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />
         </SidebarScrollWrapper>
