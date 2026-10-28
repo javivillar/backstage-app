@@ -28,6 +28,9 @@ import { ImageScan, findImageScan } from './vulnerabilities';
  *   GET /api/sbom/vulnerabilities?ref=<image>                  its vulnerabilities, from Wazuh's daily image scan
  *   GET /api/sbom/quality?ref=<image>                          the quality report the CI attached next to the SBOM
  *                                                              (tests, coverage, linters; quality.json of the app)
+ *   GET /api/sbom/compliance                                   the CIS compliance of the nodes (operating system): the
+ *                                                              newest SCA scan of each node as Wazuh scored it with the
+ *                                                              scope of the platform (wazuh-oneke >= 0.25.0, Part M)
  *
  * Config (app-config):
  *   sbom:
@@ -127,6 +130,19 @@ export const sbomPlugin = createBackendPlugin({
           scans.set(ref, entry);
           if (scans.size > 200) scans.delete(scans.keys().next().value as string);
           return entry;
+        };
+
+        // the agents scan once a day and the exporter reads the indexer every 5 minutes: kept 2 minutes
+        let compliance: { at: number; body: unknown } | undefined;
+        const COMPLIANCE_TTL = 2 * 60 * 1000;
+        const lookupCompliance = async () => {
+          if (compliance && Date.now() - compliance.at < COMPLIANCE_TTL) return compliance.body;
+          const res = await fetch(`${vulnerabilitiesUrl.replace(/\/+$/, '')}/compliance`, { signal: AbortSignal.timeout(20000) });
+          const body = await res.json().catch(() => ({}));
+          if (res.status === 404) return { configured: false, ...body };
+          if (!res.ok) throw new RegistryError(`Wazuh: ${(body as { error?: string }).error ?? res.statusText}`, 502);
+          compliance = { at: Date.now(), body: { configured: true, ...body } };
+          return compliance.body;
         };
 
         const releaseOf = (req: Request): string => {
@@ -236,6 +252,21 @@ export const sbomPlugin = createBackendPlugin({
             const ref = imageOf(req);
             const { found, report } = await lookupQuality(ref);
             res.json({ image: ref, attached: found ?? null, report: report ?? null });
+          }),
+        );
+        router.get(
+          '/compliance',
+          guarded('compliance', async (_req, res) => {
+            if (!vulnerabilitiesUrl) {
+              res.json({ configured: false, nodes: [] });
+              return;
+            }
+            try {
+              res.json(await lookupCompliance());
+            } catch (e) {
+              if (e instanceof RegistryError) throw e;
+              throw new RegistryError(`Wazuh's CIS compliance could not be read: ${(e as Error).message}`, 502);
+            }
           }),
         );
         router.get('/health', (_req, res) => {

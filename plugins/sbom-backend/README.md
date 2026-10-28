@@ -6,6 +6,10 @@ the registry (`oras attach`, artifact type `application/vnd.cyclonedx+json`), fo
 
 - `GET /api/sbom/image?ref=<image>`: its summary (components, ecosystems, licenses, the Refresquito frameworks).
 - `GET /api/sbom/image/raw?ref=<image>`: the CycloneDX document.
+- `GET /api/sbom/compliance`: the CIS compliance of the nodes (operating system) for the page **CIS nodes**: the newest
+  SCA scan of each node as the security exporter of wazuh-oneke (>= 0.25.0, USE-CASES.md Part M) scored it with the
+  scope of the platform (`GET <sbom.vulnerabilitiesUrl>/compliance`): `{configured, nodes, stale, scope}`;
+  `configured: false` when the exporter has it off (`manager.scaCis`). Kept 2 minutes.
 - `GET /api/sbom/vulnerabilities?ref=<image>`: its vulnerabilities from Wazuh's daily image scan (Trivy), as the
   security exporter of wazuh-oneke serves them (`GET <sbom.vulnerabilitiesUrl>/vulnerabilities?digest=`, then
   `?image=`): `{configured, digest, scan}`; `scan` is null when the last run did not see the image. Kept 5 minutes.
