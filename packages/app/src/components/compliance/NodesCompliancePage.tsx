@@ -92,7 +92,9 @@ const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '');
 /** green only at 100 %: one failure in scope is a finding */
 export function ScoreChip({ score }: { score: number | null }) {
   if (score === null) return <Chip size="small" variant="outlined" label="not evaluated" />;
-  const bg = score >= 100 ? '#2e7d32' : score >= 90 ? '#ed6c02' : '#c62828';
+  let bg = '#c62828';
+  if (score >= 100) bg = '#2e7d32';
+  else if (score >= 90) bg = '#ed6c02';
   return <Chip size="small" label={`${score.toFixed(1)} %`} sx={{ bgcolor: bg, color: '#fff', fontWeight: 600 }} />;
 }
 
@@ -287,7 +289,8 @@ export function ScopeCard({ policy, scope, nodes }: { policy: string; scope: Cis
 export const NodesCompliancePage = () => {
   const { loading, data, error } = useCompliance();
   const policies = [...new Set((data?.nodes ?? []).map(n => n.policy))];
-  const worst = (data?.nodes ?? []).reduce<number | null>((m, n) => (n.score === null ? m : m === null ? n.score : Math.min(m, n.score)), null);
+  const scores = (data?.nodes ?? []).flatMap(n => (n.score === null ? [] : [n.score]));
+  const worst = scores.length > 0 ? Math.min(...scores) : null;
   return (
     <Page themeId="tool">
       <Header title="CIS nodes" subtitle="CIS benchmark of the operating system of each node, from Wazuh" />
