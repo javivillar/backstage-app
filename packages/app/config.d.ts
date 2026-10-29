@@ -41,6 +41,21 @@ export interface Config {
     }>;
   };
   /**
+   * Costs (Cost card of each entity, page /costs): OpenCost is read through the proxy /opencost; these are the
+   * currency and the prices it computes with (ours, not a bill), shown next to the figures.
+   * @deepVisibility frontend
+   */
+  opencost?: {
+    /** ISO 4217 code, e.g. EUR */
+    currency?: string;
+    pricing?: {
+      description?: string;
+      cpuPerCoreHour?: number;
+      ramPerGiBHour?: number;
+      storagePerGiBHour?: number;
+    };
+  };
+  /**
    * Tech Radar shown at /tech-radar: technologies and where the organization stands on each.
    * @deepVisibility frontend
    */
