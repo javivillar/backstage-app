@@ -23,11 +23,27 @@ const json = (body: unknown, status = 200) => ({
   json: async () => body,
 });
 
-async function render(jobs: Record<string, unknown>) {
+/** the conversations the backend keeps for the user: {id: {title, state}} */
+type Kept = Record<string, { title: string; updatedAt?: string; state: unknown }>;
+
+async function render(jobs: Record<string, unknown>, kept: Kept = {}) {
   const calls: string[] = [];
-  const fetch = jest.fn(async (url: string, init?: { method?: string }) => {
+  const puts: Array<{ url: string; body: any }> = [];
+  const fetch = jest.fn(async (url: string, init?: { method?: string; body?: string }) => {
     calls.push(url);
     if (init?.method === 'POST') return json({ id: 'new' }, 202);
+    if (url.endsWith('/conversations'))
+      return json(Object.entries(kept).map(([id, c]) => ({ id, title: c.title, updatedAt: c.updatedAt ?? '2026-10-29T10:00:00Z' })));
+    if (url.includes('/conversations/')) {
+      const id = url.split('/conversations/')[1];
+      if (init?.method === 'PUT') {
+        const body = JSON.parse(init.body!);
+        puts.push({ url, body });
+        kept[id] = body;
+        return json({}, 204);
+      }
+      return id in kept ? json({ id, ...kept[id] }) : json({ error: 'No such conversation' }, 404);
+    }
     if (url.endsWith('/info'))
       return json({ enabled: true, allowed: true, model: 'm' });
     const id = url.split('/chat/')[1];
@@ -44,6 +60,7 @@ async function render(jobs: Record<string, unknown>) {
   const discovery = { getBaseUrl: async () => 'http://b/api/ops-assistant' };
   return {
     calls,
+    puts,
     view: await renderInTestApp(
       <TestApiProvider
         apis={[
@@ -79,7 +96,7 @@ describe('AssistantPage, a question left waiting', () => {
       model: 'm',
       messages: [{ role: 'user', parts: [] }],
     };
-    const { calls } = await render({
+    const { calls, puts } = await render({
       j1: { status: 'done', elapsedMs: 1000, turn },
     });
     expect(
@@ -89,6 +106,13 @@ describe('AssistantPage, a question left waiting', () => {
     const saved = JSON.parse(sessionStorage.getItem(profile.store)!);
     expect(saved.exchanges[0]).not.toHaveProperty('job');
     expect(saved.messages).toEqual(turn.messages);
+    // and kept in the backend, under the id of the tab's conversation, titled by its first question
+    await waitFor(() =>
+      expect(puts.some(p => p.body.state.exchanges[0]?.answer === 'the answer')).toBe(true),
+    );
+    const last = puts[puts.length - 1];
+    expect(last.url).toBe(`http://b/api/ops-assistant/functional/conversations/${saved.id}`);
+    expect(last.body.title).toBe('q');
   });
 
   it('says so when the job is gone', async () => {
@@ -126,5 +150,42 @@ describe('AssistantPage, a question left waiting', () => {
     expect(
       JSON.parse(sessionStorage.getItem(profile.store)!).exchanges[0],
     ).toEqual({ question: 'a question', job: 'new' });
+  });
+});
+
+describe('AssistantPage, the conversations kept in the backend', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    Element.prototype.scrollIntoView = jest.fn(); // not in jsdom
+  });
+
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const conv = (q: string, a: string, updatedAt: string) => ({
+    title: q,
+    updatedAt,
+    state: { messages: [], exchanges: [{ question: q, answer: a }] },
+  });
+
+  it('a new tab opens the most recent one and lists the others', async () => {
+    await render({}, { [A]: conv('the last question', 'the last answer', '2026-10-29T10:00:00Z'), [B]: conv('an older one', 'older answer', '2026-10-01T10:00:00Z') });
+    expect(await screen.findByText('the last answer')).toBeInTheDocument();
+    expect(screen.getByText('an older one')).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(profile.store)!).id).toBe(A);
+  });
+
+  it('opens another one when it is chosen, without saving it again', async () => {
+    const { puts } = await render({}, { [A]: conv('the last question', 'the last answer', '2026-10-29T10:00:00Z'), [B]: conv('an older one', 'older answer', '2026-10-01T10:00:00Z') });
+    await screen.findByText('the last answer');
+    fireEvent.click(screen.getByText('an older one'));
+    expect(await screen.findByText('older answer')).toBeInTheDocument();
+    expect(puts).toEqual([]);
+  });
+
+  it('keeps the tab\'s conversation, not the most recent, when the tab already has one', async () => {
+    sessionStorage.setItem(profile.store, JSON.stringify({ id: B, messages: [], exchanges: [{ question: 'mine', answer: 'my answer' }] }));
+    await render({}, { [A]: conv('the last question', 'the last answer', '2026-10-29T10:00:00Z') });
+    expect(await screen.findByText('my answer')).toBeInTheDocument();
+    expect(screen.queryByText('the last answer')).not.toBeInTheDocument();
   });
 });
