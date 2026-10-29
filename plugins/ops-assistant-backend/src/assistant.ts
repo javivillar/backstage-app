@@ -259,13 +259,13 @@ export function createAssistantRouter(o: {
   router.put('/conversations/:id', async (req: Request, res: Response) => {
     const own = await ownConversations(req, res);
     if (!own) return;
-    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    const name = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const state = req.body?.state;
-    if (!title || !state || typeof state !== 'object' || !Array.isArray(state.exchanges) || !Array.isArray(state.messages)) {
+    if (!name || !state || typeof state !== 'object' || !Array.isArray(state.exchanges) || !Array.isArray(state.messages)) {
       res.status(400).json({ error: 'title and state {exchanges, messages} are required' });
       return;
     }
-    if (!(await own.store.put(own.user, id, req.params.id, title, { exchanges: state.exchanges, messages: state.messages }))) {
+    if (!(await own.store.put(own.user, id, req.params.id, name, { exchanges: state.exchanges, messages: state.messages }))) {
       res.status(404).json({ error: 'No such conversation.' });
       return;
     }

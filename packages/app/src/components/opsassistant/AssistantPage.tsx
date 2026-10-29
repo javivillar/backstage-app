@@ -202,6 +202,13 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info]);
 
+  const reset = () => {
+    const next = empty();
+    lastSaved.current = saved(next);
+    resumed.current = next.id;
+    setState(next);
+  };
+
   const remove = async (id: string) => {
     // eslint-disable-next-line no-alert
     if (!window.confirm('Delete this conversation?')) return;
@@ -298,12 +305,6 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.id]);
 
-  const reset = () => {
-    const next = empty();
-    lastSaved.current = saved(next);
-    resumed.current = next.id;
-    setState(next);
-  };
 
   // the next poll sees the job cancelled and ends the question
   const cancel = async () => {
