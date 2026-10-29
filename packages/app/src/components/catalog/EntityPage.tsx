@@ -83,6 +83,7 @@ import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
+import { EntityCostCard } from '../cost/EntityCostCard';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
 
 // services of the stack: the catalog entities that say which namespace they run in
@@ -297,6 +298,9 @@ const overviewContent = (
         </div>
         <div style={span(12)}>
           <EntitySecurityCard />
+        </div>
+        <div style={span(12)}>
+          <EntityCostCard />
         </div>
       </EntitySwitch.Case>
     </EntitySwitch>

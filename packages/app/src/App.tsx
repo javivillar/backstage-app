@@ -53,6 +53,7 @@ import { VisitListener } from '@backstage/plugin-home';
 import { CustomApiExplorerPage } from './components/api/ApiExplorerPage';
 import { TopologyPage } from './components/topology/TopologyPage';
 import { NodesCompliancePage } from './components/compliance/NodesCompliancePage';
+import { CostsPage } from './components/cost/CostsPage';
 import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
 import { SecAssistantPage } from './components/opsassistant/SecAssistantPage';
 import { FunctionalAssistantPage } from './components/opsassistant/FunctionalAssistantPage';
@@ -142,6 +143,7 @@ const routes = (
     <Route path="/api-docs" element={<CustomApiExplorerPage />} />
     <Route path="/topology" element={<TopologyPage />} />
     <Route path="/cis-nodes" element={<NodesCompliancePage />} />
+    <Route path="/costs" element={<CostsPage />} />
     <Route path="/ops-assistant" element={<OpsAssistantPage />} />
     <Route path="/sec-assistant" element={<SecAssistantPage />} />
     <Route path="/functional-assistant" element={<FunctionalAssistantPage />} />
