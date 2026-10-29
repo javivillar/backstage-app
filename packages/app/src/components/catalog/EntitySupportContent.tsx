@@ -4,7 +4,7 @@ import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef, useEntity } from '@backstage/plugin-catalog-react';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import useAsync from 'react-use/esm/useAsync';
+import { useEffect, useState } from 'react';
 
 /** The application of the support (refresquito-specs, systems/support): the deployment it is in the catalog. */
 export const SUPPORT_APPLICATION = 'support';
@@ -42,18 +42,26 @@ export function supportLinks(base: string, entity: Entity): { open: string; inci
 export const EntitySupportContent = () => {
   const { entity } = useEntity();
   const catalogApi = useApi(catalogApiRef);
-  const { value: base, loading, error } = useAsync(async () => {
-    const { items } = await catalogApi.getEntities({
-      filter: { kind: 'component', 'metadata.annotations.refresquito.io/application': SUPPORT_APPLICATION },
-      fields: ['kind', 'metadata.name', 'metadata.namespace', 'metadata.annotations'],
-    });
-    return supportUrl(items);
+  // undefined while it is read; null when the support is not in the catalog (or the catalog could not be read)
+  const [base, setBase] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let current = true;
+    catalogApi
+      .getEntities({
+        filter: { kind: 'component', 'metadata.annotations.refresquito.io/application': SUPPORT_APPLICATION },
+        fields: ['kind', 'metadata.name', 'metadata.namespace', 'metadata.annotations'],
+      })
+      .then(({ items }) => current && setBase(supportUrl(items)))
+      .catch(() => current && setBase(null));
+    return () => {
+      current = false;
+    };
   }, [catalogApi]);
 
-  if (loading) {
+  if (base === undefined) {
     return <Progress />;
   }
-  if (error || !base) {
+  if (!base) {
     return (
       <EmptyState
         missing="info"
