@@ -20,6 +20,7 @@ import Dataset from '@mui/icons-material/Dataset';
 import GridView from '@mui/icons-material/GridView';
 import Inventory from '@mui/icons-material/Inventory2';
 import BubbleChart from '@mui/icons-material/BubbleChart';
+import SupportAgent from '@mui/icons-material/SupportAgent';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
   EntityAboutCard,
@@ -83,6 +84,7 @@ import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
+import { EntitySupportContent } from './EntitySupportContent';
 import { EntityCostCard } from '../cost/EntityCostCard';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
 
@@ -465,6 +467,10 @@ const serviceEntityPage = (
     <EntityLayout.Route path="/quality" title={tabLabel(<VerifiedUser />, 'Quality & Security')} if={isApplication}>
       {qualityContent}
     </EntityLayout.Route>
+    {/* the support: open an incident on this element, and its incidents (systems/support of refresquito-specs) */}
+    <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
+      <EntitySupportContent />
+    </EntityLayout.Route>
   </EntityLayout>
 );
 
@@ -582,6 +588,10 @@ const defaultEntityPage = (
     </EntityLayout.Route>
     <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
       <EntitySbomContent />
+    </EntityLayout.Route>
+    {/* the support: open an incident on this element, and its incidents (systems/support of refresquito-specs) */}
+    <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
+      <EntitySupportContent />
     </EntityLayout.Route>
   </EntityLayout>
 );
