@@ -25,5 +25,10 @@ jobs:
       - name: Lint
         run: yarn lint:all
 
+      - name: Test the assistants
+        run: |
+          yarn --cwd plugins/ops-assistant-backend test
+          yarn --cwd packages/app test src/components/opsassistant
+
       - name: Build backend
         run: yarn build:backend

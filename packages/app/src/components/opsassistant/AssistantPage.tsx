@@ -5,6 +5,12 @@ import { useSearchParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -15,7 +21,10 @@ type ToolCall = { name: string; input: Record<string, unknown>; isError: boolean
 /** job: the question being answered on the backend, kept so the page can collect it after being left or reloaded */
 type Exchange = { question: string; job?: string; answer?: string; toolCalls?: ToolCall[]; model?: string; usage?: Record<string, number>; error?: string; ms?: number };
 type JobProgress = { toolCalls: ToolCall[]; elapsedMs: number };
-type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: number; title?: string };
+type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: number; title?: string; keepDays?: number };
+/** the conversation open in the page: id is its key in the backend (plugins/ops-assistant-backend/src/conversations.ts) */
+type State = { id: string; messages: Message[]; exchanges: Exchange[] };
+type Summary = { id: string; title: string; updatedAt: string };
 
 /**
  * One assistant of Backstage (plugins/ops-assistant-backend: one engine, one block of config per assistant): where its
@@ -24,7 +33,7 @@ type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: num
 export interface AssistantProfile {
   /** its routes under /api/ops-assistant: '' for the operations assistant (as before), '/sec' for the security one */
   path: string;
-  /** where the page keeps its conversation (sessionStorage of the tab) */
+  /** where the tab keeps the open conversation (sessionStorage); every conversation is also kept in the backend */
   store: string;
   title: string;
   subtitle: string;
@@ -45,17 +54,32 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 class Left extends Error {}
 const pending = (x?: Exchange) => !!x && !x.answer && !x.error;
 
-function load(store: string): { messages: Message[]; exchanges: Exchange[] } {
+const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+/** a conversation id (UUID v4); randomUUID needs https, the fallback is for tests and plain http */
+const newId = (): string =>
+  globalThis.crypto?.randomUUID?.() ?? `${hex(8)}-${hex(4)}-4${hex(3)}-${'89ab'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`;
+const empty = (): State => ({ id: newId(), messages: [], exchanges: [] });
+/** what the backend lists it as: its first question */
+const titleOf = (s: State) => (s.exchanges[0]?.question ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+/** what is saved in the backend (and compared, to save only what changed) */
+const saved = (s: State) => JSON.stringify({ messages: s.messages, exchanges: s.exchanges });
+
+/** the open conversation of the tab; null when the tab has none (a new tab: the page opens the last one) */
+function load(store: string): State | null {
   try {
     const raw = sessionStorage.getItem(store);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const s = JSON.parse(raw);
+      // pages before the conversations were kept had no id
+      return { id: s.id ?? newId(), messages: s.messages ?? [], exchanges: s.exchanges ?? [] };
+    }
   } catch {
     // no storage: start empty
   }
-  return { messages: [], exchanges: [] };
+  return null;
 }
 
-function save(store: string, state: { messages: Message[]; exchanges: Exchange[] }) {
+function save(store: string, state: State) {
   try {
     sessionStorage.setItem(store, JSON.stringify(state));
   } catch {
@@ -82,7 +106,14 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   const about = project && profile.aboutProject ? profile.aboutProject(project) : undefined;
   const [info, setInfo] = useState<Info | undefined>();
   const [infoError, setInfoError] = useState<string | undefined>();
-  const [state, setState] = useState(() => load(profile.store));
+  const stored = useRef(load(profile.store));
+  const [state, setState] = useState<State>(() => stored.current ?? empty());
+  /** the user's conversations with this assistant (undefined while loading); why they are not kept, if so */
+  const [conversations, setConversations] = useState<Summary[] | undefined>();
+  const [keepError, setKeepError] = useState<string | undefined>();
+  /** what the backend has of the open conversation, so that it is saved only when it changes */
+  // a conversation the tab had from before they were kept in the backend is saved when the page opens
+  const lastSaved = useRef<string>(stored.current?.exchanges.length ? '' : saved(state));
   const [question, setQuestion] = useState(about?.prefix ?? '');
   const api = async () => `${await discovery.getBaseUrl('ops-assistant')}${profile.path}`;
   const [busy, setBusy] = useState(false);
@@ -90,7 +121,8 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   const current = useRef<string | undefined>();
   const bottom = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
-  const resumed = useRef(false);
+  /** the conversation whose question left waiting was already taken up */
+  const resumed = useRef<string | undefined>();
 
   useEffect(() => {
     mounted.current = true;
@@ -113,6 +145,74 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     save(profile.store, state);
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [profile.store, state]);
+
+  // kept in the backend after each change (a question asked, its job, its answer), so another tab or computer has it
+  useEffect(() => {
+    const body = saved(state);
+    if (!state.exchanges.length || body === lastSaved.current) return;
+    lastSaved.current = body;
+    const title = titleOf(state);
+    (async () => {
+      const res = await fetch(`${await api()}/conversations/${state.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, state: JSON.parse(body) }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `${res.status} ${res.statusText}`);
+    })().then(
+      () => {
+        setKeepError(undefined);
+        setConversations(l => [{ id: state.id, title, updatedAt: new Date().toISOString() }, ...(l ?? []).filter(c => c.id !== state.id)]);
+      },
+      e => {
+        lastSaved.current = '';
+        setKeepError((e as Error).message);
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  const open = async (id: string) => {
+    const res = await fetch(`${await api()}/conversations/${id}`);
+    const c = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(c.error ?? `${res.status} ${res.statusText}`);
+    const next: State = { id, messages: c.state?.messages ?? [], exchanges: c.state?.exchanges ?? [] };
+    lastSaved.current = saved(next);
+    setState(next);
+  };
+
+  // the user's conversations; a new tab opens the most recent one
+  useEffect(() => {
+    if (!info?.allowed || !info.enabled) return;
+    (async () => {
+      const res = await fetch(`${await api()}/conversations`);
+      const list = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(list.error ?? `${res.status} ${res.statusText}`);
+      return list as Summary[];
+    })().then(
+      list => {
+        setConversations(list);
+        if (!stored.current && list.length) open(list[0].id).catch(e => setKeepError((e as Error).message));
+      },
+      e => {
+        setConversations([]);
+        setKeepError((e as Error).message);
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info]);
+
+  const remove = async (id: string) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm('Delete this conversation?')) return;
+    const res = await fetch(`${await api()}/conversations/${id}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      setKeepError(`${res.status} ${res.statusText}`);
+      return;
+    }
+    setConversations(l => (l ?? []).filter(c => c.id !== id));
+    if (id === state.id) reset();
+  };
 
   /** waits for the job and returns the finished exchange and the conversation after it */
   const collect = async (x: Exchange, id: string, started: number): Promise<{ done: Exchange; messages?: Message[] }> => {
@@ -181,22 +281,29 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     });
   };
 
-  // a question left waiting (page left or reloaded): collect its answer, or say why there is none
+  // a question left waiting (page left or reloaded, or a conversation opened with one): collect its answer, or say
+  // why there is none
   useEffect(() => {
     const last = state.exchanges[state.exchanges.length - 1];
-    if (!pending(last) || resumed.current) return;
-    resumed.current = true;
+    if (resumed.current === state.id) return;
+    resumed.current = state.id;
+    if (!pending(last)) return;
     const id = last.job;
     setBusy(true);
     follow(last, async () => {
       if (!id) throw new Error('The page was left while this question was being answered and its answer was not kept: ask it again.');
       return collect(last, id, Date.now());
     });
-    // only when the page opens
+    // only when a conversation is opened (the page opens, another one is chosen)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [state.id]);
 
-  const reset = () => setState({ messages: [], exchanges: [] });
+  const reset = () => {
+    const next = empty();
+    lastSaved.current = saved(next);
+    resumed.current = next.id;
+    setState(next);
+  };
 
   // the next poll sees the job cancelled and ends the question
   const cancel = async () => {
@@ -213,7 +320,41 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   else if (!info.enabled) body = <WarningPanel title="Not configured" message={profile.notConfigured} />;
   else
     body = (
-      <Box sx={{ maxWidth: 1100 }}>
+      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+      <Box sx={{ width: { xs: '100%', md: 260 }, flexShrink: 0 }}>
+        <Button fullWidth variant="outlined" disabled={busy || !state.exchanges.length} onClick={reset}>
+          New conversation
+        </Button>
+        <List dense sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          {conversations?.map(c => (
+            <ListItem
+              key={c.id}
+              disablePadding
+              secondaryAction={
+                <IconButton edge="end" size="small" aria-label="Delete" title="Delete" disabled={busy} onClick={() => remove(c.id)}>
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              }
+            >
+              <ListItemButton
+                selected={c.id === state.id}
+                disabled={busy}
+                onClick={() => c.id !== state.id && open(c.id).catch(e => setKeepError((e as Error).message))}
+              >
+                <ListItemText
+                  primary={c.title}
+                  secondary={new Date(c.updatedAt).toLocaleString()}
+                  primaryTypographyProps={{ noWrap: true, title: c.title }}
+                />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+        <Typography variant="caption" color={keepError ? 'warning.main' : 'text.secondary'} display="block">
+          {keepError ? `Conversations are not being kept: ${keepError}` : `Kept ${info.keepDays ?? 90} days after their last change, only for you.`}
+        </Typography>
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0, maxWidth: 1100 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           {profile.intro} Model: {info.model}. Check what it says before acting on it.
         </Typography>
@@ -301,6 +442,7 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
             )}
           </Box>
         </Box>
+      </Box>
       </Box>
     );
 

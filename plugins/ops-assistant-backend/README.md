@@ -60,17 +60,36 @@ opsAssistant:
 
 Inert (the page says "not configured") unless `mcpUrl`, `systemPrompt` and the model's key are set.
 
+```yaml
+assistantConversations:
+  retentionDays: 90                  # optional: conversations not changed in this many days are deleted (daily)
+```
+
 ## API
 
-- `GET /api/ops-assistant/info` → `{enabled, allowed, model, maxSteps}`
+- `GET /api/ops-assistant/info` → `{enabled, allowed, model, maxSteps, title, keepDays}`
 - `POST /api/ops-assistant/chat` `{question, messages?}` → `202 {id}`: the question is being answered.
 - `DELETE /api/ops-assistant/chat/:id` cancels it: the model request is aborted and the conversation stays as it
   was before the question.
 - `GET /api/ops-assistant/chat/:id` → `{status: running|done|error, toolCalls, elapsedMs, turn?, error?}`, where
   `turn` is `{answer, messages, toolCalls, stop, model, usage}`. The page asks every 2 s and shows the tools called
   meanwhile. A question takes up to minutes, longer than Traefik or HAProxy keep a request open (60 s), hence a job
-  (`src/jobs.ts`, in memory: one replica; at most 2 running per user; a finished one kept 30 min). The backend keeps
-  no conversation: the page sends back `messages` as the last answer returned them.
+  (`src/jobs.ts`, in memory: one replica; at most 2 running per user; a finished one kept 30 min). The model gets
+  no conversation from the backend: the page sends back `messages` as the last answer returned them.
+- `GET /api/ops-assistant/conversations` → `[{id, title, updatedAt}]`, the user's conversations with this assistant,
+  the most recent first (100 at most); `GET`, `PUT {title, state}` and `DELETE` on `/conversations/:id` open, save
+  and delete one. Every route also under `/<id>/` for each assistant.
+
+## Conversations
+
+Kept in the database of this plugin (`backstage_plugin_ops-assistant` in Postgres, so they are in its backups;
+`src/conversations.ts`, table `assistant_conversations`, created at start if missing), so closing the tab, the
+browser or the session does not lose them and they open from any computer. The page saves after each change (the
+question, its job, its answer); a new tab opens the most recent one, the others are listed at the left. Each user
+sees, changes and deletes only their own, of each assistant apart; a daily task deletes the ones not changed in
+`assistantConversations.retentionDays` (90). They hold what was asked and answered, and the results of the tools,
+so they can hold personal or sensitive data: the same care as the data the assistant reads. Without the database
+the assistants still answer; the page says the conversations are not being kept.
 
 Every question logs one audit line (user, model, tools called, tokens, time), never the answer or the data; the MCP
 server logs every tool call with the user (`X-Refresquito-User`).

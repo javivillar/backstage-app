@@ -3,6 +3,7 @@ import express, { Request, Response, Router } from 'express';
 import { mayUse } from './access';
 import { runTurn, type ToolCallRecord, type Turn } from './agent';
 import { ClaudeCodeRunner } from './claudeCode';
+import { CONVERSATION_ID, type ConversationStore } from './conversations';
 import { MAX_QUESTION_CHARS, parseHistory } from './history';
 import { Jobs, MAX_RUNNING_PER_USER } from './jobs';
 import { McpClient } from './mcp';
@@ -28,10 +29,15 @@ type Config = NonNullable<ReturnType<RootConfigService['getOptionalConfig']>>;
  *     claudeCode: {oauthToken, bin}       # `claude setup-token` (Pro/Max)
  *
  * Its routes (under the router this returns):
- *   GET    /info       {enabled, allowed, model, runner, maxSteps, title}
+ *   GET    /info       {enabled, allowed, model, runner, maxSteps, title, keepDays}
  *   POST   /chat       {question, messages?} -> 202 {id}
  *   GET    /chat/:id   {status: running|done|error, toolCalls, elapsedMs, turn?, error?}
  *   DELETE /chat/:id   cancels it
+ *   GET    /conversations       the user's conversations with it, the most recent first [{id, title, updatedAt}]
+ *   GET    /conversations/:id   one of them {id, title, updatedAt, state}
+ *   PUT    /conversations/:id   {title, state} creates or replaces it (the page saves after each change)
+ *   DELETE /conversations/:id   deletes it
+ * Each user sees only their own conversations (src/conversations.ts); without a store they answer 503.
  */
 export function createAssistantRouter(o: {
   id: string;
@@ -39,8 +45,11 @@ export function createAssistantRouter(o: {
   httpAuth: HttpAuthService;
   userInfo: UserInfoService;
   logger: LoggerService;
+  conversations?: ConversationStore;
+  /** how long the conversations are kept (the page says it) */
+  keepDays?: number;
 }): Router {
-  const { id, settings, httpAuth, userInfo, logger } = o;
+  const { id, settings, httpAuth, userInfo, logger, conversations, keepDays } = o;
   const key = id === 'ops' ? 'opsAssistant' : `assistants.${id}`;
   const title = settings?.getOptionalString('title') ?? (id === 'ops' ? 'Operations assistant' : `Assistant ${id}`);
   const mcpUrl = settings?.getOptionalString('mcpUrl') ?? '';
@@ -128,7 +137,7 @@ export function createAssistantRouter(o: {
 
   router.get('/info', async (req: Request, res: Response) => {
     const { allowed } = await caller(req);
-    res.json({ enabled, allowed, model: enabled ? label : undefined, runner: runnerName, maxSteps, title });
+    res.json({ enabled, allowed, model: enabled ? label : undefined, runner: runnerName, maxSteps, title, keepDays: conversations ? keepDays : undefined });
   });
 
   router.post('/chat', async (req: Request, res: Response) => {
@@ -214,6 +223,63 @@ export function createAssistantRouter(o: {
       turn: job.turn,
       error: job.error ? `The model could not answer: ${job.error}` : undefined,
     });
+  });
+
+  /** the user and the store, or the answer already sent (no access, no store, a bad id) */
+  const ownConversations = async (req: Request, res: Response) => {
+    const { user, allowed } = await caller(req);
+    if (!allowed) {
+      res.status(403).json({ error: 'Not allowed.' });
+      return undefined;
+    }
+    if (!conversations) {
+      res.status(503).json({ error: 'Conversations are not kept (no database).' });
+      return undefined;
+    }
+    if (req.params.id !== undefined && !CONVERSATION_ID.test(req.params.id)) {
+      res.status(400).json({ error: 'Not a conversation id.' });
+      return undefined;
+    }
+    return { user, store: conversations };
+  };
+
+  router.get('/conversations', async (req: Request, res: Response) => {
+    const own = await ownConversations(req, res);
+    if (own) res.json(await own.store.list(own.user, id));
+  });
+
+  router.get('/conversations/:id', async (req: Request, res: Response) => {
+    const own = await ownConversations(req, res);
+    if (!own) return;
+    const c = await own.store.get(own.user, id, req.params.id);
+    if (c) res.json(c);
+    else res.status(404).json({ error: 'No such conversation (deleted, or older than its retention).' });
+  });
+
+  router.put('/conversations/:id', async (req: Request, res: Response) => {
+    const own = await ownConversations(req, res);
+    if (!own) return;
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    const state = req.body?.state;
+    if (!title || !state || typeof state !== 'object' || !Array.isArray(state.exchanges) || !Array.isArray(state.messages)) {
+      res.status(400).json({ error: 'title and state {exchanges, messages} are required' });
+      return;
+    }
+    if (!(await own.store.put(own.user, id, req.params.id, title, { exchanges: state.exchanges, messages: state.messages }))) {
+      res.status(404).json({ error: 'No such conversation.' });
+      return;
+    }
+    res.status(204).end();
+  });
+
+  router.delete('/conversations/:id', async (req: Request, res: Response) => {
+    const own = await ownConversations(req, res);
+    if (!own) return;
+    if (!(await own.store.delete(own.user, id, req.params.id))) {
+      res.status(404).json({ error: 'No such conversation.' });
+      return;
+    }
+    res.status(204).end();
   });
 
   return router;
