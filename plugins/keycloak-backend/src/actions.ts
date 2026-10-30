@@ -2,6 +2,8 @@ import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { Config } from '@backstage/config';
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { LoggerService } from '@backstage/backend-plugin-api';
+import type { CatalogService } from '@backstage/plugin-catalog-node';
+import type { Entity } from '@backstage/catalog-model';
 
 export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
 
@@ -327,15 +329,61 @@ export function createKeycloakUserAction(options: {
   });
 }
 
+/** The component and stage a group made from Backstage belongs to: a service of the stack by the name of its
+ * Component, a stage of an application by its annotations (refresquito.io/application, refresquito.io/stage). */
+export function securityOwner(entity: Entity): { component: string; stage?: string } {
+  const a = entity.metadata.annotations ?? {};
+  const application = a['refresquito.io/keycloak-component'] ?? a['refresquito.io/application'];
+  return { component: application ?? entity.metadata.name, stage: application ? a['refresquito.io/stage'] : undefined };
+}
+
+/** Zone, program and classification of the cluster for a new group of `component`: those of an object already tagged
+ * for it (its client, another group), else zone and program of any tagged group. */
+async function securityContext(config: Config, component: string): Promise<Record<string, string[]>> {
+  const pick = (attributes: Record<string, string[] | string> | undefined) => {
+    const out: Record<string, string[]> = {};
+    for (const key of ['refresquito.zone', 'refresquito.program', 'refresquito.classification']) {
+      const v = attributes?.[key];
+      if (v !== undefined && v !== '') out[key] = Array.isArray(v) ? v : [v];
+    }
+    return out;
+  };
+  const read = async <T>(path: string): Promise<T[]> => {
+    const r = await kcAdminFetch(config, path);
+    return r.ok ? ((await r.json()) as T[]) : [];
+  };
+  type Tagged = { attributes?: Record<string, string[] | string> };
+  const own = [
+    ...(await read<Tagged>(`/groups?q=${encodeURIComponent(`refresquito.component:${component}`)}&briefRepresentation=false`)),
+    ...(await read<Tagged>('/clients?max=10000')).filter(c => c.attributes?.['refresquito.component'] === component),
+  ];
+  for (const o of own) {
+    const found = pick(o.attributes);
+    if (found['refresquito.program']) return found;
+  }
+  for (const g of await read<Tagged>('/groups?briefRepresentation=false&max=10000')) {
+    const found = pick(g.attributes);
+    if (found['refresquito.program']) {
+      delete found['refresquito.classification'];
+      return found;
+    }
+  }
+  return {};
+}
+
 export function createKeycloakGroupAction(options: {
   config: Config;
   userInfo: UserInfoService;
+  catalog: CatalogService;
 }) {
-  const { config, userInfo } = options;
+  const { config, userInfo, catalog } = options;
 
   return createTemplateAction<{
     name: string;
     parentGroupName?: string;
+    belongsTo: string;
+    grants: string;
+    kind?: string;
   }>({
     id: 'keycloak:create-group',
     description:
@@ -344,13 +392,26 @@ export function createKeycloakGroupAction(options: {
     schema: {
       input: {
         type: 'object',
-        required: ['name'],
+        required: ['name', 'belongsTo', 'grants'],
         properties: {
           name: { title: 'Group name', type: 'string' },
           parentGroupName: {
             title: 'Parent group name',
             description: 'Leave empty to create a top-level group.',
             type: 'string',
+          },
+          belongsTo: {
+            title: 'Belongs to',
+            description:
+              'Entity ref of the Component it governs: a service of Refresquito (component:default/superset-oneke) or one stage of an application (component:default/animalshelter-dev-oneke).',
+            type: 'string',
+          },
+          grants: { title: 'What it grants', description: 'In words, shown on the Access tab.', type: 'string' },
+          kind: {
+            title: 'Kind',
+            type: 'string',
+            enum: ['team', 'role', 'access', 'data'],
+            description: 'team (people of a team), role (a role inside it), access (lets in), data (some data only)',
           },
         },
       },
@@ -365,7 +426,19 @@ export function createKeycloakGroupAction(options: {
     async handler(ctx) {
       const ownerRef = await requireAuthenticated(ctx, userInfo);
 
-      const { name, parentGroupName } = ctx.input;
+      const { name, parentGroupName, belongsTo, grants, kind } = ctx.input;
+      const entity = await catalog.getEntityByRef(belongsTo, { credentials: await ctx.getInitiatorCredentials() });
+      if (!entity) {
+        throw new Error(`"${belongsTo}" is not in the catalog: a group must say which service or application it governs`);
+      }
+      const owner = securityOwner(entity);
+      const tags: Record<string, string[]> = {
+        'refresquito.component': [owner.component],
+        'refresquito.kind': [kind || 'team'],
+        'refresquito.grants': [grants],
+        ...(owner.stage ? { 'refresquito.stage': [owner.stage] } : {}),
+        ...(await securityContext(config, owner.component)),
+      };
 
       let path = '/groups';
       if (parentGroupName) {
@@ -378,7 +451,7 @@ export function createKeycloakGroupAction(options: {
 
       const createRes = await kcAdminFetch(config, path, {
         method: 'POST',
-        body: JSON.stringify({ name, attributes: { [OWNER_ATTR]: [ownerRef] } }),
+        body: JSON.stringify({ name, attributes: { [OWNER_ATTR]: [ownerRef], ...tags } }),
       });
       if (createRes.status !== 201) {
         throw new Error(
@@ -388,7 +461,7 @@ export function createKeycloakGroupAction(options: {
       const location = createRes.headers.get('location');
       const groupId = location?.split('/').pop() ?? '';
 
-      ctx.logger.info(`Created Keycloak group ${name} (${groupId})`);
+      ctx.logger.info(`Created Keycloak group ${name} (${groupId}) of ${owner.component}${owner.stage ? ` (stage ${owner.stage})` : ''}`);
       ctx.output('groupId', groupId);
       ctx.output('name', name);
     },

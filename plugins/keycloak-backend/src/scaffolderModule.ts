@@ -3,6 +3,7 @@ import {
   createBackendModule,
 } from '@backstage/backend-plugin-api';
 import { scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import {
   createKeycloakUserAction,
   createKeycloakGroupAction,
@@ -24,11 +25,12 @@ export const keycloakScaffolderModule = createBackendModule({
         scaffolder: scaffolderActionsExtensionPoint,
         config: coreServices.rootConfig,
         userInfo: coreServices.userInfo,
+        catalog: catalogServiceRef,
       },
-      async init({ scaffolder, config, userInfo }) {
+      async init({ scaffolder, config, userInfo, catalog }) {
         scaffolder.addActions(
           createKeycloakUserAction({ config, userInfo }),
-          createKeycloakGroupAction({ config, userInfo }),
+          createKeycloakGroupAction({ config, userInfo, catalog }),
           createKeycloakClientAction({ config, userInfo }),
           createKeycloakUpdateUserAction({ config, userInfo }),
           createKeycloakDeleteUserAction({ config, userInfo }),

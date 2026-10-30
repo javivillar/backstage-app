@@ -15,6 +15,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import AddIcon from '@mui/icons-material/Add';
+import { KeycloakUnownedCard } from './EntitySecurity';
 
 type Kind = 'users' | 'groups' | 'clients';
 
@@ -163,6 +164,11 @@ export const KeycloakManagerPage = () => {
             </>
           )}
         </Box>
+        {isAdmin && (
+          <Box sx={{ mt: 4 }}>
+            <KeycloakUnownedCard />
+          </Box>
+        )}
       </Content>
     </Page>
   );

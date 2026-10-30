@@ -6,6 +6,7 @@ import {
   ownerFromAttributes,
   ownerFromClientAttributes,
 } from './actions';
+import { securityOf, unowned } from './security';
 
 interface KcUser {
   username: string;
@@ -139,6 +140,39 @@ export const keycloakManagerPlugin = createBackendPlugin({
             res.json({ items, isAdmin: caller.isAdmin });
           } catch (e) {
             logger.error('keycloak-manager /clients failed', e as Error);
+            res.status(500).json({ error: (e as Error).message });
+          }
+        });
+
+        // the Security tab of a Component: ?component=<name>[&stage=<stage>]. Every signed-in user sees which groups,
+        // clients and roles govern a component, and how many people each group has; only backstage-admin sees who.
+        router.get('/security', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            const component = String(req.query.component ?? '').trim();
+            const stage = String(req.query.stage ?? '').trim() || undefined;
+            if (!component) {
+              res.status(400).json({ error: 'component is required' });
+              return;
+            }
+            res.json({ ...(await securityOf(config, component, stage, caller.isAdmin)), isAdmin: caller.isAdmin });
+          } catch (e) {
+            logger.error('keycloak-manager /security failed', e as Error);
+            res.status(500).json({ error: (e as Error).message });
+          }
+        });
+
+        // groups, clients and realm roles that belong to no component (backstage-admin only)
+        router.get('/security/unowned', async (req, res) => {
+          try {
+            const caller = await callerContext(req);
+            if (!caller.isAdmin) {
+              res.status(403).json({ error: 'only backstage-admin' });
+              return;
+            }
+            res.json(await unowned(config));
+          } catch (e) {
+            logger.error('keycloak-manager /security/unowned failed', e as Error);
             res.status(500).json({ error: (e as Error).message });
           }
         });
