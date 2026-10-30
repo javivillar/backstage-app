@@ -21,6 +21,8 @@ import GridView from '@mui/icons-material/GridView';
 import Inventory from '@mui/icons-material/Inventory2';
 import BubbleChart from '@mui/icons-material/BubbleChart';
 import SupportAgent from '@mui/icons-material/SupportAgent';
+import Key from '@mui/icons-material/Key';
+import { EntitySecurityContent, isSecurityAvailable } from '@internal/plugin-keycloak';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
   EntityAboutCard,
@@ -468,6 +470,10 @@ const serviceEntityPage = (
     <EntityLayout.Route path="/quality" title={tabLabel(<VerifiedUser />, 'Quality & Security')} if={isApplication}>
       {qualityContent}
     </EntityLayout.Route>
+    {/* the Keycloak groups, SSO clients and roles that govern it (attributes refresquito.* in Keycloak) */}
+    <EntityLayout.Route path="/access" title={tabLabel(<Key />, 'Access')} if={isSecurityAvailable}>
+      <EntitySecurityContent />
+    </EntityLayout.Route>
     {/* the support: open an incident on this element, and its incidents (systems/support of refresquito-specs) */}
     <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
       <EntitySupportContent />
@@ -589,6 +595,10 @@ const defaultEntityPage = (
     </EntityLayout.Route>
     <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
       <EntitySbomContent />
+    </EntityLayout.Route>
+    {/* the Keycloak groups, SSO clients and roles that govern it (attributes refresquito.* in Keycloak) */}
+    <EntityLayout.Route path="/access" title={tabLabel(<Key />, 'Access')} if={isSecurityAvailable}>
+      <EntitySecurityContent />
     </EntityLayout.Route>
     {/* the support: open an incident on this element, and its incidents (systems/support of refresquito-specs) */}
     <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>

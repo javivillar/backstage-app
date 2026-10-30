@@ -56,3 +56,18 @@ Requires `keycloakAdmin` config (`baseUrl`, `realm`, `clientId`, `clientSecret` 
 the `backstage-admin-sa` service account) in `app-config.yaml` for the scaffolder
 actions, manager plugin and entity provider; `KEYCLOAK_URL` (plus the standard
 `auth.providers.keycloak-oidc` OIDC config) for the auth module.
+
+## Access tab (security tags)
+
+`GET /api/keycloak-manager/security?component=<name>[&stage=<stage>]` — the groups, SSO clients (with their client
+roles) and realm roles whose Keycloak attribute `refresquito.component` is `<name>` (and, with a stage, whose
+`refresquito.stage` includes it or is empty), with the groups that hold each role and the number of members of each
+group (their usernames only for `backstage-admin`). The tab *Access* of a Component calls it: a service of the stack
+by the name of its Component (`superset-oneke`), a stage of an application by `refresquito.io/application` and
+`refresquito.io/stage` (or `refresquito.io/keycloak-component` to override). `GET .../security/unowned`
+(backstage-admin): what has no `refresquito.component`, shown on the Keycloak Manager. Contract of the tags:
+`identity/README.md` of refresquito-services.
+
+`keycloak:create-group` asks for `belongsTo` (the Component the group governs), `grants` and `kind`, and writes the
+tags (`refresquito.component`, `.stage`, `.kind`, `.grants`, and zone/program/classification copied from an object
+already tagged for that component).
