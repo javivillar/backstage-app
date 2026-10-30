@@ -85,6 +85,7 @@ interface Security {
   groups: Group[];
   clients: Client[];
   realmRoles: (Role & Tagged)[];
+  warnings?: string[];
 }
 
 function useKeycloakManager<T>(path: string | undefined) {
@@ -172,6 +173,11 @@ export const EntitySecurityContent = () => {
 
   return (
     <Stack spacing={3}>
+      {(data.warnings ?? []).map(w => (
+        <Typography key={w} variant="body2" color="warning.main">
+          {w}
+        </Typography>
+      ))}
       <Typography variant="body2" color="textSecondary">
         Keycloak objects tagged <code>refresquito.component={component}</code>
         {stage ? (
@@ -341,6 +347,7 @@ export const KeycloakUnownedCard = () => {
     groups: string[];
     clients: string[];
     realmRoles: string[];
+    warnings?: string[];
   }>('/security/unowned');
   if (loading) return <CircularProgress size={20} />;
   if (error || !data) return null;
@@ -366,6 +373,11 @@ export const KeycloakUnownedCard = () => {
       {row('Groups', data.groups)}
       {row('Clients', data.clients)}
       {row('Realm roles', data.realmRoles)}
+      {(data.warnings ?? []).map(w => (
+        <Typography key={w} variant="body2" color="warning.main">
+          {w}
+        </Typography>
+      ))}
     </InfoCard>
   );
 };

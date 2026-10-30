@@ -76,6 +76,25 @@ async function get<T>(config: Config, path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** The realm roles, or none and a warning when the service account may not read them (it needs view-realm). */
+async function realmRolesOf(
+  config: Config,
+): Promise<{ roles: KcRole[]; warning?: string }> {
+  const res = await kcAdminFetch(
+    config,
+    '/roles?briefRepresentation=false&max=10000',
+  );
+  if (res.status === 403) {
+    return {
+      roles: [],
+      warning:
+        'Realm roles not shown: the service account backstage-admin-sa lacks the role view-realm of realm-management (a bootstrap pass gives it).',
+    };
+  }
+  if (!res.ok) throw new Error(`Keycloak GET /roles answered ${res.status}`);
+  return { roles: (await res.json()) as KcRole[] };
+}
+
 /** Who holds each role: "<role>" for a realm role, "<clientId>:<role>" for a client role. */
 function holders(groups: KcGroup[]): Map<string, string[]> {
   const map = new Map<string, string[]>();
@@ -96,9 +115,9 @@ export async function securityOf(
   stage: string | undefined,
   withNames: boolean,
 ) {
-  const [groups, realmRoles, clients] = await Promise.all([
+  const [groups, { roles: realmRoles, warning }, clients] = await Promise.all([
     get<KcGroup[]>(config, '/groups?briefRepresentation=false&max=10000'),
-    get<KcRole[]>(config, '/roles?briefRepresentation=false&max=10000'),
+    realmRolesOf(config),
     get<KcClient[]>(config, '/clients?max=10000'),
   ]);
   const held = holders(groups);
@@ -174,14 +193,15 @@ export async function securityOf(
     groups: myGroups.sort((a, b) => a.name.localeCompare(b.name)),
     clients: myClients.sort((a, b) => a.clientId.localeCompare(b.clientId)),
     realmRoles: myRealmRoles,
+    warnings: warning ? [warning] : [],
   };
 }
 
 /** What says no component: leftovers to clean up, or something created without its tags. */
 export async function unowned(config: Config) {
-  const [groups, realmRoles, clients] = await Promise.all([
+  const [groups, { roles: realmRoles, warning }, clients] = await Promise.all([
     get<KcGroup[]>(config, '/groups?briefRepresentation=false&max=10000'),
-    get<KcRole[]>(config, '/roles?briefRepresentation=false&max=10000'),
+    realmRolesOf(config),
     get<KcClient[]>(config, '/clients?max=10000'),
   ]);
   const none = (a: Attributes) => !tagsOf(a).component;
@@ -198,5 +218,6 @@ export async function unowned(config: Config) {
       .filter(r => none(r.attributes))
       .map(r => r.name)
       .sort(),
+    warnings: warning ? [warning] : [],
   };
 }
