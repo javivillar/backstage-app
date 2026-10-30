@@ -1,7 +1,9 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express from 'express';
+import { mayUse } from './access';
 import { createAssistantRouter } from './assistant';
 import { ConversationStore, DEFAULT_RETENTION_DAYS, ensureTable } from './conversations';
+import { currentMonth, DEFAULT_USAGE_RETENTION_DAYS, ensureUsageTable, UsageStore } from './usage';
 
 /** an assistant id: its routes, the name of its MCP server for Claude Code, its logs */
 const ID = /^[a-z][a-z0-9]{1,15}$/;
@@ -23,6 +25,11 @@ const ID = /^[a-z][a-z0-9]{1,15}$/;
  *
  * The conversations of every assistant are kept in the database of this plugin (src/conversations.ts), each user's
  * apart, `assistantConversations.retentionDays` (default 90) after their last change.
+ *
+ * What each question consumed (who, which assistant and model, its tokens, which system it was about) is recorded too
+ * (src/usage.ts), `assistantUsage.retentionDays` (default 400), for the page /costs:
+ *   GET /api/ops-assistant/usage?month=YYYY-MM   {month, all, groups}   (signed-in users; who asked is shown only for
+ *       their own questions, or for everyone's to the members of assistantUsage.viewAllGroups, default backstage-admin)
  */
 export const opsAssistantPlugin = createBackendPlugin({
   pluginId: 'ops-assistant',
@@ -58,8 +65,54 @@ export const opsAssistantPlugin = createBackendPlugin({
         } catch (e) {
           logger.error(`ops-assistant: conversations are not kept: ${(e as Error).message}`);
         }
-        const deps = { httpAuth, userInfo, logger, conversations, keepDays: days };
+        // nor without it what they consume: they answer all the same
+        let usage: UsageStore | undefined;
+        const usageDays = config.getOptionalNumber('assistantUsage.retentionDays') ?? DEFAULT_USAGE_RETENTION_DAYS;
+        try {
+          const knex = await database.getClient();
+          await ensureUsageTable(knex);
+          usage = new UsageStore(knex);
+          await scheduler.scheduleTask({
+            id: 'ops-assistant-purge-usage',
+            frequency: { hours: 24 },
+            timeout: { minutes: 5 },
+            initialDelay: { minutes: 2 },
+            fn: async () => {
+              const n = await usage!.purge(usageDays);
+              if (n) logger.info(`ops-assistant: ${n} usage rows older than ${usageDays} days deleted`);
+            },
+          });
+        } catch (e) {
+          logger.error(`ops-assistant: what the assistants consume is not recorded: ${(e as Error).message}`);
+        }
+        const viewAll = config.getOptionalStringArray('assistantUsage.viewAllGroups') ?? ['backstage-admin'];
+        const deps = { httpAuth, userInfo, logger, conversations, keepDays: days, usage };
         const router = express.Router();
+        router.get('/usage', async (req, res) => {
+          let viewer: string;
+          let all: boolean;
+          try {
+            const info = await userInfo.getUserInfo(await httpAuth.credentials(req, { allow: ['user'] }));
+            viewer = info.userEntityRef;
+            all = mayUse(info.ownershipEntityRefs, viewAll);
+          } catch {
+            res.status(401).json({ error: 'Sign in to read what the assistants consume' });
+            return;
+          }
+          if (!usage) {
+            res.status(503).json({ error: 'What the assistants consume is not recorded (no database).' });
+            return;
+          }
+          const month = typeof req.query.month === 'string' && req.query.month ? req.query.month : currentMonth();
+          try {
+            const body = await usage.month(month, viewer, all);
+            if (!body) res.status(400).json({ error: 'month is YYYY-MM' });
+            else res.json(body);
+          } catch (e) {
+            logger.error(`ops-assistant: usage: ${(e as Error).message}`);
+            res.status(500).json({ error: 'What the assistants consume could not be read' });
+          }
+        });
         // the operations assistant: at the root, as before the other assistants existed, and at /ops
         const ops = createAssistantRouter({ id: 'ops', settings: config.getOptionalConfig('opsAssistant'), ...deps });
         router.use('/ops', ops);

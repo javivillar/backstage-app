@@ -57,6 +57,20 @@ export interface Config {
       perDeployment?: number;
       /** charged once per incident opened on an element of a namespace (application support), by its priority */
       perIncident?: { P1?: number; P2?: number; P3?: number; P4?: number };
+      /**
+       * What the assistants consume (plugin ops-assistant), charged to the system each question was about. The first
+       * entry whose model (part of the model name, or '*') and runner (api, claude-code) match is its price: per
+       * million tokens, or per hour of answering (a local model: the server is what costs).
+       */
+      assistants?: Array<{
+        model?: string;
+        runner?: string;
+        inputPerMillion?: number;
+        outputPerMillion?: number;
+        cacheReadPerMillion?: number;
+        cacheWritePerMillion?: number;
+        perHour?: number;
+      }>;
     };
   };
   /**

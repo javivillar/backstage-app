@@ -2,6 +2,7 @@ import { configApiRef, discoveryApiRef, fetchApiRef, useApi } from '@backstage/c
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { keycloakOIDCAuthApiRef } from '@internal/plugin-keycloak';
 import { SUPPORT_APPLICATION, supportUrl } from '../catalog/EntitySupportContent';
+import type { AssistantPrice } from './assistantUsage';
 import { useEffect, useState } from 'react';
 
 /**
@@ -101,6 +102,8 @@ export type Pricing = {
   perDeployment?: number;
   /** what each incident opened on an element of the namespace costs, by its priority */
   perIncident?: ByPriority;
+  /** what the assistants consume, by model or runner (assistantUsage.ts) */
+  assistants?: AssistantPrice[];
 };
 
 export const PRIORITIES = ['P1', 'P2', 'P3', 'P4'] as const;
@@ -130,6 +133,15 @@ export function usePricing(): Pricing {
     storagePerGiBHour: c?.getOptionalNumber('pricing.storagePerGiBHour'),
     perDeployment: c?.getOptionalNumber('pricing.perDeployment'),
     perIncident: perIncidentOf(c?.getOptionalConfig('pricing.perIncident')),
+    assistants: c?.getOptionalConfigArray('pricing.assistants')?.map(a => ({
+      model: a.getOptionalString('model'),
+      runner: a.getOptionalString('runner'),
+      inputPerMillion: a.getOptionalNumber('inputPerMillion'),
+      outputPerMillion: a.getOptionalNumber('outputPerMillion'),
+      cacheReadPerMillion: a.getOptionalNumber('cacheReadPerMillion'),
+      cacheWritePerMillion: a.getOptionalNumber('cacheWritePerMillion'),
+      perHour: a.getOptionalNumber('perHour'),
+    })),
   };
 }
 
@@ -143,6 +155,7 @@ export function describePrices(p: Pricing) {
     p.perIncident
       ? `${PRIORITIES.filter(k => p.perIncident![k] !== undefined).map(k => `${k} ${p.perIncident![k]}`).join(' / ')} ${p.currency}/incident`
       : undefined,
+    p.assistants?.length ? 'assistants by model (tokens, or hours of a local model)' : undefined,
   ].filter(Boolean);
   return parts.join(' · ');
 }

@@ -8,6 +8,7 @@ import { MAX_QUESTION_CHARS, parseHistory } from './history';
 import { Jobs, MAX_RUNNING_PER_USER } from './jobs';
 import { McpClient } from './mcp';
 import { providerFromConfig, type Message } from './model';
+import { subjectName, subjectsOf, type UsageStore } from './usage';
 
 type Config = NonNullable<ReturnType<RootConfigService['getOptionalConfig']>>;
 
@@ -30,14 +31,15 @@ type Config = NonNullable<ReturnType<RootConfigService['getOptionalConfig']>>;
  *
  * Its routes (under the router this returns):
  *   GET    /info       {enabled, allowed, model, runner, maxSteps, title, keepDays}
- *   POST   /chat       {question, messages?} -> 202 {id}
+ *   POST   /chat       {question, messages?, system?} -> 202 {id}   system: the one its cost is charged to
  *   GET    /chat/:id   {status: running|done|error, toolCalls, elapsedMs, turn?, error?}
  *   DELETE /chat/:id   cancels it
  *   GET    /conversations       the user's conversations with it, the most recent first [{id, title, updatedAt}]
  *   GET    /conversations/:id   one of them {id, title, updatedAt, state}
- *   PUT    /conversations/:id   {title, state} creates or replaces it (the page saves after each change)
+ *   PUT    /conversations/:id   {title, state: {exchanges, messages, system?}} creates or replaces it (the page saves after each change)
  *   DELETE /conversations/:id   deletes it
  * Each user sees only their own conversations (src/conversations.ts); without a store they answer 503.
+ * Each question answered is recorded in `usage` (src/usage.ts): who, which model, its tokens, what it was about.
  */
 export function createAssistantRouter(o: {
   id: string;
@@ -48,8 +50,10 @@ export function createAssistantRouter(o: {
   conversations?: ConversationStore;
   /** how long the conversations are kept (the page says it) */
   keepDays?: number;
+  /** where what each question consumed is recorded, for the costs; without it nothing is recorded */
+  usage?: UsageStore;
 }): Router {
-  const { id, settings, httpAuth, userInfo, logger, conversations, keepDays } = o;
+  const { id, settings, httpAuth, userInfo, logger, conversations, keepDays, usage } = o;
   const key = id === 'ops' ? 'opsAssistant' : `assistants.${id}`;
   const title = settings?.getOptionalString('title') ?? (id === 'ops' ? 'Operations assistant' : `Assistant ${id}`);
   const mcpUrl = settings?.getOptionalString('mcpUrl') ?? '';
@@ -155,6 +159,13 @@ export function createAssistantRouter(o: {
       res.status(400).json({ error: `question: 1 to ${MAX_QUESTION_CHARS} characters` });
       return;
     }
+    // the system its cost is charged to (chosen in the page); without it, what the tools looked at
+    const rawSystem = req.body?.system;
+    const chosen = rawSystem === undefined || rawSystem === null || rawSystem === '' ? undefined : subjectName(rawSystem);
+    if (rawSystem && !chosen) {
+      res.status(400).json({ error: 'system: the name of a system of the catalog' });
+      return;
+    }
     let history;
     try {
       history = parseHistory(req.body?.messages);
@@ -170,6 +181,7 @@ export function createAssistantRouter(o: {
         onToolCall: call => j.toolCalls.push(call),
         signal: j.signal,
       });
+      const ms = Date.now() - j.startedAt;
       // one audit line per question: which assistant, who, what was looked at, what it cost (never the answer or the data)
       logger.info(`${log} turn`, {
         assistant: id,
@@ -177,10 +189,26 @@ export function createAssistantRouter(o: {
         runner: runnerName,
         model: turn.model ?? label,
         stop: turn.stop,
+        system: chosen,
         tools: turn.toolCalls.map(t => `${t.name}${t.isError ? '!' : ''}`).join(','),
-        ms: Date.now() - j.startedAt,
-        ...Object.fromEntries(Object.entries(turn.usage).map(([k, v]) => [`tokens_${k}`, v])),
+        ms,
+        ...Object.fromEntries(Object.entries(turn.usage ?? {}).map(([k, v]) => [`tokens_${k}`, v])),
       });
+      // what it consumed, for the costs: a failure here never loses the answer
+      await usage
+        ?.record({
+          at: new Date(),
+          assistant: id,
+          user,
+          runner: runnerName,
+          model: turn.model ?? label ?? 'unknown',
+          system: chosen,
+          subjects: subjectsOf(turn.toolCalls),
+          usage: turn.usage ?? {},
+          ms,
+          tools: turn.toolCalls.length,
+        })
+        .catch(e => logger.warn(`${log}: its usage was not recorded: ${(e as Error).message}`));
       return turn;
     });
     if (!job) {
@@ -265,7 +293,9 @@ export function createAssistantRouter(o: {
       res.status(400).json({ error: 'title and state {exchanges, messages} are required' });
       return;
     }
-    if (!(await own.store.put(own.user, id, req.params.id, name, { exchanges: state.exchanges, messages: state.messages }))) {
+    // system: the one its questions are charged to, chosen in the page
+    const kept = { exchanges: state.exchanges, messages: state.messages, ...(typeof state.system === 'string' && state.system ? { system: state.system.slice(0, 253) } : {}) };
+    if (!(await own.store.put(own.user, id, req.params.id, name, kept))) {
       res.status(404).json({ error: 'No such conversation.' });
       return;
     }

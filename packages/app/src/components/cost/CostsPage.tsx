@@ -31,6 +31,7 @@ import {
   useDeployments,
   usePricing,
 } from './openCost';
+import { chargeByAssistant, chargeBySystem, PLATFORM, tokens, useAssistantUsage, userName, useSystemsIndex } from './assistantUsage';
 
 type Row = {
   ns: string;
@@ -99,7 +100,15 @@ export const CostsPage = () => {
   const deployments = useDeployments();
   const incidents = useIncidentCounts();
   const { byNs, nsOfRef } = useEntitiesByNamespace();
+  const usage = useAssistantUsage();
+  const systemsIndex = useSystemsIndex();
   const c = pricing.currency;
+  // what the assistants consumed this month, charged to the system each question was about
+  const assistantCharges = useMemo(
+    () => (usage.value ? chargeBySystem(usage.value, systemsIndex, pricing.assistants) : undefined),
+    [usage.value, systemsIndex, pricing.assistants],
+  );
+  const byAssistant = useMemo(() => (usage.value ? chargeByAssistant(usage.value, pricing.assistants) : []), [usage.value, pricing.assistants]);
 
   // the incidents of each namespace (those of its elements), and those on elements without a namespace (the platform)
   const incidentsByNs = useMemo(() => {
@@ -137,11 +146,14 @@ export const CostsPage = () => {
   }, [week, day, byNs, deployments.value, incidents.value, incidentsByNs, pricing]);
 
   const systems = useMemo(() => {
-    const m = new Map<string, { week: number; day: number; deploy: number; incident: number; count: number }>();
+    type S = { week: number; day: number; deploy: number; incident: number; count: number; assistants?: number; questions?: number };
+    const m = new Map<string, S>();
+    const none = (): S => ({ week: 0, day: 0, deploy: 0, incident: 0, count: 0 });
     for (const r of rows) {
       const k = r.system || '(no system)';
-      const s = m.get(k) ?? { week: 0, day: 0, deploy: 0, incident: 0, count: 0 };
+      const s = m.get(k) ?? none();
       m.set(k, {
+        ...s,
         week: s.week + (r.week?.total ?? 0),
         day: s.day + (r.day?.total ?? 0),
         deploy: s.deploy + (r.deployCost ?? 0),
@@ -149,8 +161,14 @@ export const CostsPage = () => {
         count: s.count + 1,
       });
     }
-    return [...m.entries()].sort((a, b) => b[1].week - a[1].week);
-  }, [rows]);
+    // a system can be asked about before it has a namespace
+    for (const [system, charge] of assistantCharges?.bySystem ?? []) {
+      const k = system === PLATFORM ? '(no system)' : system;
+      const s = m.get(k) ?? none();
+      m.set(k, { ...s, assistants: (s.assistants ?? 0) + (charge.cost ?? 0), questions: (s.questions ?? 0) + charge.questions });
+    }
+    return [...m.entries()].sort((a, b) => b[1].week - a[1].week || (b[1].assistants ?? 0) - (a[1].assistants ?? 0));
+  }, [rows, assistantCharges]);
 
   let body;
   if (loading) body = <Progress />;
@@ -181,6 +199,23 @@ export const CostsPage = () => {
         .filter(Boolean)
         .join(' · ');
     }
+    const assistantTotal = assistantCharges?.total;
+    const assistantCost = assistantTotal?.cost;
+    let assistantNote: string;
+    if (usage.loading) assistantNote = 'counting…';
+    else if (usage.error) assistantNote = `not available: ${usage.error.message}`;
+    else if (!assistantTotal?.questions) assistantNote = 'no question this month';
+    else {
+      assistantNote = [
+        `${Math.round(assistantTotal.questions)} questions · ${tokens(assistantTotal.tokens)} tokens`,
+        assistantCost === undefined ? 'no price for their models configured' : '',
+        assistantTotal.unreported ? `${Math.round(assistantTotal.unreported)} without tokens reported` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
+    let assistantValue = '—';
+    if (assistantTotal) assistantValue = assistantCost !== undefined ? money(assistantCost, c) : `${tokens(assistantTotal.tokens)} tokens`;
     const since = deployments.value?.trackedSince;
     const sinceThisMonth = since && since.slice(0, 7) === deployments.value?.month;
     body = (
@@ -190,10 +225,10 @@ export const CostsPage = () => {
             <Figure label="Last 7 days" value={money(totalWeek, c)} note={`${rows.length} namespaces`} />
             <Figure
               label="Per month"
-              value={money(monthly(totalDay * 30.4, deployTotal, incidentTotal), c)}
+              value={money(monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost), c)}
               note={
-                deployTotal || incidentTotal
-                  ? 'resources at the pace of the last 24 hours + the deployments and incidents of this month'
+                deployTotal || incidentTotal || assistantCost
+                  ? 'resources at the pace of the last 24 hours + the deployments, incidents and assistants of this month'
                   : 'at the pace of the last 24 hours'
               }
             />
@@ -206,6 +241,11 @@ export const CostsPage = () => {
               label="Incidents this month"
               value={incidents.value ? String(incidentCount(allIncidents)) : '—'}
               note={incidentNote}
+            />
+            <Figure
+              label="Assistants this month"
+              value={assistantValue}
+              note={assistantNote}
             />
             <Figure
               label="Capacity nobody reserved"
@@ -222,6 +262,7 @@ export const CostsPage = () => {
                 <TableCell>System</TableCell>
                 <TableCell align="right">Namespaces</TableCell>
                 <TableCell align="right">Last 7 days</TableCell>
+                <TableCell align="right" title="what the assistants consumed this month about the system">Assistants this month</TableCell>
                 <TableCell align="right">Per month</TableCell>
                 <TableCell align="right">Share</TableCell>
               </TableRow>
@@ -232,12 +273,65 @@ export const CostsPage = () => {
                   <TableCell>{name === '(no system)' ? name : <EntityRefLink entityRef={{ kind: 'System', namespace: 'default', name }} />}</TableCell>
                   <TableCell align="right">{s.count}</TableCell>
                   <TableCell align="right">{money(s.week, c)}</TableCell>
-                  <TableCell align="right">{money(monthly(s.day * 30.4, deployTotal === undefined ? undefined : s.deploy, incidentTotal === undefined ? undefined : s.incident), c)}</TableCell>
+                  <TableCell align="right">
+                    {s.questions ? `${money(s.assistants, c)} · ${Math.round(s.questions)} q.` : '—'}
+                  </TableCell>
+                  <TableCell align="right">
+                    {money(
+                      monthly(
+                        s.day * 30.4,
+                        deployTotal === undefined ? undefined : s.deploy,
+                        incidentTotal === undefined ? undefined : s.incident,
+                        assistantCost === undefined ? undefined : s.assistants,
+                      ),
+                      c,
+                    )}
+                  </TableCell>
                   <TableCell align="right">{pct(totalWeek ? (s.week / totalWeek) * 100 : undefined)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+        </InfoCard>
+        <div style={{ height: 24 }} />
+        <InfoCard
+          title="Assistants this month"
+          subheader={
+            usage.value?.all
+              ? 'Every question to the assistants, by assistant and who asked it.'
+              : 'By assistant; who asked is shown only for your own questions.'
+          }
+        >
+          {usage.error ? (
+            <Typography variant="body2">Not available: {usage.error.message}</Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Assistant</TableCell>
+                  <TableCell>Who</TableCell>
+                  <TableCell>Models</TableCell>
+                  <TableCell align="right">Questions</TableCell>
+                  <TableCell align="right" title="input + output + cache read and written">Tokens</TableCell>
+                  <TableCell align="right">Cost</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {byAssistant.map(a => (
+                  <TableRow key={`${a.assistant}/${a.user ?? ''}`}>
+                    <TableCell>{a.assistant}</TableCell>
+                    <TableCell>{userName(a.user)}</TableCell>
+                    <TableCell>{[...a.models].join(', ')}</TableCell>
+                    <TableCell align="right">{Math.round(a.questions)}</TableCell>
+                    <TableCell align="right" title={a.unreported ? `${a.unreported} questions without tokens reported` : undefined}>
+                      {tokens(a.tokens)}
+                    </TableCell>
+                    <TableCell align="right">{money(a.cost, c)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </InfoCard>
         <div style={{ height: 24 }} />
         <InfoCard title="By namespace">
@@ -290,7 +384,9 @@ export const CostsPage = () => {
           namespace costs what its pods reserve (requests) or use, whichever is more; &quot;CPU used&quot; and &quot;Memory
           used&quot; say how much of what it reserves it really uses: reserved and not used is paid all the same. Each
           deployment, a new version of an image that runs in the namespace, is charged too; restarting or scaling is not a
-          deployment. Each incident opened this month on an element of the namespace is charged at the price of its priority.
+          deployment. Each incident opened this month on an element of the namespace is charged at the price of its priority. What
+          the assistants consume is charged to the system each question was about: the one chosen in their page, else
+          the systems, namespaces or projects their tools looked at (split in equal parts), else the platform.
         </Typography>
         {body}
       </Content>
