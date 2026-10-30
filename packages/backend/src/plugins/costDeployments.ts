@@ -4,8 +4,9 @@
  * every namespace ran (kube-state-metrics, kube_pod_container_info) and keeps, in the database of Backstage, the first
  * time each one was seen. Prometheus keeps only 15 days; this table keeps the months.
  *
- * - The version is the digest the node pulled (image_id); without one yet, the image with its tag (image_spec). A tag
- *   pushed again with other content is a new version too.
+ * - The version is the digest the node pulled (image_id). A tag pushed again with other content is a new version too.
+ *   A container still starting has no digest yet: it is skipped, and counted once it runs (keying it by its tag in the
+ *   meantime counted every deployment twice, and every run of a CronJob whose pod was caught starting).
  * - Restarting or scaling a pod is not a deployment (same image). Going back to a version the namespace already ran is
  *   not either: it is counted the first time only.
  * - The first sweep ever takes what was already running as the starting point (baseline): it is not charged.
@@ -71,7 +72,7 @@ export function parseSweep(body: any): Seen[] {
     const m = r?.metric ?? {};
     const namespace = typeof m.namespace === 'string' ? m.namespace : '';
     const image = (m.image_spec || m.image || '') as string;
-    const version = (m.image_id || image) as string;
+    const version = (m.image_id || '') as string;
     const seconds = Number(r?.value?.[1]);
     if (!namespace || !version || !Number.isFinite(seconds)) continue;
     const firstSeen = new Date(seconds * 1000);

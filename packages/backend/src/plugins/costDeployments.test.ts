@@ -21,15 +21,15 @@ describe('parseSweep', () => {
           },
           // the same version under another label set: the earliest time wins
           { metric: { namespace: 'shop', image: 'x', image_spec: 'ghcr.io/a/web:1', image_id: 'ghcr.io/a/web@sha256:1' }, value: [1, '1793320000'] },
-          // not pulled yet: the image with its tag is the version
+          // still starting, no digest yet: skipped (it is counted by its digest once it runs)
           { metric: { namespace: 'shop', image: 'ghcr.io/a/api:2', image_id: '' }, value: [1, '1793330000'] },
+          { metric: { namespace: 'shop', image_spec: 'ghcr.io/a/api:2' }, value: [1, '1793330000'] },
           { metric: { image: 'no-namespace' }, value: [1, '1'] },
         ],
       },
     };
     expect(parseSweep(body)).toEqual([
       { namespace: 'shop', version: 'ghcr.io/a/web@sha256:1', image: 'ghcr.io/a/web:1', firstSeen: new Date(1793320000 * 1000) },
-      { namespace: 'shop', version: 'ghcr.io/a/api:2', image: 'ghcr.io/a/api:2', firstSeen: new Date(1793330000 * 1000) },
     ]);
     expect(parseSweep({})).toEqual([]);
   });
