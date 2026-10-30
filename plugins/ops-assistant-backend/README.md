@@ -63,12 +63,16 @@ Inert (the page says "not configured") unless `mcpUrl`, `systemPrompt` and the m
 ```yaml
 assistantConversations:
   retentionDays: 90                  # optional: conversations not changed in this many days are deleted (daily)
+assistantUsage:
+  retentionDays: 400                 # optional: what each question consumed, kept this many days (daily purge)
+  viewAllGroups: [backstage-admin]   # optional: who sees who asked every question (the others only their own)
 ```
 
 ## API
 
 - `GET /api/ops-assistant/info` → `{enabled, allowed, model, maxSteps, title, keepDays}`
-- `POST /api/ops-assistant/chat` `{question, messages?}` → `202 {id}`: the question is being answered.
+- `POST /api/ops-assistant/chat` `{question, messages?, system?}` → `202 {id}`: the question is being answered;
+  `system` (a name of the catalog) is the one its cost is charged to.
 - `DELETE /api/ops-assistant/chat/:id` cancels it: the model request is aborted and the conversation stays as it
   was before the question.
 - `GET /api/ops-assistant/chat/:id` → `{status: running|done|error, toolCalls, elapsedMs, turn?, error?}`, where
@@ -79,6 +83,10 @@ assistantConversations:
 - `GET /api/ops-assistant/conversations` → `[{id, title, updatedAt}]`, the user's conversations with this assistant,
   the most recent first (100 at most); `GET`, `PUT {title, state}` and `DELETE` on `/conversations/:id` open, save
   and delete one. Every route also under `/<id>/` for each assistant.
+- `GET /api/ops-assistant/usage?month=YYYY-MM` → `{month, all, groups: [{assistant, user?, runner, model, system?,
+  systems, namespaces, components, questions, unreported, input, output, cacheRead, cacheWrite, ms}]}`: what the
+  assistants consumed in the month (default the current one, UTC), for the page `/costs`. Any signed-in user; `user`
+  only on their own rows unless they are in `assistantUsage.viewAllGroups` (`all: true`).
 
 ## Conversations
 
@@ -90,6 +98,15 @@ sees, changes and deletes only their own, of each assistant apart; a daily task 
 `assistantConversations.retentionDays` (90). They hold what was asked and answered, and the results of the tools,
 so they can hold personal or sensitive data: the same care as the data the assistant reads. Without the database
 the assistants still answer; the page says the conversations are not being kept.
+
+## Usage
+
+Each question answered is recorded (`src/usage.ts`, table `assistant_usage`): who, which assistant, runner and model,
+the tokens the model reported, the time, how many tools, and what it was about (the system chosen in the page, and
+the `system`, `namespace` and `project` arguments of its tool calls), never the question or the answer. The same with
+every runner and provider: Anthropic, a local model through an OpenAI-compatible server (0 tokens when the server
+does not report them) or Claude Code. The page `/costs` prices it and charges it to the system:
+`packages/app/src/components/cost/README.md` "Assistants".
 
 Every question logs one audit line (user, model, tools called, tokens, time), never the answer or the data; the MCP
 server logs every tool call with the user (`X-Refresquito-User`).

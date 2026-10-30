@@ -86,6 +86,7 @@ import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
 import { EntitySupportContent } from './EntitySupportContent';
 import { EntityCostCard } from '../cost/EntityCostCard';
+import { EntityAssistantUsageCard } from '../cost/EntityAssistantUsageCard';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
 
 // services of the stack: the catalog entities that say which namespace they run in
@@ -700,6 +701,9 @@ const systemPage = (
         </div>
         <div style={span(6)}>
           <EntityHasResourcesCard />
+        </div>
+        <div style={span(6)}>
+          <EntityAssistantUsageCard />
         </div>
       </div>
     </EntityLayout.Route>

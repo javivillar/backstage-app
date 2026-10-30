@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Content, Header, MarkdownContent, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { useSearchParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
+import MenuItem from '@mui/material/MenuItem';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
@@ -22,8 +24,11 @@ type ToolCall = { name: string; input: Record<string, unknown>; isError: boolean
 type Exchange = { question: string; job?: string; answer?: string; toolCalls?: ToolCall[]; model?: string; usage?: Record<string, number>; error?: string; ms?: number };
 type JobProgress = { toolCalls: ToolCall[]; elapsedMs: number };
 type Info = { enabled: boolean; allowed: boolean; model?: string; maxSteps?: number; title?: string; keepDays?: number };
-/** the conversation open in the page: id is its key in the backend (plugins/ops-assistant-backend/src/conversations.ts) */
-type State = { id: string; messages: Message[]; exchanges: Exchange[] };
+/**
+ * the conversation open in the page: id is its key in the backend (plugins/ops-assistant-backend/src/conversations.ts);
+ * system, the one its questions are charged to (page /costs); without it, the backend works it out from the tools
+ */
+type State = { id: string; messages: Message[]; exchanges: Exchange[]; system?: string };
 type Summary = { id: string; title: string; updatedAt: string };
 
 /**
@@ -48,6 +53,9 @@ export interface AssistantProfile {
   aboutProject?: (project: string) => { examples: string[]; prefix: string };
 }
 
+/** the choice "no system": the backend charges what the tools looked at, or the platform */
+const FROM_TOOLS = '';
+
 const POLL_MS = 2000;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 /** the page was left while waiting: the job keeps going on the backend and the page collects it when it comes back */
@@ -58,11 +66,12 @@ const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.rando
 /** a conversation id (UUID v4); randomUUID needs https, the fallback is for tests and plain http */
 const newId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `${hex(8)}-${hex(4)}-4${hex(3)}-${'89ab'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`;
-const empty = (): State => ({ id: newId(), messages: [], exchanges: [] });
+const empty = (system?: string): State => ({ id: newId(), messages: [], exchanges: [], ...(system ? { system } : {}) });
 /** what the backend lists it as: its first question */
 const titleOf = (s: State) => (s.exchanges[0]?.question ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
 /** what is saved in the backend (and compared, to save only what changed) */
-const saved = (s: State) => JSON.stringify({ messages: s.messages, exchanges: s.exchanges });
+const saved = (s: State) => JSON.stringify({ messages: s.messages, exchanges: s.exchanges, ...(s.system ? { system: s.system } : {}) });
+const systemOf = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
 
 /** the open conversation of the tab; null when the tab has none (a new tab: the page opens the last one) */
 function load(store: string): State | null {
@@ -71,7 +80,7 @@ function load(store: string): State | null {
     if (raw) {
       const s = JSON.parse(raw);
       // pages before the conversations were kept had no id
-      return { id: s.id ?? newId(), messages: s.messages ?? [], exchanges: s.exchanges ?? [] };
+      return { id: s.id ?? newId(), messages: s.messages ?? [], exchanges: s.exchanges ?? [], ...(systemOf(s.system) ? { system: s.system } : {}) };
     }
   } catch {
     // no storage: start empty
@@ -101,13 +110,18 @@ const describe = (t: ToolCall) => {
 export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
+  const catalog = useApi(catalogApiRef);
   const [params] = useSearchParams();
   const project = params.get('project')?.trim() || undefined;
+  /** the system the page was opened for (?system=<name>, or the system of ?project=<name>) */
+  const asked = params.get('system')?.trim().toLocaleLowerCase('en-US') || undefined;
+  /** the systems of the catalog, to choose the one the questions are charged to */
+  const [systems, setSystems] = useState<string[]>([]);
   const about = project && profile.aboutProject ? profile.aboutProject(project) : undefined;
   const [info, setInfo] = useState<Info | undefined>();
   const [infoError, setInfoError] = useState<string | undefined>();
   const stored = useRef(load(profile.store));
-  const [state, setState] = useState<State>(() => stored.current ?? empty());
+  const [state, setState] = useState<State>(() => stored.current ?? empty(asked));
   /** the user's conversations with this assistant (undefined while loading); why they are not kept, if so */
   const [conversations, setConversations] = useState<Summary[] | undefined>();
   const [keepError, setKeepError] = useState<string | undefined>();
@@ -140,6 +154,26 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     })().then(setInfo, e => setInfoError((e as Error).message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discovery, fetch, profile.path]);
+
+  useEffect(() => {
+    catalog
+      .getEntities({ filter: { kind: 'system' }, fields: ['metadata.name'] })
+      .then(({ items }) => setSystems(items.map(e => e.metadata.name.toLocaleLowerCase('en-US')).sort()))
+      .catch(() => setSystems([]));
+  }, [catalog]);
+
+  // opened from a project: its questions are charged to the system of the project, unless one is already chosen
+  useEffect(() => {
+    if (asked || !project) return;
+    catalog
+      .getEntities({ filter: { kind: 'component', 'metadata.name': project }, fields: ['spec.system'] })
+      .then(({ items }) => {
+        const s = items[0]?.spec?.system;
+        if (typeof s === 'string' && s)
+          setState(st => (st.system || st.exchanges.length ? st : { ...st, system: s.split('/').pop()!.toLocaleLowerCase('en-US') }));
+      })
+      .catch(() => undefined);
+  }, [catalog, asked, project]);
 
   useEffect(() => {
     save(profile.store, state);
@@ -176,7 +210,8 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     const res = await fetch(`${await api()}/conversations/${id}`);
     const c = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(c.error ?? `${res.status} ${res.statusText}`);
-    const next: State = { id, messages: c.state?.messages ?? [], exchanges: c.state?.exchanges ?? [] };
+    const sys = systemOf(c.state?.system);
+    const next: State = { id, messages: c.state?.messages ?? [], exchanges: c.state?.exchanges ?? [], ...(sys ? { system: sys } : {}) };
     lastSaved.current = saved(next);
     setState(next);
   };
@@ -203,7 +238,8 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
   }, [info]);
 
   const reset = () => {
-    const next = empty();
+    // a new conversation goes on being charged to the same system
+    const next = empty(state.system);
     lastSaved.current = saved(next);
     resumed.current = next.id;
     setState(next);
@@ -259,7 +295,7 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
     }
     current.current = undefined;
     setProgress(undefined);
-    setState(s => ({ messages: result.messages ?? s.messages, exchanges: [...s.exchanges.slice(0, -1), result.done] }));
+    setState(s => ({ ...s, messages: result.messages ?? s.messages, exchanges: [...s.exchanges.slice(0, -1), result.done] }));
     setBusy(false);
   };
 
@@ -277,7 +313,7 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
       const res = await fetch(`${base}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: text, messages: state.messages }),
+        body: JSON.stringify({ question: text, messages: state.messages, ...(state.system ? { system: state.system } : {}) }),
       });
       const begun = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(begun.error ?? `${res.status} ${res.statusText}`);
@@ -443,6 +479,26 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
             )}
           </Box>
         </Box>
+        <TextField
+          select
+          size="small"
+          label="Charge its cost to"
+          value={state.system ?? FROM_TOOLS}
+          disabled={busy}
+          onChange={e => {
+            const system = e.target.value || undefined;
+            setState(({ system: _, ...s }) => (system ? { ...s, system } : s));
+          }}
+          helperText="What each question consumes is charged to this system in Costs; without one, to what the assistant looks at."
+          sx={{ mt: 1.5, minWidth: 320 }}
+        >
+          <MenuItem value={FROM_TOOLS}>What it looks at</MenuItem>
+          {[...new Set([...systems, ...(state.system ? [state.system] : [])])].sort().map(s => (
+            <MenuItem key={s} value={s}>
+              {s}
+            </MenuItem>
+          ))}
+        </TextField>
       </Box>
       </Box>
     );

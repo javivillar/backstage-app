@@ -12,6 +12,9 @@ A namespace pays for two things:
 | **Deployments**: each new version of an image that runs in it | the backend plugin `costs` of this repo (below) | `perDeployment` |
 | **Incidents**: each incident opened on one of its elements | the application support (`GET /api/costs/incidents`, below) | `perIncident.P1` … `P4` |
 
+A **system** also pays for what the **assistants** of Backstage consumed answering questions about it (below):
+`opencost.pricing.assistants`, per million tokens or per hour of a local model.
+
 How OpenCost computes, how to set the real prices, how to install, upgrade and troubleshoot it on a cluster:
 `charts/cnoe-oneke/OPENCOST.md` of refresquito-services. This file is about the code.
 
@@ -24,6 +27,9 @@ How OpenCost computes, how to set the real prices, how to install, upgrade and t
 | `packages/app/src/components/cost/EntityCostCard.tsx` | Cost card of an entity |
 | `packages/backend/src/plugins/costs.ts` | backend plugin `costs`: the hourly sweep and `GET /api/costs/deployments` |
 | `packages/backend/src/plugins/costDeployments.ts` | the logic of deployments: Prometheus query, parser, the store (tables), months |
+| `packages/app/src/components/cost/assistantUsage.ts` | the assistants: `useAssistantUsage` (this month, plugin ops-assistant), `useSystemsIndex` (namespace/project → system), `systemsOf`, `usageCost`, `chargeBySystem`, `chargeByAssistant` |
+| `packages/app/src/components/cost/EntityAssistantUsageCard.tsx` | card "Assistants this month" in the overview of a System |
+| `plugins/ops-assistant-backend/src/usage.ts` | the record of each question (table `assistant_usage`) and `GET /api/ops-assistant/usage` |
 | `packages/app/config.d.ts` | config schema: `opencost` (visible to the frontend), `costs.prometheusUrl` (backend only) |
 
 ## What the page and the card show
@@ -115,6 +121,40 @@ not change the charge. User decisions of 2026-10-30.
   On the card, the incidents of every entity of the catalog in the same namespace are added.
 - Nothing is stored in Backstage: the support keeps the history, so any past month can be asked again.
 
+## Assistants (plugin ops-assistant)
+
+Every question answered by an assistant (ops, sec, functional, architect, developer chat) is charged to the
+**system** it was about, in the month it was asked (UTC). User decisions of 2026-10-30.
+
+- **Recorded by** the backend of the assistants (`plugins/ops-assistant-backend/src/usage.ts`, table
+  `assistant_usage` in `backstage_plugin_ops-assistant`): one row per question answered with who asked it (the
+  Backstage user, signed in with Keycloak), the assistant, runner and model, the tokens the model reported (input,
+  output, cache read, cache write), the time it took, how many tools it called, and what it was about. Never the
+  question or the answer. A question cancelled or failed is not recorded. Kept `assistantUsage.retentionDays` (400).
+- **Which system**, in this order:
+  1. the one chosen in the page of the assistant ("Charge its cost to"; preset from `?system=<name>`, or from the
+     system of `?project=<name>`), kept with the conversation;
+  2. else what its tools were asked about: the argument `system` (functional, architect, developer, sec), a
+     `namespace` (ops, sec: its system through `refresquito.io/namespace` and `spec.system` of the catalog) or a
+     `project` (sec: the `spec.system` of that Component). A question about several systems is split between them
+     in equal parts;
+  3. else the **platform** (shown as "(no system)").
+- **Price**: the first entry of `opencost.pricing.assistants` whose `model` (part of the model name, `*` any) and
+  `runner` (`api`, `claude-code`) match. Per million tokens for a model billed by use; `perHour` × the time it was
+  answering for a **local model** (llama.cpp, Ollama, vLLM through the runner `api`, `provider: local`): there the
+  tokens cost nothing and the server does. A model without a price is shown in tokens, not in money. With the runner
+  `claude-code` (the operator's Claude subscription) the tokens are real, the money is notional (a flat fee): price
+  it as you want to charge it, or at 0.
+- **Local servers that do not report tokens**: the question is recorded with 0 tokens and counted as "without
+  tokens reported"; `perHour` charges it all the same.
+- **Who sees whom**: the totals by system and assistant are the same for everyone. Who asked is shown only for the
+  person's own questions, and for everyone's to the members of `assistantUsage.viewAllGroups` (default
+  `backstage-admin`).
+- **Where**: page `/costs` (figure "Assistants this month", column "Assistants this month" and "Per month" of
+  *By system*, card *Assistants this month* by assistant and person) and the card *Assistants this month* of each
+  System. Not yet: the Developer Assistant's `develop` workflow (GitHub Actions) does not go through Backstage and
+  is not recorded.
+
 ## Configuration
 
 Rendered by cnoe-oneke (`templates/backstage-config.yaml`, values `opencost`), 0.2.62 or later:
@@ -133,6 +173,14 @@ opencost:
       P2: 25
       P3: 10
       P4: 5
+    assistants:               # optional, EXAMPLE prices: the first that matches; a model without a price is shown in tokens
+      - model: claude-opus    # part of the model name
+        inputPerMillion: 4.6
+        outputPerMillion: 23
+        cacheReadPerMillion: 0.46
+        cacheWritePerMillion: 5.75
+      - model: gpt-oss        # a local model: an hour of the server answering
+        perHour: 0.4
 costs:
   prometheusUrl: http://observability-oneke-prometheus.<prefix>observability-oneke.svc.cluster.local:9090
 ```
@@ -145,7 +193,11 @@ and answers 503.
 ```bash
 yarn --cwd packages/backend backstage-cli package test --watchAll=false src/plugins/costDeployments.test.ts
 yarn --cwd packages/app backstage-cli package test --watchAll=false src/components/cost
+yarn --cwd plugins/ops-assistant-backend backstage-cli package test --watchAll=false src/usage.test.ts
 ```
+
+`usage.test.ts` also asks a question end to end to a fake local model (OpenAI-compatible, runner `api`, no Claude
+Code) and a fake MCP server, and checks what is recorded.
 
 The store test runs on SQLite (`TestDatabases`, `better-sqlite3` must be built: `yarn install` does it): baseline, new
 and repeated versions, months in UTC, the window after a gap.
@@ -171,6 +223,10 @@ kubectl -n $NS exec deploy/cnoe-oneke-backstage-postgres -- psql -U backstage -d
   `delete from cost_deployments; delete from cost_deployments_meta;`
 - **Rows kept by tag** (before the fix of 2026-10-31, a deployment counted twice): `update cost_deployments set
   baseline = true where version not like '%@sha256:%';`
+- **What the assistants consumed this month**:
+  `kubectl -n $NS exec deploy/cnoe-oneke-backstage-postgres -- psql -U backstage -d backstage_plugin_ops-assistant -c
+  "select assistant, user_ref, model, coalesce(system, systems) as about, count(*), sum(input+output+cache_read+cache_write) as tokens
+  from assistant_usage where at >= date_trunc('month', now() at time zone 'utc') group by 1,2,3,4 order by 6 desc"`
 - **Not charge one deployment** (a mistake): `update cost_deployments set baseline = true where namespace = '…' and
   image = '…';`
 - A sweep that failed (Prometheus down) logs the error and the next one covers the gap: nothing is lost while the gap

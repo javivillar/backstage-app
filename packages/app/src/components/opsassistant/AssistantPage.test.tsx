@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderInTestApp, TestApiProvider } from '@backstage/test-utils';
 import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { AssistantPage, AssistantProfile } from './AssistantPage';
 
 const profile: AssistantProfile = {
@@ -29,9 +30,13 @@ type Kept = Record<string, { title: string; updatedAt?: string; state: unknown }
 async function render(jobs: Record<string, unknown>, kept: Kept = {}) {
   const calls: string[] = [];
   const puts: Array<{ url: string; body: any }> = [];
+  const posts: any[] = [];
   const fetch = jest.fn(async (url: string, init?: { method?: string; body?: string }) => {
     calls.push(url);
-    if (init?.method === 'POST') return json({ id: 'new' }, 202);
+    if (init?.method === 'POST') {
+      posts.push(JSON.parse(init.body!));
+      return json({ id: 'new' }, 202);
+    }
     if (url.endsWith('/conversations'))
       return json(Object.entries(kept).map(([id, c]) => ({ id, title: c.title, updatedAt: c.updatedAt ?? '2026-10-29T10:00:00Z' })));
     if (url.includes('/conversations/')) {
@@ -58,14 +63,18 @@ async function render(jobs: Record<string, unknown>, kept: Kept = {}) {
         );
   });
   const discovery = { getBaseUrl: async () => 'http://b/api/ops-assistant' };
+  // the systems of the catalog, to charge the questions to one of them
+  const catalog = { getEntities: async () => ({ items: [{ metadata: { name: 'petstore' } }, { metadata: { name: 'animalshelter' } }] }) };
   return {
     calls,
     puts,
+    posts,
     view: await renderInTestApp(
       <TestApiProvider
         apis={[
           [discoveryApiRef, discovery],
           [fetchApiRef, { fetch }],
+          [catalogApiRef, catalog],
         ]}
       >
         <AssistantPage profile={profile} />
@@ -187,5 +196,31 @@ describe('AssistantPage, the conversations kept in the backend', () => {
     await render({}, { [A]: conv('the last question', 'the last answer', '2026-10-29T10:00:00Z') });
     expect(await screen.findByText('my answer')).toBeInTheDocument();
     expect(screen.queryByText('the last answer')).not.toBeInTheDocument();
+  });
+});
+
+describe('AssistantPage, the system its cost is charged to', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    Element.prototype.scrollIntoView = jest.fn(); // not in jsdom
+  });
+
+  it('sends the system chosen with the question, and keeps it with the conversation', async () => {
+    const { posts, puts } = await render({ new: { status: 'running', toolCalls: [], elapsedMs: 10 } });
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: /Charge its cost to/ }));
+    fireEvent.click(await screen.findByRole('option', { name: 'petstore' }));
+    fireEvent.change(screen.getByPlaceholderText('Ask'), { target: { value: 'a question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await waitFor(() => expect(posts).toEqual([expect.objectContaining({ question: 'a question', system: 'petstore' })]));
+    await waitFor(() => expect(puts.some(p => p.body.state.system === 'petstore')).toBe(true));
+    expect(JSON.parse(sessionStorage.getItem(profile.store)!).system).toBe('petstore');
+  });
+
+  it('sends no system when none is chosen (the backend works it out from the tools)', async () => {
+    const { posts } = await render({ new: { status: 'running', toolCalls: [], elapsedMs: 10 } });
+    fireEvent.change(await screen.findByPlaceholderText('Ask'), { target: { value: 'a question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).not.toHaveProperty('system');
   });
 });
