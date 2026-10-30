@@ -151,9 +151,16 @@ Every question answered by an assistant (ops, sec, functional, architect, develo
   person's own questions, and for everyone's to the members of `assistantUsage.viewAllGroups` (default
   `backstage-admin`).
 - **Where**: page `/costs` (figure "Assistants this month", column "Assistants this month" and "Per month" of
-  *By system*, card *Assistants this month* by assistant and person) and the card *Assistants this month* of each
-  System. Not yet: the Developer Assistant's `develop` workflow (GitHub Actions) does not go through Backstage and
-  is not recorded.
+  *By system*, card *Assistants this month* by assistant and person), the card *Assistants this month* of each
+  System, and the figure *Assistants this month* of the Cost card of each application (Component: what was about
+  it, included in its *Per month*).
+- **The developer workflow** (`develop` of refresquito-specs, GitHub Actions) does not go through Backstage: each run
+  uploads an artifact `usage` (only figures, with who asked for it in Backstage, the system and the application
+  developed) and Backstage reads it every 30 minutes (`plugins/ops-assistant-backend/src/developerRuns.ts`, config
+  `assistantUsage.developerWorkflow`, the github.com token of `integrations.github`). It is charged to the person,
+  the **application** developed and its **system**; shown as `developer (workflow)`, runner `github-actions`, one
+  line per model Claude Code used (the time of the run on the main one). A run started by hand on GitHub is charged
+  to `github:<actor>`.
 
 ## Configuration
 

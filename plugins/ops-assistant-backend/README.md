@@ -66,6 +66,10 @@ assistantConversations:
 assistantUsage:
   retentionDays: 400                 # optional: what each question consumed, kept this many days (daily purge)
   viewAllGroups: [backstage-admin]   # optional: who sees who asked every question (the others only their own)
+  developerWorkflow:                 # optional: read the runs of the developer workflow from GitHub (every 30 min)
+    owner: javivillar
+    repo: refresquito-specs
+    workflow: develop.yml            # default
 ```
 
 ## API
@@ -105,7 +109,9 @@ Each question answered is recorded (`src/usage.ts`, table `assistant_usage`): wh
 the tokens the model reported, the time, how many tools, and what it was about (the system chosen in the page, and
 the `system`, `namespace` and `project` arguments of its tool calls), never the question or the answer. The same with
 every runner and provider: Anthropic, a local model through an OpenAI-compatible server (0 tokens when the server
-does not report them) or Claude Code. The page `/costs` prices it and charges it to the system:
+does not report them) or Claude Code. The runs of the developer workflow (GitHub Actions) are read from their artifact
+`usage` (`src/developerRuns.ts`, each run once: table `assistant_usage_sources`). The page `/costs` prices it and
+charges it to the system:
 `packages/app/src/components/cost/README.md` "Assistants".
 
 Every question logs one audit line (user, model, tools called, tokens, time), never the answer or the data; the MCP

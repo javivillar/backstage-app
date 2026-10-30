@@ -139,16 +139,36 @@ export function chargeBySystem(usage: MonthUsage, index: SystemsIndex, prices: A
   return { bySystem, total };
 }
 
+/** how an assistant is named: the runs of the developer workflow (GitHub Actions) apart from its chat */
+export const assistantLabel = (g: Pick<UsageGroup, 'assistant' | 'runner'>) =>
+  g.runner === 'github-actions' ? `${g.assistant} (workflow)` : g.assistant;
+
 /** the month by assistant and user (who: only the viewer's own, unless the viewer may see everyone's) */
 export function chargeByAssistant(usage: MonthUsage, prices: AssistantPrice[] | undefined) {
   const m = new Map<string, Charge & { assistant: string; user?: string; models: Set<string> }>();
   for (const g of usage.groups) {
-    const key = `${g.assistant}\u0000${g.user ?? ''}`;
-    const prev = m.get(key) ?? { ...zero(), assistant: g.assistant, user: g.user, models: new Set<string>() };
+    const assistant = assistantLabel(g);
+    const key = `${assistant}\u0000${g.user ?? ''}`;
+    const prev = m.get(key) ?? { ...zero(), assistant, user: g.user, models: new Set<string>() };
     prev.models.add(g.model);
-    m.set(key, { ...add(prev, 1, g, usageCost(g, prices)), assistant: g.assistant, user: g.user, models: prev.models });
+    m.set(key, { ...add(prev, 1, g, usageCost(g, prices)), assistant, user: g.user, models: prev.models });
   }
   return [...m.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0) || b.tokens - a.tokens);
+}
+
+/**
+ * the month charged to one application (a Component of the catalog): the questions and runs whose tools or workflow
+ * were about it (a run of the developer workflow is always about the application it develops), split in equal parts
+ * when about several; undefined when nothing was
+ */
+export function chargeOfComponent(usage: MonthUsage, component: string, prices: AssistantPrice[] | undefined): Charge | undefined {
+  const name = component.toLocaleLowerCase('en-US');
+  let c: Charge | undefined;
+  for (const g of usage.groups) {
+    if (!g.components.includes(name)) continue;
+    c = add(c ?? zero(), 1 / g.components.length, g, usageCost(g, prices));
+  }
+  return c;
 }
 
 /** "1.2 M", "35 k", "900" */

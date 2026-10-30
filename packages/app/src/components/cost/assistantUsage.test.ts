@@ -1,4 +1,4 @@
-import { chargeByAssistant, chargeBySystem, parseUsage, PLATFORM, priceOf, systemsOf, tokens, usageCost, type UsageGroup } from './assistantUsage';
+import { chargeByAssistant, chargeBySystem, chargeOfComponent, parseUsage, PLATFORM, priceOf, systemsOf, tokens, usageCost, type UsageGroup } from './assistantUsage';
 
 const g = (o: Partial<UsageGroup>): UsageGroup => ({
   assistant: 'functional',
@@ -66,5 +66,17 @@ describe('the cost of the assistants', () => {
     ]);
     expect(tokens(1_234_567)).toBe('1.2 M');
     expect(tokens(35_400)).toBe('35 k');
+  });
+});
+
+describe('the runs of the developer workflow', () => {
+  it('are charged to the application developed and to its system, apart from the chat', () => {
+    const run = g({ assistant: 'developer', runner: 'github-actions', system: 'animalshelter', components: ['animalshelter'] });
+    const chat = g({ assistant: 'sec', components: ['animalshelter', 'petstore'] });
+    const usage = parseUsage({ month: '2026-10', all: true, groups: [run, chat] });
+    expect(chargeOfComponent(usage, 'Animalshelter', prices)!.cost).toBeCloseTo(8.5 + 8.5 / 2);
+    expect(chargeOfComponent(usage, 'orders', prices)).toBeUndefined();
+    expect(systemsOf(run, index)).toEqual(['animalshelter']);
+    expect(chargeByAssistant(usage, prices).map(r => r.assistant)).toEqual(['developer (workflow)', 'sec']);
   });
 });
