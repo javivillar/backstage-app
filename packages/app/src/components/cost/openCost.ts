@@ -94,6 +94,8 @@ export type Pricing = {
   cpuPerCoreHour?: number;
   ramPerGiBHour?: number;
   storagePerGiBHour?: number;
+  /** what each deployment (a new version of an image in the namespace) costs */
+  perDeployment?: number;
 };
 
 /** the currency and the prices (app-config opencost); EUR when not configured */
@@ -106,15 +108,17 @@ export function usePricing(): Pricing {
     cpuPerCoreHour: c?.getOptionalNumber('pricing.cpuPerCoreHour'),
     ramPerGiBHour: c?.getOptionalNumber('pricing.ramPerGiBHour'),
     storagePerGiBHour: c?.getOptionalNumber('pricing.storagePerGiBHour'),
+    perDeployment: c?.getOptionalNumber('pricing.perDeployment'),
   };
 }
 
-/** "0.0205 €/vCPU·h · 0.0027 €/GiB·h of memory · 0.0001 €/GiB·h of disk" */
+/** "0.0205 €/vCPU·h · 0.0027 €/GiB·h of memory · 0.0001 €/GiB·h of disk · 0.5 €/deployment" */
 export function describePrices(p: Pricing) {
   const parts = [
     p.cpuPerCoreHour !== undefined ? `${p.cpuPerCoreHour} ${p.currency}/vCPU·h` : undefined,
     p.ramPerGiBHour !== undefined ? `${p.ramPerGiBHour} ${p.currency}/GiB·h of memory` : undefined,
     p.storagePerGiBHour !== undefined ? `${p.storagePerGiBHour} ${p.currency}/GiB·h of disk` : undefined,
+    p.perDeployment !== undefined ? `${p.perDeployment} ${p.currency}/deployment` : undefined,
   ].filter(Boolean);
   return parts.join(' · ');
 }
@@ -142,6 +146,52 @@ export function useAllocations() {
       return { week, day };
     })().then(
       v => !cancelled && setState({ loading: false, ...v }),
+      error => !cancelled && setState({ loading: false, error }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [discovery, fetch]);
+  return state;
+}
+
+/**
+ * The deployments of a month (backend plugin costs of packages/backend: a new version of an image in a namespace, kept
+ * in the database of Backstage). What is deployed is charged at pricing.perDeployment.
+ */
+export type NamespaceDeployments = { count: number; versions: { image: string; firstSeen: string }[] };
+export type MonthDeployments = { month: string; trackedSince?: string; byNamespace: Map<string, NamespaceDeployments> };
+
+export function parseDeployments(body: any): MonthDeployments {
+  const byNamespace = new Map<string, NamespaceDeployments>();
+  for (const [ns, d] of Object.entries((body?.namespaces ?? {}) as Record<string, any>)) {
+    const versions = Array.isArray(d?.versions) ? d.versions.filter((v: any) => typeof v?.image === 'string') : [];
+    byNamespace.set(ns, { count: num(d?.count), versions });
+  }
+  return {
+    month: typeof body?.month === 'string' ? body.month : '',
+    trackedSince: typeof body?.trackedSince === 'string' ? body.trackedSince : undefined,
+    byNamespace,
+  };
+}
+
+/** what the deployments of a namespace cost; undefined without a price */
+export const deploymentsCost = (count: number | undefined, p: Pricing) =>
+  p.perDeployment === undefined ? undefined : (count ?? 0) * p.perDeployment;
+
+/** the deployments of the current month; error when they are not counted (the page then shows the rest) */
+export function useDeployments() {
+  const discovery = useApi(discoveryApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const [state, setState] = useState<{ loading: boolean; value?: MonthDeployments; error?: Error }>({ loading: true });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`${await discovery.getBaseUrl('costs')}/deployments`);
+      if (!res.ok) throw new Error(`the deployments answered ${res.status} ${res.statusText}`);
+      return parseDeployments(await res.json());
+    })().then(
+      value => !cancelled && setState({ loading: false, value }),
       error => !cancelled && setState({ loading: false, error }),
     );
     return () => {

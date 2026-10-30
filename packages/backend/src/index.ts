@@ -50,6 +50,8 @@ backend.add(import('@backstage/plugin-techdocs-backend'));
 backend.add(import('@backstage/plugin-user-settings-backend'));
 // the live topology of the platform, published by the OpenNebula host (page Topology)
 backend.add(import('./plugins/topology'));
+// the deployments of each namespace (new image versions), charged in its cost (page Costs)
+backend.add(import('./plugins/costs'));
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));

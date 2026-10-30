@@ -53,7 +53,16 @@ export interface Config {
       cpuPerCoreHour?: number;
       ramPerGiBHour?: number;
       storagePerGiBHour?: number;
+      /** charged once per deployment: a new version of an image running in a namespace (backend plugin costs) */
+      perDeployment?: number;
     };
+  };
+  /**
+   * Deployments of each namespace (backend plugin costs of packages/backend): the Prometheus that scrapes
+   * kube-state-metrics. Without it deployments are not counted.
+   */
+  costs?: {
+    prometheusUrl?: string;
   };
   /**
    * Tech Radar shown at /tech-radar: technologies and where the organization stands on each.
