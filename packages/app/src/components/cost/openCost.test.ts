@@ -1,4 +1,4 @@
-import { efficiency, IDLE, money, parseAllocations, perMonth } from './openCost';
+import { deploymentsCost, efficiency, IDLE, money, parseAllocations, parseDeployments, perMonth } from './openCost';
 
 // the shape of GET /allocation/compute?aggregate=namespace&accumulate=true of OpenCost 1.121
 const body = {
@@ -58,5 +58,21 @@ describe('figures', () => {
     expect(money(2.05, 'EUR')).toMatch(/2,05/);
     expect(money(1234, 'EUR')).toMatch(/1\.?234/);
     expect(money(undefined, 'EUR')).toBe('—');
+  });
+});
+
+describe('deployments', () => {
+  it('parses the month and prices it', () => {
+    const d = parseDeployments({
+      month: '2026-10',
+      trackedSince: '2026-10-30T07:00:00.000Z',
+      namespaces: { shop: { count: 2, versions: [{ image: 'web:1', firstSeen: 'x' }, { image: 'web:2', firstSeen: 'y' }, { bad: 1 }] } },
+    });
+    expect(d.month).toBe('2026-10');
+    expect(d.byNamespace.get('shop')).toEqual({ count: 2, versions: [{ image: 'web:1', firstSeen: 'x' }, { image: 'web:2', firstSeen: 'y' }] });
+    expect(parseDeployments(null).byNamespace.size).toBe(0);
+    expect(deploymentsCost(3, { currency: 'EUR', perDeployment: 0.5 })).toBe(1.5);
+    expect(deploymentsCost(undefined, { currency: 'EUR', perDeployment: 0.5 })).toBe(0);
+    expect(deploymentsCost(3, { currency: 'EUR' })).toBeUndefined();
   });
 });
