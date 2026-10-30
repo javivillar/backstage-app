@@ -59,8 +59,9 @@ kube-state-metrics, one series per container; init containers are not in it). Th
 since the last sweep plus 5 minutes after a gap, at most 14 days (Prometheus keeps 15); step 1m, or 5m for windows
 over 3 hours. Measured on nato/sirtap: 1 hour 0.4 s, 14 days 15 s (the fetch gives up at 60 s).
 
-**What a version is.** The digest the node pulled (`image_id`, e.g. `ghcr.io/x/web@sha256:…`); while a container has
-not started yet, the image with its tag (`image_spec`). So:
+**What a version is.** The digest the node pulled (`image_id`, e.g. `ghcr.io/x/web@sha256:…`). A container that has
+not started yet has no digest and is skipped until it runs (before 2026-10-31 it was kept by its tag, so each
+deployment counted twice: see "Operating it" to clean those rows). So:
 
 | Event | Deployment? |
 |---|---|
@@ -168,6 +169,8 @@ kubectl -n $NS exec deploy/cnoe-oneke-backstage-postgres -- psql -U backstage -d
 - **Start counting again from now** (e.g. after test deployments): delete both tables' rows; the next sweep is a new
   baseline.
   `delete from cost_deployments; delete from cost_deployments_meta;`
+- **Rows kept by tag** (before the fix of 2026-10-31, a deployment counted twice): `update cost_deployments set
+  baseline = true where version not like '%@sha256:%';`
 - **Not charge one deployment** (a mistake): `update cost_deployments set baseline = true where namespace = '…' and
   image = '…';`
 - A sweep that failed (Prometheus down) logs the error and the next one covers the gap: nothing is lost while the gap
