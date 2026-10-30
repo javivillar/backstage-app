@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { InfoCard, Link, Progress, WarningPanel } from '@backstage/core-components';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import { money, usePricing } from './openCost';
-import { systemsOf, tokens, tokensOf, usageCost, useAssistantUsage, userName, useSystemsIndex } from './assistantUsage';
+import { assistantLabel, systemsOf, tokens, tokensOf, usageCost, useAssistantUsage, userName, useSystemsIndex } from './assistantUsage';
 
 /**
  * What the assistants consumed this month about a system (its page): the questions charged to it (chosen in the page
@@ -22,8 +22,9 @@ export const EntityAssistantUsageCard = () => {
       if (!systems.includes(system)) continue;
       const share = 1 / systems.length;
       const cost = usageCost(g, pricing.assistants);
-      const key = `${g.assistant}\u0000${g.user ?? ''}`;
-      const prev = m.get(key) ?? { assistant: g.assistant, user: g.user, questions: 0, tokens: 0 };
+      const assistant = assistantLabel(g);
+      const key = `${assistant}\u0000${g.user ?? ''}`;
+      const prev = m.get(key) ?? { assistant, user: g.user, questions: 0, tokens: 0 };
       m.set(key, {
         ...prev,
         questions: prev.questions + g.questions * share,

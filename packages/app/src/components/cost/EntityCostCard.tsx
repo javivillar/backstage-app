@@ -22,6 +22,7 @@ import {
   useIncidentCounts,
   usePricing,
 } from './openCost';
+import { chargeOfComponent, tokens, useAssistantUsage } from './assistantUsage';
 
 /** the references (lowercase) of every entity of the catalog in a namespace: its incidents are the namespace's */
 function useRefsOfNamespace(ns: string) {
@@ -60,6 +61,12 @@ export const EntityCostCard = () => {
   const deployments = useDeployments();
   const incidents = useIncidentCounts();
   const refs = useRefsOfNamespace(ns);
+  const usage = useAssistantUsage();
+  // what the assistants consumed about this application (its development by the developer workflow, its questions)
+  const assistants = useMemo(
+    () => (usage.value && entity.kind === 'Component' ? chargeOfComponent(usage.value, entity.metadata.name, pricing.assistants) : undefined),
+    [usage.value, entity.kind, entity.metadata.name, pricing.assistants],
+  );
   const ownRef = stringifyEntityRef(entity).toLocaleLowerCase('en-US');
   const nsIncidents: ByPriority | undefined = useMemo(() => {
     if (!incidents.value) return undefined;
@@ -84,10 +91,18 @@ export const EntityCostCard = () => {
       const deployCost = deployments.value ? deploymentsCost(deploys?.count, pricing) : undefined;
       const resources = perMonth(d);
       const incidentCost = nsIncidents ? incidentsCost(nsIncidents, pricing) : undefined;
+      const assistantCost = assistants?.cost;
       const month =
-        resources === undefined && deployCost === undefined && incidentCost === undefined
+        resources === undefined && deployCost === undefined && incidentCost === undefined && assistantCost === undefined
           ? undefined
-          : (resources ?? 0) + (deployCost ?? 0) + (incidentCost ?? 0);
+          : (resources ?? 0) + (deployCost ?? 0) + (incidentCost ?? 0) + (assistantCost ?? 0);
+      let assistantNote: string;
+      if (usage.loading) assistantNote = 'counting…';
+      else if (usage.error) assistantNote = 'not recorded in this installation';
+      else if (!assistants) assistantNote = 'nothing about this application this month';
+      else assistantNote = `${Math.round(assistants.questions)} questions or runs · ${tokens(assistants.tokens)} tokens`;
+      let assistantValue = '—';
+      if (assistants) assistantValue = assistantCost !== undefined ? money(assistantCost, pricing.currency) : `${tokens(assistants.tokens)} tokens`;
       let incidentNote: string;
       if (incidents.loading) incidentNote = 'counting…';
       else if (incidents.error) incidentNote = `not available: ${incidents.error.message}`;
@@ -109,13 +124,14 @@ export const EntityCostCard = () => {
             label="Per month"
             value={money(month, pricing.currency)}
             note={
-              deployCost || incidentCost
-                ? 'resources at the pace of the last 24 hours + deployments and incidents of this month'
+              deployCost || incidentCost || assistantCost
+                ? 'resources at the pace of the last 24 hours + deployments, incidents and assistants of this month'
                 : 'at the pace of the last 24 hours'
             }
           />
           <Figure label="Deployments this month" value={deployments.value ? String(deploys?.count ?? 0) : '—'} note={deployNote} />
           <Figure label="Incidents this month" value={nsIncidents ? String(incidentCount(nsIncidents)) : '—'} note={incidentNote} />
+          <Figure label="Assistants this month" value={assistantValue} note={assistantNote} />
           <Figure
             label="CPU used of reserved"
             value={pct(cpu)}
@@ -141,7 +157,8 @@ export const EntityCostCard = () => {
       <div style={{ marginTop: 12, fontSize: '0.8rem', opacity: 0.7 }}>
         Reserved = what its pods request; what is reserved and not used is paid all the same. A deployment is a new version
         of an image running in the namespace; an incident, one opened on an element of the namespace, at the price of its
-        priority. <Link to="/costs">Compare with the others</Link>.
+        priority. Assistants: what they consumed about this application, its development by the developer workflow
+        included. <Link to="/costs">Compare with the others</Link>.
       </div>
     </InfoCard>
   );

@@ -3,6 +3,7 @@ import express from 'express';
 import { mayUse } from './access';
 import { createAssistantRouter } from './assistant';
 import { ConversationStore, DEFAULT_RETENTION_DAYS, ensureTable } from './conversations';
+import { DeveloperRuns, sweepDeveloperRuns } from './developerRuns';
 import { currentMonth, DEFAULT_USAGE_RETENTION_DAYS, ensureUsageTable, UsageStore } from './usage';
 
 /** an assistant id: its routes, the name of its MCP server for Claude Code, its logs */
@@ -28,6 +29,8 @@ const ID = /^[a-z][a-z0-9]{1,15}$/;
  *
  * What each question consumed (who, which assistant and model, its tokens, which system it was about) is recorded too
  * (src/usage.ts), `assistantUsage.retentionDays` (default 400), for the page /costs:
+ * The runs of the developer workflow (GitHub Actions) are read from GitHub every 30 minutes (src/developerRuns.ts,
+ * assistantUsage.developerWorkflow: {owner, repo, workflow}).
  *   GET /api/ops-assistant/usage?month=YYYY-MM   {month, all, groups}   (signed-in users; who asked is shown only for
  *       their own questions, or for everyone's to the members of assistantUsage.viewAllGroups, default backstage-admin)
  */
@@ -84,6 +87,34 @@ export const opsAssistantPlugin = createBackendPlugin({
           });
         } catch (e) {
           logger.error(`ops-assistant: what the assistants consume is not recorded: ${(e as Error).message}`);
+        }
+        // the runs of the developer workflow (GitHub Actions) do not go through Backstage: read from GitHub
+        const wf = config.getOptionalConfig('assistantUsage.developerWorkflow');
+        const githubToken = config
+          .getOptionalConfigArray('integrations.github')
+          ?.find(h => (h.getOptionalString('host') ?? 'github.com') === 'github.com')
+          ?.getOptionalString('token');
+        if (usage && wf && githubToken) {
+          const settings = {
+            owner: wf.getString('owner'),
+            repo: wf.getString('repo'),
+            workflow: wf.getOptionalString('workflow') ?? 'develop.yml',
+            token: githubToken,
+          };
+          const runs = new DeveloperRuns(settings);
+          const store = usage;
+          await scheduler.scheduleTask({
+            id: 'ops-assistant-developer-runs',
+            frequency: { minutes: 30 },
+            timeout: { minutes: 10 },
+            initialDelay: { minutes: 3 },
+            fn: async () => {
+              const r = await sweepDeveloperRuns(runs, settings, store);
+              logger.info(`ops-assistant: developer runs swept, ${r.runs} new with usage (${r.rows} rows)`);
+            },
+          });
+        } else if (wf) {
+          logger.warn('ops-assistant: assistantUsage.developerWorkflow needs the database and a github.com token in integrations.github');
         }
         const viewAll = config.getOptionalStringArray('assistantUsage.viewAllGroups') ?? ['backstage-admin'];
         const deps = { httpAuth, userInfo, logger, conversations, keepDays: days, usage };

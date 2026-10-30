@@ -22,6 +22,8 @@ import type { Knex } from 'knex';
 import type { ToolCallRecord } from './agent';
 
 export const USAGE_TABLE = 'assistant_usage';
+/** what was recorded from outside a question (a run of the developer workflow): each one once */
+export const SOURCES_TABLE = 'assistant_usage_sources';
 export const DEFAULT_USAGE_RETENTION_DAYS = 400;
 /** a system, a namespace or a project name, as the catalog and Kubernetes name them */
 export const SUBJECT = /^[a-z0-9]([a-z0-9._-]{0,251}[a-z0-9])?$/;
@@ -90,6 +92,12 @@ export function subjectsOf(calls: ToolCallRecord[]): Subjects {
 }
 
 export async function ensureUsageTable(knex: Knex): Promise<void> {
+  if (!(await knex.schema.hasTable(SOURCES_TABLE))) {
+    await knex.schema.createTable(SOURCES_TABLE, t => {
+      t.string('source', 255).primary();
+      t.timestamp('at', { useTz: true }).notNullable();
+    });
+  }
   if (await knex.schema.hasTable(USAGE_TABLE)) return;
   await knex.schema.createTable(USAGE_TABLE, t => {
     t.increments('id');
@@ -133,11 +141,11 @@ export const currentMonth = (now = new Date()) => now.toISOString().slice(0, 7);
 export class UsageStore {
   constructor(private readonly knex: Knex) {}
 
-  async record(r: UsageRow): Promise<void> {
+  async record(r: UsageRow, db: Knex = this.knex): Promise<void> {
     const u = r.usage ?? {};
     const input = n(u.input);
     const output = n(u.output);
-    await this.knex(USAGE_TABLE).insert({
+    await db(USAGE_TABLE).insert({
       at: r.at,
       assistant: r.assistant,
       user_ref: r.user.slice(0, 255),
@@ -200,9 +208,25 @@ export class UsageStore {
     return { month, all, groups };
   }
 
+  /** whether a source (e.g. a run of a workflow) was already recorded */
+  async seen(source: string): Promise<boolean> {
+    return !!(await this.knex(SOURCES_TABLE).where({ source }).first());
+  }
+
+  /** records the rows of a source once: false (and nothing recorded) when it was already */
+  async recordSource(source: string, rows: UsageRow[], now = new Date()): Promise<boolean> {
+    return this.knex.transaction(async tx => {
+      if (await tx(SOURCES_TABLE).where({ source }).first()) return false;
+      await tx(SOURCES_TABLE).insert({ source: source.slice(0, 255), at: now });
+      for (const r of rows) await this.record(r, tx);
+      return true;
+    });
+  }
+
   /** deletes the rows older than `days`; how many */
   async purge(days: number, now = new Date()): Promise<number> {
     const before = new Date(now.getTime() - days * 24 * 3600 * 1000);
+    await this.knex(SOURCES_TABLE).where('at', '<', before).delete();
     return this.knex(USAGE_TABLE).where('at', '<', before).delete();
   }
 }
