@@ -10,6 +10,7 @@ A namespace pays for two things:
 |---|---|---|
 | **Resources**: CPU, memory and disk it reserves or uses | OpenCost (chart cnoe-oneke), read through the proxy `/opencost` | `cpuPerCoreHour`, `ramPerGiBHour`, `storagePerGiBHour` |
 | **Deployments**: each new version of an image that runs in it | the backend plugin `costs` of this repo (below) | `perDeployment` |
+| **Incidents**: each incident opened on one of its elements | the application support (`GET /api/costs/incidents`, below) | `perIncident.P1` … `P4` |
 
 How OpenCost computes, how to set the real prices, how to install, upgrade and troubleshoot it on a cluster:
 `charts/cnoe-oneke/OPENCOST.md` of refresquito-services. This file is about the code.
@@ -18,7 +19,7 @@ How OpenCost computes, how to set the real prices, how to install, upgrade and t
 
 | File | What |
 |---|---|
-| `packages/app/src/components/cost/openCost.ts` | types, parsers and hooks: `useAllocations` (OpenCost, windows 7d and 24h), `useDeployments` (this month), `usePricing`, `deploymentsCost`, `money` |
+| `packages/app/src/components/cost/openCost.ts` | types, parsers and hooks: `useAllocations` (OpenCost, windows 7d and 24h), `useDeployments` (this month), `useIncidentCounts` (this month, from the support), `usePricing`, `deploymentsCost`, `incidentsCost`, `money` |
 | `packages/app/src/components/cost/CostsPage.tsx` | page `/costs`: the cluster, by system (`spec.system` of the entity), by namespace |
 | `packages/app/src/components/cost/EntityCostCard.tsx` | Cost card of an entity |
 | `packages/backend/src/plugins/costs.ts` | backend plugin `costs`: the hourly sweep and `GET /api/costs/deployments` |
@@ -29,10 +30,15 @@ How OpenCost computes, how to set the real prices, how to install, upgrade and t
 
 - **Last 7 days**: OpenCost, `window=7d`.
 - **Per month**: the resources of the last 24 hours × 30.4, **plus** the deployments of the current month ×
-  `perDeployment`. Without a price per deployment, only the resources.
+  `perDeployment`, **plus** the incidents of the current month × the price of their priority. What has no price is
+  left out.
 - **Deployments this month**: how many, what they cost and (card) the last version; on the page, hovering the number
   of a namespace lists its versions. "not counted in this installation" when the plugin answers an error (no
   `costs.prometheusUrl`, no database): the rest of the page works the same.
+- **Incidents this month**: how many were opened on the elements of the namespace, by priority, and what they cost;
+  on the page the cluster figure also says how many are on elements without a namespace (the platform itself,
+  `system:default/refresquito`): counted in the total, not in any namespace. "not available: …" when the support
+  cannot be read (not deployed, no Keycloak session, the person has no role in it): the rest of the page works.
 - CPU / memory **used of reserved**: average used ÷ average requested (what is reserved and not used is paid too).
 
 ## Deployments (backend plugin `costs`)
@@ -89,6 +95,25 @@ GET /api/costs/deployments?month=YYYY-MM          (default: the current month; m
 `400` for a bad month, `503` when deployments are not counted (no `costs.prometheusUrl` or no database), `401`
 without a session. Baseline rows are never returned.
 
+## Incidents (application support)
+
+Each incident opened on an element of the catalog is charged to the namespace of that element, at the price of its
+priority, **in the month it was opened** (UTC); what happens to it later (resolved, reopened, a new priority) does
+not change the charge. User decisions of 2026-10-30.
+
+- **Source**: the application support keeps the incidents; `GET /api/costs/incidents?month=YYYY-MM` (support 0.4.0
+  or later) answers how many were opened on each element, by priority: `{month, elements: [{ref, priority, count}]}`.
+  Only counts, no title or person, so any person with a role in the support reads it (the incidents themselves
+  stay visible only to their requester and the support team). Only incidents, not changes.
+- **Where the support is and how it is called**: as the tab Incidents (`components/catalog/EntitySupportContent.tsx`):
+  the URL is the annotation `refresquito.io/url` of the deployment of the application `support` in the catalog (pro,
+  then pre, then dev), and the call is made in the browser with the Keycloak token of the person
+  (`keycloakOIDCAuthApiRef`; the support trusts the client `backstage`, python-app-oneke `sso.fromBackstage`).
+- **Element → namespace**: the reference of the element is the reference of the entity in the catalog
+  (`component:default/petstore-oneke`); its namespace is the annotation `refresquito.io/namespace` of that entity.
+  On the card, the incidents of every entity of the catalog in the same namespace are added.
+- Nothing is stored in Backstage: the support keeps the history, so any past month can be asked again.
+
 ## Configuration
 
 Rendered by cnoe-oneke (`templates/backstage-config.yaml`, values `opencost`), 0.2.62 or later:
@@ -102,6 +127,11 @@ opencost:
     ramPerGiBHour: 0.0027
     storagePerGiBHour: 0.0001
     perDeployment: 0.5        # optional: without it deployments are counted and shown, not priced
+    perIncident:              # optional, by priority; a priority without a price costs 0
+      P1: 50
+      P2: 25
+      P3: 10
+      P4: 5
 costs:
   prometheusUrl: http://observability-oneke-prometheus.<prefix>observability-oneke.svc.cluster.local:9090
 ```

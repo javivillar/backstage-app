@@ -1,4 +1,4 @@
-import { deploymentsCost, efficiency, IDLE, money, parseAllocations, parseDeployments, perMonth } from './openCost';
+import { addCounts, deploymentsCost, describeCounts, efficiency, IDLE, incidentCount, incidentsCost, money, parseAllocations, parseDeployments, parseIncidentCounts, perMonth } from './openCost';
 
 // the shape of GET /allocation/compute?aggregate=namespace&accumulate=true of OpenCost 1.121
 const body = {
@@ -74,5 +74,30 @@ describe('deployments', () => {
     expect(deploymentsCost(3, { currency: 'EUR', perDeployment: 0.5 })).toBe(1.5);
     expect(deploymentsCost(undefined, { currency: 'EUR', perDeployment: 0.5 })).toBe(0);
     expect(deploymentsCost(3, { currency: 'EUR' })).toBeUndefined();
+  });
+});
+
+describe('incidents', () => {
+  it('parses the counts by element, adds them and prices them by priority', () => {
+    const m = parseIncidentCounts({
+      month: '2026-10',
+      elements: [
+        { ref: 'component:default/Petstore-oneke', priority: 'P1', count: 2 },
+        { ref: 'component:default/petstore-oneke', priority: 'P3', count: 1 },
+        { ref: 'system:default/refresquito', priority: 'P2', count: 1 },
+        { ref: 'x', priority: 'P9', count: 5 },
+      ],
+    });
+    expect(m.get('component:default/petstore-oneke')).toEqual({ P1: 2, P3: 1 });
+    expect(m.size).toBe(2);
+    const all = addCounts(m.get('component:default/petstore-oneke')!, m.get('system:default/refresquito')!);
+    expect(all).toEqual({ P1: 2, P2: 1, P3: 1 });
+    expect(incidentCount(all)).toBe(4);
+    expect(describeCounts(all)).toBe('P1 2 · P2 1 · P3 1');
+    const pricing = { currency: 'EUR', perIncident: { P1: 50, P2: 20, P3: 5 } };
+    expect(incidentsCost(all, pricing)).toBe(125);
+    expect(incidentsCost({ P4: 3 }, pricing)).toBe(0); // no price for P4
+    expect(incidentsCost(all, { currency: 'EUR' })).toBeUndefined();
+    expect(parseIncidentCounts(undefined).size).toBe(0);
   });
 });

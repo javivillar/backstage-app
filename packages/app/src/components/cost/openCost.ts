@@ -1,4 +1,7 @@
 import { configApiRef, discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import { keycloakOIDCAuthApiRef } from '@internal/plugin-keycloak';
+import { SUPPORT_APPLICATION, supportUrl } from '../catalog/EntitySupportContent';
 import { useEffect, useState } from 'react';
 
 /**
@@ -96,7 +99,24 @@ export type Pricing = {
   storagePerGiBHour?: number;
   /** what each deployment (a new version of an image in the namespace) costs */
   perDeployment?: number;
+  /** what each incident opened on an element of the namespace costs, by its priority */
+  perIncident?: ByPriority;
 };
+
+export const PRIORITIES = ['P1', 'P2', 'P3', 'P4'] as const;
+export type Priority = (typeof PRIORITIES)[number];
+/** a number for each priority: how many incidents, or the price of one */
+export type ByPriority = Partial<Record<Priority, number>>;
+
+function perIncidentOf(c?: { getOptionalNumber(key: string): number | undefined }): ByPriority | undefined {
+  if (!c) return undefined;
+  const prices: ByPriority = {};
+  for (const p of PRIORITIES) {
+    const v = c.getOptionalNumber(p);
+    if (v !== undefined) prices[p] = v;
+  }
+  return Object.keys(prices).length ? prices : undefined;
+}
 
 /** the currency and the prices (app-config opencost); EUR when not configured */
 export function usePricing(): Pricing {
@@ -109,6 +129,7 @@ export function usePricing(): Pricing {
     ramPerGiBHour: c?.getOptionalNumber('pricing.ramPerGiBHour'),
     storagePerGiBHour: c?.getOptionalNumber('pricing.storagePerGiBHour'),
     perDeployment: c?.getOptionalNumber('pricing.perDeployment'),
+    perIncident: perIncidentOf(c?.getOptionalConfig('pricing.perIncident')),
   };
 }
 
@@ -119,6 +140,9 @@ export function describePrices(p: Pricing) {
     p.ramPerGiBHour !== undefined ? `${p.ramPerGiBHour} ${p.currency}/GiB·h of memory` : undefined,
     p.storagePerGiBHour !== undefined ? `${p.storagePerGiBHour} ${p.currency}/GiB·h of disk` : undefined,
     p.perDeployment !== undefined ? `${p.perDeployment} ${p.currency}/deployment` : undefined,
+    p.perIncident
+      ? `${PRIORITIES.filter(k => p.perIncident![k] !== undefined).map(k => `${k} ${p.perIncident![k]}`).join(' / ')} ${p.currency}/incident`
+      : undefined,
   ].filter(Boolean);
   return parts.join(' · ');
 }
@@ -198,5 +222,72 @@ export function useDeployments() {
       cancelled = true;
     };
   }, [discovery, fetch]);
+  return state;
+}
+
+/**
+ * The incidents opened this month on each element of the catalog, by priority: the application support
+ * (GET /api/costs/incidents), read in the browser with the Keycloak token of the person, as the tab Incidents does.
+ * Each one is charged to the namespace of its element at pricing.perIncident of its priority.
+ */
+export function parseIncidentCounts(body: any): Map<string, ByPriority> {
+  const out = new Map<string, ByPriority>();
+  const rows: unknown[] = Array.isArray(body?.elements) ? body.elements : [];
+  for (const row of rows as any[]) {
+    const ref = typeof row?.ref === 'string' ? row.ref.toLocaleLowerCase('en-US') : '';
+    const p = row?.priority as Priority;
+    if (!ref || !PRIORITIES.includes(p)) continue;
+    const counts = out.get(ref) ?? {};
+    counts[p] = (counts[p] ?? 0) + num(row?.count);
+    out.set(ref, counts);
+  }
+  return out;
+}
+
+export const addCounts = (a: ByPriority, b: ByPriority): ByPriority => {
+  const out: ByPriority = { ...a };
+  for (const p of PRIORITIES) if (b[p]) out[p] = (out[p] ?? 0) + b[p]!;
+  return out;
+};
+
+export const incidentCount = (c?: ByPriority) => PRIORITIES.reduce((s, p) => s + (c?.[p] ?? 0), 0);
+
+/** what the incidents cost at the price of their priority; undefined without prices (a priority without price: 0) */
+export const incidentsCost = (c: ByPriority | undefined, p: Pricing) =>
+  p.perIncident === undefined ? undefined : PRIORITIES.reduce((s, k) => s + (c?.[k] ?? 0) * (p.perIncident![k] ?? 0), 0);
+
+/** "P1 1 · P3 2" */
+export const describeCounts = (c?: ByPriority) =>
+  PRIORITIES.filter(p => c?.[p]).map(p => `${p} ${c![p]}`).join(' · ');
+
+/** the incidents of this month by element (lowercase reference); error when the support cannot be read */
+export function useIncidentCounts() {
+  const catalog = useApi(catalogApiRef);
+  const keycloak = useApi(keycloakOIDCAuthApiRef);
+  const [state, setState] = useState<{ loading: boolean; value?: Map<string, ByPriority>; error?: Error }>({ loading: true });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { items } = await catalog.getEntities({
+        filter: { kind: 'component', 'metadata.annotations.refresquito.io/application': SUPPORT_APPLICATION },
+        fields: ['kind', 'metadata.name', 'metadata.namespace', 'metadata.annotations'],
+      });
+      const base = supportUrl(items);
+      if (!base) throw new Error('the support is not deployed');
+      const token = await keycloak.getAccessToken(undefined, { optional: true });
+      if (!token) throw new Error('sign in with Keycloak to read the incidents');
+      const res = await fetch(`${base}/api/costs/incidents`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`the support answered ${res.status}`);
+      return parseIncidentCounts(await res.json());
+    })().then(
+      value => !cancelled && setState({ loading: false, value }),
+      error =>
+        !cancelled &&
+        setState({ loading: false, error: error instanceof TypeError ? new Error('the support could not be reached') : error }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [catalog, keycloak]);
   return state;
 }

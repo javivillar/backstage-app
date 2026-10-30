@@ -1,7 +1,44 @@
+import { useEffect, useMemo, useState } from 'react';
 import { InfoCard, Link, Progress, WarningPanel } from '@backstage/core-components';
-import { useEntity } from '@backstage/plugin-catalog-react';
+import { useApi } from '@backstage/core-plugin-api';
+import { stringifyEntityRef } from '@backstage/catalog-model';
+import { catalogApiRef, useEntity } from '@backstage/plugin-catalog-react';
 import { NAMESPACE_ANNOTATION } from '../catalog/usePrometheus';
-import { deploymentsCost, describePrices, efficiency, GiB, money, pct, perMonth, useAllocations, useDeployments, usePricing } from './openCost';
+import {
+  addCounts,
+  ByPriority,
+  deploymentsCost,
+  describeCounts,
+  describePrices,
+  efficiency,
+  GiB,
+  incidentCount,
+  incidentsCost,
+  money,
+  pct,
+  perMonth,
+  useAllocations,
+  useDeployments,
+  useIncidentCounts,
+  usePricing,
+} from './openCost';
+
+/** the references (lowercase) of every entity of the catalog in a namespace: its incidents are the namespace's */
+function useRefsOfNamespace(ns: string) {
+  const catalog = useApi(catalogApiRef);
+  const [refs, setRefs] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!ns) return;
+    catalog
+      .getEntities({
+        filter: { [`metadata.annotations.${NAMESPACE_ANNOTATION}`]: ns },
+        fields: ['kind', 'metadata.name', 'metadata.namespace'],
+      })
+      .then(({ items }) => setRefs(new Set(items.map(e => stringifyEntityRef(e).toLocaleLowerCase('en-US')))))
+      .catch(() => setRefs(new Set()));
+  }, [catalog, ns]);
+  return refs;
+}
 
 const Figure = ({ label, value, note }: { label: string; value: string; note?: string }) => (
   <div style={{ minWidth: 0 }}>
@@ -21,6 +58,15 @@ export const EntityCostCard = () => {
   const pricing = usePricing();
   const { loading, error, week, day } = useAllocations();
   const deployments = useDeployments();
+  const incidents = useIncidentCounts();
+  const refs = useRefsOfNamespace(ns);
+  const ownRef = stringifyEntityRef(entity).toLocaleLowerCase('en-US');
+  const nsIncidents: ByPriority | undefined = useMemo(() => {
+    if (!incidents.value) return undefined;
+    let sum: ByPriority = {};
+    for (const [ref, counts] of incidents.value) if (refs.has(ref) || ref === ownRef) sum = addCounts(sum, counts);
+    return sum;
+  }, [incidents.value, refs, ownRef]);
 
   let body;
   if (loading) body = <Progress />;
@@ -37,7 +83,16 @@ export const EntityCostCard = () => {
       const deploys = deployments.value?.byNamespace.get(ns);
       const deployCost = deployments.value ? deploymentsCost(deploys?.count, pricing) : undefined;
       const resources = perMonth(d);
-      const month = resources === undefined && deployCost === undefined ? undefined : (resources ?? 0) + (deployCost ?? 0);
+      const incidentCost = nsIncidents ? incidentsCost(nsIncidents, pricing) : undefined;
+      const month =
+        resources === undefined && deployCost === undefined && incidentCost === undefined
+          ? undefined
+          : (resources ?? 0) + (deployCost ?? 0) + (incidentCost ?? 0);
+      let incidentNote: string;
+      if (incidents.loading) incidentNote = 'counting…';
+      else if (incidents.error) incidentNote = `not available: ${incidents.error.message}`;
+      else if (!incidentCount(nsIncidents)) incidentNote = 'none opened this month';
+      else incidentNote = [describeCounts(nsIncidents), incidentCost !== undefined ? money(incidentCost, pricing.currency) : ''].filter(Boolean).join(' · ');
       let deployNote: string;
       if (deployments.loading) deployNote = 'counting…';
       else if (deployments.error) deployNote = 'not counted in this installation';
@@ -53,9 +108,14 @@ export const EntityCostCard = () => {
           <Figure
             label="Per month"
             value={money(month, pricing.currency)}
-            note={deployCost ? 'resources at the pace of the last 24 hours + deployments of this month' : 'at the pace of the last 24 hours'}
+            note={
+              deployCost || incidentCost
+                ? 'resources at the pace of the last 24 hours + deployments and incidents of this month'
+                : 'at the pace of the last 24 hours'
+            }
           />
           <Figure label="Deployments this month" value={deployments.value ? String(deploys?.count ?? 0) : '—'} note={deployNote} />
+          <Figure label="Incidents this month" value={nsIncidents ? String(incidentCount(nsIncidents)) : '—'} note={incidentNote} />
           <Figure
             label="CPU used of reserved"
             value={pct(cpu)}
@@ -80,7 +140,8 @@ export const EntityCostCard = () => {
       {body}
       <div style={{ marginTop: 12, fontSize: '0.8rem', opacity: 0.7 }}>
         Reserved = what its pods request; what is reserved and not used is paid all the same. A deployment is a new version
-        of an image running in the namespace. <Link to="/costs">Compare with the others</Link>.
+        of an image running in the namespace; an incident, one opened on an element of the namespace, at the price of its
+        priority. <Link to="/costs">Compare with the others</Link>.
       </div>
     </InfoCard>
   );

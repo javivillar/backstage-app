@@ -55,6 +55,8 @@ export interface Config {
       storagePerGiBHour?: number;
       /** charged once per deployment: a new version of an image running in a namespace (backend plugin costs) */
       perDeployment?: number;
+      /** charged once per incident opened on an element of a namespace (application support), by its priority */
+      perIncident?: { P1?: number; P2?: number; P3?: number; P4?: number };
     };
   };
   /**
