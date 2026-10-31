@@ -87,6 +87,7 @@ import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMe
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
 import { EntitySecurityCard } from './EntitySecurityCard';
 import { EntitySupportContent } from './EntitySupportContent';
+import { EntityImageContent, isImageAvailable } from '../images/EntityImageContent';
 import { EntityCostCard } from '../cost/EntityCostCard';
 import { EntityAssistantUsageCard } from '../cost/EntityAssistantUsageCard';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
@@ -582,6 +583,10 @@ const defaultEntityPage = (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overviewContent}
+    </EntityLayout.Route>
+    {/* an image of the image catalog (Harbor): its vulnerabilities with the VEX, SBOM, provenance, history */}
+    <EntityLayout.Route path="/image" title={tabLabel(<Inventory />, 'Image')} if={isImageAvailable}>
+      <EntityImageContent />
     </EntityLayout.Route>
     <EntityLayout.Route path="/docs" title={tabLabel(<Description />, 'Docs')}>
       {techdocsContent}
