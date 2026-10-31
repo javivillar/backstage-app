@@ -15,7 +15,7 @@ import {
 } from './registry';
 import { FoundReleaseSbom, findReleaseSbom } from './releases';
 import { ImageScan, findImageScan } from './vulnerabilities';
-import { imageCatalogFromConfig } from './imageCatalogConfig';
+import { imageCatalogFromConfig, imageDetailFromConfig } from './imageCatalogConfig';
 
 /**
  * Backend of the SBOM tab: the CycloneDX SBOM that the CI attached to an image in the registry (oras attach), for
@@ -34,6 +34,8 @@ import { imageCatalogFromConfig } from './imageCatalogConfig';
  *                                                              scope of the platform (wazuh-oneke >= 0.25.0, Part M)
  *   GET /api/sbom/images                                       the image catalog: the images of Harbor a system may use
  *                                                              (imageCatalog.ts; the published catalog + Harbor's API)
+ *   GET /api/sbom/images/detail?repository=common/x&tag=1.0    one image: findings (covered by the VEX or not), SBOM,
+ *                                                              provenance, signature, history (imageDetail.ts)
  *
  * Config (app-config):
  *   sbom:
@@ -283,6 +285,16 @@ export const sbomPlugin = createBackendPlugin({
               return;
             }
             res.json(await imageCatalog.view());
+          }),
+        );
+        const imageDetail = imageDetailFromConfig(config, logger);
+        router.get(
+          '/images/detail',
+          guarded('image-detail', async (req, res) => {
+            if (!imageDetail) throw new RegistryError('The image catalog is not configured (sbom.imageCatalog.harborUrl)', 404);
+            const repository = typeof req.query.repository === 'string' ? req.query.repository : '';
+            const tag = typeof req.query.tag === 'string' ? req.query.tag : '';
+            res.json(await imageDetail.detail(repository, tag));
           }),
         );
         router.get('/health', (_req, res) => {

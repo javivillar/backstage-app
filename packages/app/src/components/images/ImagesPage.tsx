@@ -257,7 +257,7 @@ export function ImagesPage() {
                   <TableRow key={`${r.image.repository}:${r.tag}`} hover>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <Link to={entityPath(r.image.repository)}>
+                        <Link to={`${entityPath(r.image.repository)}/image?tag=${encodeURIComponent(r.tag)}`}>
                           <b>{r.image.repository}</b>:{r.tag}
                         </Link>
                         {r.audience === 'platform' && <Chip size="small" variant="outlined" label="platform" sx={{ ml: 1 }} />}
