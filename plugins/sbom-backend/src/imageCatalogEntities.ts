@@ -14,8 +14,12 @@ export const entityNameOf = (repository: string) =>
 
 const tagOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 63);
 
-/** The entities of the image catalog: one System and one Resource (type container-image) per repository. */
-export function entitiesOf(view: ImageCatalogView): Entity[] {
+/**
+ * The entities of the image catalog: one System and one Resource (type container-image) per repository.
+ * appBaseUrl: app.baseUrl of Backstage; the catalog only accepts absolute URLs in links.
+ */
+export function entitiesOf(view: ImageCatalogView, appBaseUrl: string): Entity[] {
+  const app = appBaseUrl.replace(/\/+$/, '');
   const location = `url:${view.harbor}/common/image-catalog`;
   const managed = { [ANNOTATION_LOCATION]: location, [ANNOTATION_ORIGIN_LOCATION]: location };
   const system: Entity = {
@@ -26,14 +30,14 @@ export function entitiesOf(view: ImageCatalogView): Entity[] {
       title: 'Image catalog',
       description: 'Container images of Harbor that the systems of the PaaS may use (common, framework-python, framework-spring).',
       annotations: managed,
-      links: [{ url: '/images', title: 'Images', icon: 'catalog' }],
+      links: [{ url: `${app}/images`, title: 'Images', icon: 'catalog' }],
     },
     spec: { owner: 'platform-team' },
   };
-  return [system, ...view.images.map(i => resourceOf(i, managed))];
+  return [system, ...view.images.map(i => resourceOf(i, managed, app))];
 }
 
-function resourceOf(image: ImageView, managed: Record<string, string>): Entity {
+function resourceOf(image: ImageView, managed: Record<string, string>, app: string): Entity {
   const first = image.tags[0];
   const states = new Set(image.tags.map(t => t.state));
   const lifecycle = states.has('approved') || states.has('unknown') ? 'production' : 'deprecated';
@@ -54,7 +58,7 @@ function resourceOf(image: ImageView, managed: Record<string, string>): Entity {
         ...(image.source ? { 'refresquito.io/image-source': image.source } : {}),
       },
       links: [
-        { url: `/images?repository=${encodeURIComponent(image.repository)}`, title: 'In the image catalog', icon: 'catalog' },
+        { url: `${app}/images?repository=${encodeURIComponent(image.repository)}`, title: 'In the image catalog', icon: 'catalog' },
         { url: image.harborUrl, title: 'In Harbor', icon: 'web' },
       ],
     },
@@ -74,6 +78,7 @@ export class ImageCatalogEntityProvider implements EntityProvider {
     private readonly service: ImageCatalogService,
     private readonly logger: LoggerService,
     private readonly taskRunner: SchedulerServiceTaskRunner,
+    private readonly appBaseUrl: string,
   ) {}
 
   getProviderName(): string {
@@ -93,7 +98,7 @@ export class ImageCatalogEntityProvider implements EntityProvider {
       this.logger.warn(`image catalog: nothing read from Harbor, entities kept (${view.errors[0]})`);
       return;
     }
-    const entities = entitiesOf(view);
+    const entities = entitiesOf(view, this.appBaseUrl);
     await this.connection.applyMutation({
       type: 'full',
       entities: entities.map(entity => ({ entity, locationKey: this.getProviderName() })),
@@ -121,7 +126,8 @@ export const catalogModuleImageCatalog = createBackendModule({
           return;
         }
         const taskRunner = scheduler.createScheduledTaskRunner({ frequency: { minutes: 30 }, timeout: { minutes: 5 } });
-        catalog.addEntityProvider(new ImageCatalogEntityProvider(service, logger, taskRunner));
+        const appBaseUrl = config.getString('app.baseUrl');
+        catalog.addEntityProvider(new ImageCatalogEntityProvider(service, logger, taskRunner, appBaseUrl));
       },
     });
   },
