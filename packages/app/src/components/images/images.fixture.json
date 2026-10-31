@@ -1,0 +1,55 @@
+{
+  "configured": true,
+  "harbor": "https://harbor.example.io",
+  "catalog": { "published": true, "generatedAt": "2026-10-31T10:00:00Z", "commit": "abc1234def" },
+  "categories": { "database": "Databases", "observability": "Metrics, logs, traces", "runtime": "Runtimes of applications" },
+  "errors": [],
+  "images": [
+    {
+      "repository": "common/postgres", "project": "common", "name": "postgres", "source": "dhi.io/postgres",
+      "harborUrl": "https://harbor.example.io/harbor/projects/9/repositories/postgres/artifacts-tab",
+      "tags": [
+        { "tag": "18-alpine3.24", "pull": "harbor.example.io/common/postgres:18-alpine3.24", "category": "database",
+          "summary": "PostgreSQL 18: the relational database of the applications.", "audience": "apps", "state": "approved",
+          "replacedBy": "", "owner": "platform-team", "note": "", "inHarbor": true, "digest": "sha256:aaa",
+          "pushedAt": "2026-10-31T03:00:00Z", "version": "18.3-alpine3.24", "title": "PostgreSQL 18.x", "license": "PostgreSQL",
+          "eol": "2030-11-14", "distro": "alpine-3.24", "compliance": "cis",
+          "scan": { "status": "Success", "severity": "None", "critical": 0, "high": 0, "medium": 0, "low": 0 },
+          "sourceSignatureVerified": true, "attestations": ["provenance", "sbom-cyclonedx", "sbom-spdx", "vex"] },
+        { "tag": "14-alpine3.24", "pull": "harbor.example.io/common/postgres:14-alpine3.24", "category": "database",
+          "summary": "PostgreSQL 14.", "audience": "apps", "state": "deprecated",
+          "replacedBy": "common/postgres:18-alpine3.24", "owner": "platform-team", "note": "", "inHarbor": true, "digest": "sha256:bbb",
+          "pushedAt": "2026-10-31T03:00:00Z", "version": "14.20-alpine3.24", "title": "PostgreSQL 14.x", "license": "PostgreSQL",
+          "eol": "2026-11-12", "distro": "alpine-3.24", "compliance": "cis",
+          "scan": { "status": "Success", "severity": "High", "critical": 0, "high": 27, "medium": 3, "low": 1 },
+          "sourceSignatureVerified": true, "attestations": ["sbom-spdx"] }
+      ]
+    },
+    {
+      "repository": "common/grafana", "project": "common", "name": "grafana", "source": "dhi.io/grafana",
+      "harborUrl": "https://harbor.example.io/harbor/projects/9/repositories/grafana/artifacts-tab",
+      "tags": [
+        { "tag": "12.4-debian13", "pull": "harbor.example.io/common/grafana:12.4-debian13", "category": "observability",
+          "summary": "Grafana: dashboards of the platform.", "audience": "platform", "state": "approved",
+          "replacedBy": "", "owner": "platform-team", "note": "", "inHarbor": true, "digest": "sha256:ccc",
+          "pushedAt": "2026-10-31T03:00:00Z", "version": "12.4.12-debian13", "title": "dhi/grafana", "license": "AGPL-3.0",
+          "eol": "2027-05-24", "distro": "debian-13", "compliance": "cis",
+          "scan": { "status": "Success", "severity": "High", "critical": 0, "high": 22, "medium": 40, "low": 9 },
+          "sourceSignatureVerified": true, "attestations": ["sbom-spdx", "vex"] }
+      ]
+    },
+    {
+      "repository": "framework-python/python", "project": "framework-python", "name": "python", "source": "dhi.io/python",
+      "harborUrl": "https://harbor.example.io/harbor/projects/10/repositories/python/artifacts-tab",
+      "tags": [
+        { "tag": "3.12", "pull": "harbor.example.io/framework-python/python:3.12", "category": "runtime",
+          "summary": "Python 3.12 (Debian): runtime of FastAPI services.", "audience": "apps", "state": "approved",
+          "replacedBy": "", "owner": "platform-team", "note": "", "inHarbor": true, "digest": "sha256:ddd",
+          "pushedAt": "2026-10-31T03:15:30Z", "version": "3.12.16-debian13", "title": "Python 3.12.x", "license": "PSF-2.0",
+          "eol": "2028-10-31", "distro": "debian-13", "compliance": "cis",
+          "scan": { "status": "Success", "severity": "Critical", "critical": 1, "high": 8, "medium": 27, "low": 15 },
+          "sourceSignatureVerified": false, "attestations": [] }
+      ]
+    }
+  ]
+}
