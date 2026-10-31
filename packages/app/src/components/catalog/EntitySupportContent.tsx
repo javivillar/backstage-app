@@ -33,11 +33,11 @@ export function supportUrl(deployments: Entity[]): string | null {
   return sorted.length ? url(sorted[0])!.replace(/\/+$/, '') : null;
 }
 
-/** The two links of the support for an element: open an incident on it, and its incidents not closed. */
+/** The links of the support for an element: open an incident on it, its incidents not closed, ask for a change on it. */
 export function supportLinks(
   base: string,
   entity: Entity,
-): { open: string; incidents: string } {
+): { open: string; incidents: string; change: string } {
   const ref = stringifyEntityRef(entity); // kind:namespace/name, the reference the support keeps
   const [entityPart, name] = ref.split('/');
   return {
@@ -45,7 +45,51 @@ export function supportLinks(
     incidents: `${base}/elements/${encodeURIComponent(
       entityPart,
     )}/${encodeURIComponent(name)}`,
+    change: `${base}/changes/new?element=${encodeURIComponent(ref)}`,
   };
+}
+
+/** A change as the API of the support gives it (GET /api/elements/{element}/changes), only what the tab shows. */
+export type SupportChange = {
+  id: number;
+  what: string;
+  state: string;
+  risk: string;
+  urgent: boolean;
+  planned_on: string;
+  requester: string;
+  requester_name: string | null;
+  assignee: string | null;
+};
+
+/**
+ * The changes planned on an element (requested, approved or in execution, the soonest first), read from the API of
+ * the support with the token of the person signed in to Backstage: everyone with access to the portal sees them
+ * (change-requests: The changes planned on an element, RK-35). An element the support does not know has none.
+ */
+export async function fetchChanges(
+  base: string,
+  ref: string,
+  token: string,
+): Promise<SupportChange[]> {
+  const response = await fetch(
+    `${base}/api/elements/${encodeURIComponent(ref)}/changes`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (response.status === 404) return [];
+  if (response.status === 401) {
+    throw new Error('The support did not accept the sign-in of Backstage.');
+  }
+  if (response.status === 403) {
+    throw new Error(
+      'You have no role in the support: ask the platform administrator.',
+    );
+  }
+  if (!response.ok) {
+    throw new Error(`The support answered ${response.status}.`);
+  }
+  const body = await response.json();
+  return Array.isArray(body) ? body : [];
 }
 
 /** An incident as the API of the support gives it (GET /api/incidents), only what the tab shows. */
@@ -96,6 +140,128 @@ export async function fetchIncidents(
   const page = await response.json();
   return { items: page.items ?? [], total: page.total ?? 0 };
 }
+
+const CHANGE_STATES: Record<string, string> = {
+  requested: 'Requested (waiting for approval)',
+  approved: 'Approved',
+  in_execution: 'In execution',
+};
+
+const RISKS: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
+/** What the tab knows of the changes planned on the element. */
+type Changes =
+  | { status: 'loading' }
+  | { status: 'ok'; items: SupportChange[] }
+  | { status: 'error'; message: string };
+
+/** The table of the changes planned on the element, each one a link to it in the support. */
+const SupportChanges = ({
+  base,
+  entityRef,
+}: {
+  base: string;
+  entityRef: string;
+}) => {
+  const keycloak = useApi(keycloakOIDCAuthApiRef);
+  const [changes, setChanges] = useState<Changes>({ status: 'loading' });
+  useEffect(() => {
+    let current = true;
+    keycloak
+      .getAccessToken(undefined, { optional: true })
+      .then(token => {
+        if (!token) {
+          throw new Error(
+            'Sign in to Backstage with Keycloak to see them here.',
+          );
+        }
+        return fetchChanges(base, entityRef, token);
+      })
+      .then(items => current && setChanges({ status: 'ok', items }))
+      .catch(
+        (error: Error) =>
+          current &&
+          setChanges({
+            status: 'error',
+            message:
+              error instanceof TypeError
+                ? 'the support could not be reached.'
+                : error.message,
+          }),
+      );
+    return () => {
+      current = false;
+    };
+  }, [keycloak, base, entityRef]);
+
+  if (changes.status === 'loading') {
+    return <Progress />;
+  }
+  if (changes.status === 'error') {
+    return (
+      <InfoCard title="Changes planned on it">
+        <Typography variant="body2">
+          The changes could not be read: {changes.message}
+        </Typography>
+      </InfoCard>
+    );
+  }
+  const columns: TableColumn<SupportChange>[] = [
+    {
+      title: 'Change',
+      field: 'id',
+      width: '90px',
+      render: c => <Link to={`${base}/changes/${c.id}`}>#{c.id}</Link>,
+    },
+    {
+      title: 'What',
+      field: 'what',
+      render: c => <Link to={`${base}/changes/${c.id}`}>{c.what}</Link>,
+    },
+    {
+      title: 'Planned on',
+      field: 'planned_on',
+      width: '120px',
+      render: c => new Date(`${c.planned_on}T00:00:00`).toLocaleDateString(),
+    },
+    {
+      title: 'State',
+      field: 'state',
+      render: c =>
+        `${CHANGE_STATES[c.state] ?? c.state}${c.urgent ? ' · urgent' : ''}`,
+    },
+    { title: 'Risk', field: 'risk', render: c => RISKS[c.risk] ?? c.risk },
+    {
+      title: 'Asked by',
+      field: 'requester',
+      render: c => c.requester_name ?? c.requester,
+    },
+    { title: 'Executed by', field: 'assignee', render: c => c.assignee ?? '—' },
+  ];
+  return (
+    <Table<SupportChange>
+      title={`Changes planned on it (${changes.items.length})`}
+      subtitle="Requested, approved or in execution, the soonest first; everyone sees them"
+      columns={columns}
+      data={changes.items}
+      options={{
+        search: false,
+        paging: changes.items.length > 10,
+        pageSize: 10,
+        padding: 'dense',
+      }}
+      emptyContent={
+        <Typography style={{ padding: 16 }}>
+          No change planned on this element.
+        </Typography>
+      }
+    />
+  );
+};
 
 const STATES: Record<string, string> = {
   open: 'Open',
@@ -206,8 +372,9 @@ const SupportIncidents = ({
 
 /**
  * The tab "Incidents" of an element of the catalog (incidents: Open an incident from the page of an element; The
- * incidents of an element). It links to the support and lists the incidents not closed of the element, read with the
- * login of Keycloak: the requester sees only their own incidents and the support team all of them.
+ * incidents of an element; change-requests: The changes planned on an element). It links to the support, lists the
+ * incidents not closed of the element and the changes planned on it, read with the login of Keycloak: the requester
+ * sees only their own incidents and the support team all of them; everyone sees the changes.
  */
 export const EntitySupportContent = () => {
   const { entity } = useEntity();
@@ -258,7 +425,8 @@ export const EntitySupportContent = () => {
           Something of <strong>{title}</strong> does not work as it should? Open
           an incident: the support team gets it with its priority, and you
           follow it until it is solved. You see your own incidents; the support
-          team sees all of them.
+          team sees all of them. A change to make on it (an upgrade, more disk,
+          a restart) is asked for and approved in the support too.
         </Typography>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Button
@@ -277,10 +445,21 @@ export const EntitySupportContent = () => {
           >
             Its incidents not closed
           </Button>
+          <Button
+            variant="outlined"
+            href={links.change}
+            target="_blank"
+            rel="noopener"
+          >
+            Ask for a change on {title}
+          </Button>
         </div>
       </InfoCard>
       <div style={{ marginTop: 16 }}>
         <SupportIncidents base={base} entityRef={stringifyEntityRef(entity)} />
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <SupportChanges base={base} entityRef={stringifyEntityRef(entity)} />
       </div>
     </>
   );
