@@ -101,13 +101,6 @@ const GraphSidebarItem = () => (
   <SidebarItem icon={CategoryIcon} to={useGraphLink()} text="Graph" />
 );
 
-/** The console draws its own frame: no classic sidebar around it. Every other page keeps the sidebar as before. */
-export const Root = ({ children }: PropsWithChildren<{}>) => {
-  const { pathname } = useLocation();
-  if (isConsolePath(pathname)) return <>{children}</>;
-  return <ClassicRoot>{children}</ClassicRoot>;
-};
-
 const ClassicRoot = ({ children }: PropsWithChildren<{}>) => (
   <SidebarPage>
     <Sidebar>
@@ -198,3 +191,10 @@ const ClassicRoot = ({ children }: PropsWithChildren<{}>) => (
     {children}
   </SidebarPage>
 );
+
+/** The console draws its own frame: no classic sidebar around it. Every other page keeps the sidebar as before. */
+export const Root = ({ children }: PropsWithChildren<{}>) => {
+  const { pathname } = useLocation();
+  if (isConsolePath(pathname)) return <>{children}</>;
+  return <ClassicRoot>{children}</ClassicRoot>;
+};
