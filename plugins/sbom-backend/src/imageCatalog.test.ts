@@ -1,6 +1,7 @@
 import { ImageCatalogService, IMAGE_CATALOG_SCHEMA, annotationsOf, scanOf } from './imageCatalog';
 import { entitiesOf, entityNameOf } from './imageCatalogEntities';
 import { RegistryClient, RegistryError } from './registry';
+import { EntityPolicies, FieldFormatEntityPolicy, NoForeignRootFieldsEntityPolicy, SchemaValidEntityPolicy } from '@backstage/catalog-model';
 // GET .../projects/common/repositories/postgres/artifacts?with_tag=true&with_scan_overview=true of the live Harbor
 // (2026-10-31): tags 17-alpine3.24 and 16-alpine3.24 of dhi.io/postgres with their DHI annotations and Trivy scan
 import postgresArtifacts from './__fixtures__/harbor-postgres-artifacts.json';
@@ -126,7 +127,7 @@ describe('image catalog', () => {
 
   it('makes one System and one Resource per repository', async () => {
     const view = await new ImageCatalogService({ harborUrl: HARBOR, projects: ['common'] }, registry(catalogDoc), harborApi()).view();
-    const [system, res] = entitiesOf(view);
+    const [system, res] = entitiesOf(view, 'https://backstage.example.io/');
     expect(system).toMatchObject({ kind: 'System', metadata: { name: 'image-catalog' } });
     expect(res).toMatchObject({
       kind: 'Resource',
@@ -134,7 +135,16 @@ describe('image catalog', () => {
       spec: { type: 'container-image', owner: 'platform-team', lifecycle: 'production', system: 'image-catalog' },
     });
     expect(res.metadata.annotations?.['refresquito.io/harbor-repository']).toBe('common/postgres');
+    // the catalog refuses relative URLs in links (2026-10-31: every image entity failed its policy check)
+    expect(system.metadata.links?.[0].url).toBe('https://backstage.example.io/images');
+    expect(res.metadata.links?.map(l => l.url)).toEqual([
+      'https://backstage.example.io/images?repository=common%2Fpostgres',
+      `${HARBOR}/harbor/projects/9/repositories/postgres/artifacts-tab`,
+    ]);
     expect(res.metadata.annotations?.['backstage.io/managed-by-location']).toBe(`url:${HARBOR}/common/image-catalog`);
+    // the policies the catalog applies before accepting an entity
+    const policy = EntityPolicies.allOf([new SchemaValidEntityPolicy(), new FieldFormatEntityPolicy(), new NoForeignRootFieldsEntityPolicy()]);
+    for (const e of [system, res]) await expect(policy.enforce(e)).resolves.toBeDefined();
     expect(entityNameOf('framework-spring/eclipse-temurin')).toBe('image-framework-spring-eclipse-temurin');
     expect(entityNameOf(`common/${'x'.repeat(80)}`)).toHaveLength(63);
   });
