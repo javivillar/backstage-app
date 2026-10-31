@@ -62,6 +62,7 @@ import { ArchitectAssistantPage } from './components/opsassistant/ArchitectAssis
 import { DeveloperAssistantPage } from './components/opsassistant/DeveloperAssistantPage';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
+import { ConsolePage } from '@internal/plugin-console';
 
 const app = createApp({
   apis,
@@ -177,6 +178,8 @@ const routes = (
     </Route>
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={<CatalogGraphPage />} />
+    {/* the cloud-style console: off unless console.enabled (plugins/console); the classic pages above do not change */}
+    <Route path="/console/*" element={<ConsolePage />} />
   </FlatRoutes>
 );
 

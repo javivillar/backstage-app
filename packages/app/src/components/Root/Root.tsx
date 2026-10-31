@@ -48,6 +48,7 @@ import {
 } from '@backstage/core-components';
 import { MyGroupsSidebarItem } from '@backstage/plugin-org';
 import { useGraphLink } from './useGraphLink';
+import { ConsoleSidebarItem, isConsolePath } from '@internal/plugin-console';
 
 const sidebarLogoStyles = {
   root: {
@@ -100,7 +101,14 @@ const GraphSidebarItem = () => (
   <SidebarItem icon={CategoryIcon} to={useGraphLink()} text="Graph" />
 );
 
-export const Root = ({ children }: PropsWithChildren<{}>) => (
+/** The console draws its own frame: no classic sidebar around it. Every other page keeps the sidebar as before. */
+export const Root = ({ children }: PropsWithChildren<{}>) => {
+  const { pathname } = useLocation();
+  if (isConsolePath(pathname)) return <>{children}</>;
+  return <ClassicRoot>{children}</ClassicRoot>;
+};
+
+const ClassicRoot = ({ children }: PropsWithChildren<{}>) => (
   <SidebarPage>
     <Sidebar>
       <RouteMarker />
@@ -159,6 +167,8 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
           <SidebarItem icon={EuroIcon} to="costs" text="Costs" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />
+          {/* only where console.enabled, for console.allowedGroups */}
+          <ConsoleSidebarItem />
         </SidebarScrollWrapper>
       </SidebarGroup>
 
