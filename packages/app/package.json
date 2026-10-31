@@ -55,6 +55,7 @@
     "@internal/plugin-keycloak": "^0.1.0",
     "@internal/plugin-superset": "^0.1.0",
     "@internal/plugin-camunda": "^0.1.0",
+    "@internal/plugin-console": "^0.1.0",
     "@internal/plugin-seaweedfs": "^0.1.0",
     "@internal/plugin-sbom": "^0.1.0",
     "@internal/plugin-activepieces": "^0.1.0",
