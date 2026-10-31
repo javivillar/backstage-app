@@ -1,4 +1,5 @@
 export { sbomPlugin } from './plugin';
+export { catalogModuleImageCatalog } from './imageCatalogEntities';
 export { techInsightsModuleSupplyChain, supplyChainFactRetriever } from './techInsights';
 export { summarize } from './cyclonedx';
 export type { Component, SbomSummary } from './cyclonedx';

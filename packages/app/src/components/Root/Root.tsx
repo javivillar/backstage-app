@@ -1,6 +1,7 @@
 import { type PropsWithChildren, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import MapIcon from '@mui/icons-material/MyLocation';
 import LibraryBooks from '@mui/icons-material/LibraryBooks';
@@ -154,6 +155,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
           <SidebarItem icon={CodeIcon} to="developer-assistant" text="Developer Assistant" />
           <SidebarItem icon={VerifiedUserIcon} to="tech-insights" text="Quality & Security" />
           <SidebarItem icon={FactCheckIcon} to="cis-nodes" text="CIS Nodes" />
+          <SidebarItem icon={Inventory2Icon} to="images" text="Images" />
           <SidebarItem icon={EuroIcon} to="costs" text="Costs" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />

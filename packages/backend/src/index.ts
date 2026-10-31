@@ -23,7 +23,7 @@ import {
   activepiecesScaffolderModule,
 } from '@internal/backstage-plugin-activepieces-backend';
 import { datahubManagerPlugin, datahubScaffolderModule } from '@internal/backstage-plugin-datahub-backend';
-import { sbomPlugin, techInsightsModuleSupplyChain } from '@internal/backstage-plugin-sbom-backend';
+import { catalogModuleImageCatalog, sbomPlugin, techInsightsModuleSupplyChain } from '@internal/backstage-plugin-sbom-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -209,6 +209,9 @@ backend.add(datahubScaffolderModule);
 // SBOM tab -- the CycloneDX SBOM the CI attached to each image a component runs (annotation
 // refresquito.io/sbom-images), read from the registry (sbom.allowedImages, sbom.dockerConfig). Read only.
 backend.add(sbomPlugin);
+// Image catalog (page /images): the images of Harbor a system may use, as Resource entities of type container-image
+// (plugins/sbom-backend/src/imageCatalogEntities.ts); inert unless sbom.imageCatalog.harborUrl is set.
+backend.add(catalogModuleImageCatalog);
 
 // Operations assistant (page /ops-assistant): a model with the READ-ONLY tools of the MCP server opsassistant-oneke
 // (Kubernetes, Argo CD, logs, metrics, docs). The model is pluggable (plugins/ops-assistant-backend/src/model/:

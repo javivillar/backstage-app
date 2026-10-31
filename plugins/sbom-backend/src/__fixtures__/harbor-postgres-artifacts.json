@@ -1,0 +1,130 @@
+[
+ {
+  "digest": "sha256:3abfdbe89a890c2894fdba0bd43b9625809c285353cd7e16d9968a242115c234",
+  "push_time": "2026-10-28T21:08:16.270Z",
+  "tags": [
+   {
+    "name": "17-alpine3.24",
+    "push_time": "2026-10-28T21:08:16.282Z"
+   }
+  ],
+  "annotations": {
+   "com.docker.dhi.chain-id": "sha256:b94ea4a70b2948ba20c934137a39814f98d473a59f332c2521697cbbcacc053d",
+   "com.docker.dhi.compliance": "cis",
+   "com.docker.dhi.created": "2026-08-16T20:49:36Z",
+   "com.docker.dhi.date.end-of-life": "2029-11-08",
+   "com.docker.dhi.date.release": "2024-09-26",
+   "com.docker.dhi.definition": "image/postgres/alpine-3.24/17",
+   "com.docker.dhi.distro": "alpine-3.24",
+   "com.docker.dhi.entitlement": "public",
+   "com.docker.dhi.flavor": "",
+   "com.docker.dhi.name": "dhi/postgres",
+   "com.docker.dhi.package-manager": "",
+   "com.docker.dhi.shell": "bash,busybox",
+   "com.docker.dhi.title": "PostgreSQL 17.x",
+   "com.docker.dhi.url": "https://dhi.io/catalog/postgres",
+   "com.docker.dhi.variant": "runtime",
+   "com.docker.dhi.version": "17.11-alpine3.24",
+   "org.opencontainers.image.authors": "Docker, Inc. https://docker.com",
+   "org.opencontainers.image.created": "2026-08-16T20:49:36Z",
+   "org.opencontainers.image.description": "A minimal PostgreSQL image / PostgreSQL 17.x",
+   "org.opencontainers.image.documentation": "https://dhi.io/catalog/postgres/guides",
+   "org.opencontainers.image.licenses": "PostgreSQL",
+   "org.opencontainers.image.source": "https://github.com/docker-hardened-images/definitions",
+   "org.opencontainers.image.title": "dhi/postgres",
+   "org.opencontainers.image.url": "https://dhi.io/catalog/postgres",
+   "org.opencontainers.image.vendor": "Docker, Inc.",
+   "org.opencontainers.image.version": "17.11-alpine3.24"
+  },
+  "scan_overview": {
+   "application/vnd.security.vulnerability.report; version=1.1": {
+    "complete_percent": 100,
+    "duration": 2,
+    "end_time": "2026-10-31T03:06:31.000Z",
+    "report_id": "dcd7ba45-a0c3-43c2-b13d-e68c7cfa13ef",
+    "scan_status": "Success",
+    "scanner": {
+     "name": "Trivy",
+     "vendor": "Aqua Security",
+     "version": "v0.75.0"
+    },
+    "severity": "None",
+    "start_time": "2026-10-31T03:06:29.000Z",
+    "summary": {
+     "fixable": 0,
+     "summary": {},
+     "total": 0
+    }
+   }
+  },
+  "extra_attrs": {
+   "os": "linux",
+   "architecture": "amd64"
+  },
+  "type": "IMAGE"
+ },
+ {
+  "digest": "sha256:210f63a4772d68ebfbde9239d0cc4917e7ffff36584425ad3c12e1ed1ea13651",
+  "push_time": "2026-10-28T21:07:58.808Z",
+  "tags": [
+   {
+    "name": "16-alpine3.24",
+    "push_time": "2026-10-28T21:07:58.823Z"
+   }
+  ],
+  "annotations": {
+   "com.docker.dhi.chain-id": "sha256:04f553db3a47e0893726bf3dd80c52b166a33910276d656941e3f9924fa997d0",
+   "com.docker.dhi.compliance": "cis",
+   "com.docker.dhi.created": "2026-08-16T21:00:55Z",
+   "com.docker.dhi.date.end-of-life": "2028-11-09",
+   "com.docker.dhi.date.release": "2023-09-14",
+   "com.docker.dhi.definition": "image/postgres/alpine-3.24/16",
+   "com.docker.dhi.distro": "alpine-3.24",
+   "com.docker.dhi.entitlement": "public",
+   "com.docker.dhi.flavor": "",
+   "com.docker.dhi.name": "dhi/postgres",
+   "com.docker.dhi.package-manager": "",
+   "com.docker.dhi.shell": "bash,busybox",
+   "com.docker.dhi.title": "PostgreSQL 16.x",
+   "com.docker.dhi.url": "https://dhi.io/catalog/postgres",
+   "com.docker.dhi.variant": "runtime",
+   "com.docker.dhi.version": "16.15-alpine3.24",
+   "org.opencontainers.image.authors": "Docker, Inc. https://docker.com",
+   "org.opencontainers.image.created": "2026-08-16T21:00:55Z",
+   "org.opencontainers.image.description": "A minimal PostgreSQL image / PostgreSQL 16.x",
+   "org.opencontainers.image.documentation": "https://dhi.io/catalog/postgres/guides",
+   "org.opencontainers.image.licenses": "PostgreSQL",
+   "org.opencontainers.image.source": "https://github.com/docker-hardened-images/definitions",
+   "org.opencontainers.image.title": "dhi/postgres",
+   "org.opencontainers.image.url": "https://dhi.io/catalog/postgres",
+   "org.opencontainers.image.vendor": "Docker, Inc.",
+   "org.opencontainers.image.version": "16.15-alpine3.24"
+  },
+  "scan_overview": {
+   "application/vnd.security.vulnerability.report; version=1.1": {
+    "complete_percent": 100,
+    "duration": 2,
+    "end_time": "2026-10-31T03:06:22.000Z",
+    "report_id": "121d9eb7-6bba-4632-9975-16fd69c4b299",
+    "scan_status": "Success",
+    "scanner": {
+     "name": "Trivy",
+     "vendor": "Aqua Security",
+     "version": "v0.75.0"
+    },
+    "severity": "None",
+    "start_time": "2026-10-31T03:06:20.000Z",
+    "summary": {
+     "fixable": 0,
+     "summary": {},
+     "total": 0
+    }
+   }
+  },
+  "extra_attrs": {
+   "os": "linux",
+   "architecture": "amd64"
+  },
+  "type": "IMAGE"
+ }
+]

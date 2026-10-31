@@ -15,6 +15,7 @@ import {
 } from './registry';
 import { FoundReleaseSbom, findReleaseSbom } from './releases';
 import { ImageScan, findImageScan } from './vulnerabilities';
+import { imageCatalogFromConfig } from './imageCatalogConfig';
 
 /**
  * Backend of the SBOM tab: the CycloneDX SBOM that the CI attached to an image in the registry (oras attach), for
@@ -31,6 +32,8 @@ import { ImageScan, findImageScan } from './vulnerabilities';
  *   GET /api/sbom/compliance                                   the CIS compliance of the nodes (operating system): the
  *                                                              newest SCA scan of each node as Wazuh scored it with the
  *                                                              scope of the platform (wazuh-oneke >= 0.25.0, Part M)
+ *   GET /api/sbom/images                                       the image catalog: the images of Harbor a system may use
+ *                                                              (imageCatalog.ts; the published catalog + Harbor's API)
  *
  * Config (app-config):
  *   sbom:
@@ -43,6 +46,8 @@ import { ImageScan, findImageScan } from './vulnerabilities';
  *       denied: ['AGPL-*', 'GPL-*', 'SSPL-*']      # SPDX ids, * = any version; applied to the dependencies of the
  *       ecosystems: [pypi, npm, maven, ...]        # application (not to the OS packages of the image)
  *       ignore: ['pkg:nuget/Simple%20Launcher@']   # purl prefixes that are not dependencies
+ *     imageCatalog:                                # page Images + entities (imageCatalogConfig.ts); empty: off
+ *       harborUrl: https://harbor.iaas.refresquito.io
  * The releases are read with the token of integrations.github (github.com).
  */
 export const sbomPlugin = createBackendPlugin({
@@ -269,8 +274,19 @@ export const sbomPlugin = createBackendPlugin({
             }
           }),
         );
+        const imageCatalog = imageCatalogFromConfig(config, logger);
+        router.get(
+          '/images',
+          guarded('images', async (_req, res) => {
+            if (!imageCatalog) {
+              res.json({ configured: false, categories: {}, images: [], errors: [] });
+              return;
+            }
+            res.json(await imageCatalog.view());
+          }),
+        );
         router.get('/health', (_req, res) => {
-          res.json({ status: 'ok', allowedImages: allowed, allowedReleases, credentials: !!dockerConfig, github: !!githubToken, vulnerabilities: !!vulnerabilitiesUrl });
+          res.json({ status: 'ok', allowedImages: allowed, allowedReleases, credentials: !!dockerConfig, github: !!githubToken, vulnerabilities: !!vulnerabilitiesUrl, imageCatalog: !!imageCatalog });
         });
         httpRouter.use(router);
         httpRouter.addAuthPolicy({ path: '/health', allow: 'unauthenticated' });
