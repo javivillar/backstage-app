@@ -92,6 +92,28 @@ assistantUsage:
   assistants consumed in the month (default the current one, UTC), for the page `/costs`. Any signed-in user; `user`
   only on their own rows unless they are in `assistantUsage.viewAllGroups` (`all: true`).
 
+## Analyses for the applications (platform block `analysis`)
+
+An assistant can also answer the **applications**: an application asks it to analyse something (support: an
+incident, with its description and its element), with no person behind. Only the subjects in its `allowedApps` may,
+each with the static token Backstage accepts for it (`backend.auth.externalAccess`, chart cnoe-oneke
+`backstage.analysis`); a person cannot use these routes, and an application cannot use the chat of people.
+
+    assistants:
+      analysis:
+        allowedGroups: []                         # no person
+        allowedApps: [refresquito-apps-analysis]  # the subject of the token of the store key analysis-caller
+        maxRunningPerApp: 4
+        runner: api
+        model: { provider: anthropic, name: claude-sonnet-5-5, apiKey: ${ANTHROPIC_API_KEY} }   # or provider: local
+
+    POST /api/ops-assistant/analysis/analyses      {question, system?} -> 202 {id}
+    GET  /api/ops-assistant/analysis/analyses/:id  {status: running|done|error, elapsedMs, answer?, model?, stop?, error?}
+
+One question, no conversation; only the application that started an analysis reads it, 30 minutes after it ends. What
+it consumed is recorded like any question, as the user `app:<subject>` and charged to `system`. To move the analyses
+to a model of the zone, change only `model` (provider `local`, `baseUrl`): the applications do not change.
+
 ## Conversations
 
 Kept in the database of this plugin (`backstage_plugin_ops-assistant` in Postgres, so they are in its backups;

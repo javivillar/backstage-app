@@ -28,6 +28,9 @@ type Config = NonNullable<ReturnType<RootConfigService['getOptionalConfig']>>;
  *                                         # claude-code: Claude Code with the operator's Claude subscription
  *     model: {provider, name, effort, apiKey, baseUrl}   (src/model/index.ts; claude-code uses name and effort)
  *     claudeCode: {oauthToken, bin}       # `claude setup-token` (Pro/Max)
+ *     allowedApps: [refresquito-apps-analysis]   # the applications that may ask it (subjects of the static tokens of
+ *                                         # backend.auth.externalAccess); none by default
+ *     maxRunningPerApp: 4                 # analyses of one application being made at once
  *
  * Its routes (under the router this returns):
  *   GET    /info       {enabled, allowed, model, runner, maxSteps, title, keepDays}
@@ -39,6 +42,12 @@ type Config = NonNullable<ReturnType<RootConfigService['getOptionalConfig']>>;
  *   PUT    /conversations/:id   {title, state: {exchanges, messages, system?}} creates or replaces it (the page saves after each change)
  *   DELETE /conversations/:id   deletes it
  * Each user sees only their own conversations (src/conversations.ts); without a store they answer 503.
+ *
+ * For the applications (the platform block `analysis`: an application asks it to analyse something, with no person
+ * behind; only the subjects of allowedApps, never a user):
+ *   POST   /analyses       {question, system?} -> 202 {id}   one question, no conversation; system: charged to it
+ *   GET    /analyses/:id   {status: running|done|error, elapsedMs, answer?, model?, stop?, error?}
+ * Only the application that started an analysis reads it; it is kept 30 minutes after it ends (src/jobs.ts).
  * Each question answered is recorded in `usage` (src/usage.ts): who, which model, its tokens, what it was about.
  */
 export function createAssistantRouter(o: {
@@ -58,6 +67,8 @@ export function createAssistantRouter(o: {
   const title = settings?.getOptionalString('title') ?? (id === 'ops' ? 'Operations assistant' : `Assistant ${id}`);
   const mcpUrl = settings?.getOptionalString('mcpUrl') ?? '';
   const allowedGroups = settings?.getOptionalStringArray('allowedGroups') ?? [];
+  const allowedApps = settings?.getOptionalStringArray('allowedApps') ?? [];
+  const maxRunningPerApp = settings?.getOptionalNumber('maxRunningPerApp') ?? 4;
   const maxSteps = settings?.getOptionalNumber('maxSteps') ?? 12;
   const system = settings?.getOptionalString('systemPrompt') ?? '';
   const runnerName = settings?.getOptionalString('runner') ?? 'api';
@@ -135,6 +146,41 @@ export function createAssistantRouter(o: {
     return { user: info.userEntityRef, allowed: mayUse(info.ownershipEntityRefs, allowedGroups) };
   };
 
+  /** one audit line per question and what it consumed, for the costs: which assistant, who (a user, or app:<subject>),
+   * what was looked at, what it cost (never the answer or the data); a failure here never loses the answer */
+  const account = async (turn: Turn, startedAt: number, user: string, chosen: string | undefined) => {
+    const ms = Date.now() - startedAt;
+    logger.info(`${log} turn`, {
+      assistant: id,
+      user,
+      runner: runnerName,
+      model: turn.model ?? label,
+      stop: turn.stop,
+      system: chosen,
+      tools: turn.toolCalls.map(t => `${t.name}${t.isError ? '!' : ''}`).join(','),
+      ms,
+      ...Object.fromEntries(Object.entries(turn.usage ?? {}).map(([k, v]) => [`tokens_${k}`, v])),
+    });
+    await usage
+      ?.record({
+        at: new Date(),
+        assistant: id,
+        user,
+        runner: runnerName,
+        model: turn.model ?? label ?? 'unknown',
+        system: chosen,
+        subjects: subjectsOf(turn.toolCalls),
+        usage: turn.usage ?? {},
+        ms,
+        tools: turn.toolCalls.length,
+      })
+      .catch(e => logger.warn(`${log}: its usage was not recorded: ${(e as Error).message}`));
+  };
+
+  /** the system a question is charged to: undefined when not given, null when it is not a name of the catalog */
+  const systemOf = (raw: unknown): string | undefined | null =>
+    raw === undefined || raw === null || raw === '' ? undefined : subjectName(raw) ?? null;
+
   const jobs = new Jobs();
   const router = express.Router();
   router.use(express.json({ limit: '4mb' }));
@@ -160,9 +206,8 @@ export function createAssistantRouter(o: {
       return;
     }
     // the system its cost is charged to (chosen in the page); without it, what the tools looked at
-    const rawSystem = req.body?.system;
-    const chosen = rawSystem === undefined || rawSystem === null || rawSystem === '' ? undefined : subjectName(rawSystem);
-    if (rawSystem && !chosen) {
+    const chosen = systemOf(req.body?.system);
+    if (chosen === null) {
       res.status(400).json({ error: 'system: the name of a system of the catalog' });
       return;
     }
@@ -181,34 +226,7 @@ export function createAssistantRouter(o: {
         onToolCall: call => j.toolCalls.push(call),
         signal: j.signal,
       });
-      const ms = Date.now() - j.startedAt;
-      // one audit line per question: which assistant, who, what was looked at, what it cost (never the answer or the data)
-      logger.info(`${log} turn`, {
-        assistant: id,
-        user,
-        runner: runnerName,
-        model: turn.model ?? label,
-        stop: turn.stop,
-        system: chosen,
-        tools: turn.toolCalls.map(t => `${t.name}${t.isError ? '!' : ''}`).join(','),
-        ms,
-        ...Object.fromEntries(Object.entries(turn.usage ?? {}).map(([k, v]) => [`tokens_${k}`, v])),
-      });
-      // what it consumed, for the costs: a failure here never loses the answer
-      await usage
-        ?.record({
-          at: new Date(),
-          assistant: id,
-          user,
-          runner: runnerName,
-          model: turn.model ?? label ?? 'unknown',
-          system: chosen,
-          subjects: subjectsOf(turn.toolCalls),
-          usage: turn.usage ?? {},
-          ms,
-          tools: turn.toolCalls.length,
-        })
-        .catch(e => logger.warn(`${log}: its usage was not recorded: ${(e as Error).message}`));
+      await account(turn, j.startedAt, user, chosen);
       return turn;
     });
     if (!job) {
@@ -249,6 +267,77 @@ export function createAssistantRouter(o: {
       toolCalls: job.toolCalls,
       elapsedMs: (job.endedAt ?? Date.now()) - job.startedAt,
       turn: job.turn,
+      error: job.error ? `The model could not answer: ${job.error}` : undefined,
+    });
+  });
+
+  /** the application asking (app:<subject of its static token>), or undefined with the answer already sent */
+  const appCaller = async (req: Request, res: Response) => {
+    let subject: string;
+    try {
+      const credentials = await httpAuth.credentials(req, { allow: ['service'] });
+      subject = credentials.principal.subject;
+    } catch {
+      res.status(401).json({ error: 'Only an application with the token of the block analysis may ask for analyses.' });
+      return undefined;
+    }
+    // external:<subject> for a static token of backend.auth.externalAccess
+    const name = subject.replace(/^external:/, '');
+    if (!allowedApps.includes(name)) {
+      res.status(403).json({ error: `The application ${name} may not ask the ${title.toLowerCase()}.` });
+      return undefined;
+    }
+    return `app:${name}`;
+  };
+
+  router.post('/analyses', async (req: Request, res: Response) => {
+    const app = await appCaller(req, res);
+    if (!app) return;
+    if (!enabled) {
+      res.status(503).json({ error: 'The assistant is not configured.' });
+      return;
+    }
+    const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+    if (!question || question.length > MAX_QUESTION_CHARS) {
+      res.status(400).json({ error: `question: 1 to ${MAX_QUESTION_CHARS} characters` });
+      return;
+    }
+    const chosen = systemOf(req.body?.system);
+    if (chosen === null) {
+      res.status(400).json({ error: 'system: the name of a system of the catalog' });
+      return;
+    }
+    const job = jobs.start(
+      app,
+      async j => {
+        const turn = await run!({ history: [], question, user: app, onToolCall: call => j.toolCalls.push(call), signal: j.signal });
+        await account(turn, j.startedAt, app, chosen);
+        return turn;
+      },
+      maxRunningPerApp,
+    );
+    if (!job) {
+      res.status(429).json({ error: `${maxRunningPerApp} analyses of this application are being made; ask again later.` });
+      return;
+    }
+    res.status(202).json({ id: job.id });
+  });
+
+  router.get('/analyses/:id', async (req: Request, res: Response) => {
+    const app = await appCaller(req, res);
+    if (!app) return;
+    const job = jobs.get(req.params.id, app);
+    if (!job) {
+      res.status(404).json({ error: 'No such analysis (older than 30 minutes, or Backstage restarted): ask again.' });
+      return;
+    }
+    if (job.status === 'error') logger.warn(`${log}: ${app}: ${job.error}`);
+    res.json({
+      status: job.status,
+      elapsedMs: (job.endedAt ?? Date.now()) - job.startedAt,
+      answer: job.turn?.answer,
+      model: job.turn?.model,
+      stop: job.turn?.stop,
       error: job.error ? `The model could not answer: ${job.error}` : undefined,
     });
   });

@@ -40,10 +40,10 @@ export class Jobs {
     return [...this.jobs.values()].filter(j => j.user === user && j.status === 'running').length;
   }
 
-  /** starts work(job) in the background; undefined when the user already has MAX_RUNNING_PER_USER running */
-  start(user: string, work: (job: Job) => Promise<Turn>): Job | undefined {
+  /** starts work(job) in the background; undefined when the user already has `limit` (MAX_RUNNING_PER_USER) running */
+  start(user: string, work: (job: Job) => Promise<Turn>, limit = MAX_RUNNING_PER_USER): Job | undefined {
     this.sweep();
-    if (this.running(user) >= MAX_RUNNING_PER_USER) return undefined;
+    if (this.running(user) >= limit) return undefined;
     const abort = new AbortController();
     const job: Job = { id: randomUUID(), user, status: 'running', startedAt: this.now(), toolCalls: [], signal: abort.signal };
     this.jobs.set(job.id, job);

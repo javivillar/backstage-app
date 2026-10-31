@@ -65,4 +65,10 @@ describe('Jobs.cancel', () => {
     expect(jobs.cancel(job.id, 'u')).toBe(false);
     expect(jobs.running('u')).toBe(0);
   });
+  it('takes another limit per caller (the analyses of an application)', () => {
+    const jobs = new Jobs();
+    const never = () => new Promise<never>(() => undefined);
+    expect(jobs.start('app:a', never, 1)).toBeDefined();
+    expect(jobs.start('app:a', never, 1)).toBeUndefined();
+  });
 });
