@@ -5,6 +5,7 @@ import { screen } from '@testing-library/react';
 import { keycloakOIDCAuthApiRef } from '@internal/plugin-keycloak';
 import {
   EntitySupportContent,
+  fetchChanges,
   fetchIncidents,
   supportLinks,
   supportUrl,
@@ -44,13 +45,31 @@ const incident = {
   assignee: 'luis',
   opened_at: '2026-10-30T08:00:00Z',
 };
-const keycloak = (token = 'tok') => ({
-  getAccessToken: jest.fn().mockResolvedValue(token),
-});
+const change = {
+  id: 54,
+  what: 'Upgrade the Pet Store to 2.1',
+  state: 'approved',
+  risk: 'medium',
+  urgent: false,
+  planned_on: '2026-11-03',
+  requester: 'ana',
+  requester_name: 'Ana',
+  assignee: null,
+};
 const answer = (status: number, body: unknown = {}) => ({
   ok: status < 300,
   status,
   json: async () => body,
+});
+/** the support answers the incidents and the changes of the element, each on its own route */
+const support = (incidents: unknown[], changes: unknown[]) =>
+  jest.fn(async (url: string) =>
+    url.includes('/changes')
+      ? answer(200, changes)
+      : answer(200, { items: incidents, total: incidents.length }),
+  );
+const keycloak = (token = 'tok') => ({
+  getAccessToken: jest.fn().mockResolvedValue(token),
 });
 
 afterEach(() => {
@@ -77,6 +96,8 @@ describe('the support of an element', () => {
       open: 'https://support.x/incidents/new?element=component%3Adefault%2Fpetstore-oneke',
       incidents:
         'https://support.x/elements/component%3Adefault/petstore-oneke',
+      change:
+        'https://support.x/changes/new?element=component%3Adefault%2Fpetstore-oneke',
     });
   });
 
@@ -85,11 +106,9 @@ describe('the support of an element', () => {
       .fn()
       .mockResolvedValue(answer(200, { items: [], total: 0 }));
     const catalogApi = {
-      getEntities: jest
-        .fn()
-        .mockResolvedValue({
-          items: [deployment('dev', 'https://support-dev.x')],
-        }),
+      getEntities: jest.fn().mockResolvedValue({
+        items: [deployment('dev', 'https://support-dev.x')],
+      }),
     };
     await renderInTestApp(
       <TestApiProvider
@@ -176,11 +195,9 @@ describe('the support of an element', () => {
       .fn()
       .mockResolvedValue(answer(200, { items: [incident], total: 1 }));
     const catalogApi = {
-      getEntities: jest
-        .fn()
-        .mockResolvedValue({
-          items: [deployment('dev', 'https://support-dev.x')],
-        }),
+      getEntities: jest.fn().mockResolvedValue({
+        items: [deployment('dev', 'https://support-dev.x')],
+      }),
     };
     await renderInTestApp(
       <TestApiProvider
@@ -207,11 +224,9 @@ describe('the support of an element', () => {
       .fn()
       .mockRejectedValue(new TypeError('Failed to fetch'));
     const catalogApi = {
-      getEntities: jest
-        .fn()
-        .mockResolvedValue({
-          items: [deployment('dev', 'https://support-dev.x')],
-        }),
+      getEntities: jest.fn().mockResolvedValue({
+        items: [deployment('dev', 'https://support-dev.x')],
+      }),
     };
     await renderInTestApp(
       <TestApiProvider
@@ -229,5 +244,88 @@ describe('the support of an element', () => {
       await screen.findByText(/The support could not be reached/),
     ).toBeTruthy();
     expect(screen.getByText('Open an incident on Pet Store')).toBeTruthy();
+  });
+
+  it('reads the changes planned on the element with the token of Keycloak', async () => {
+    const fetch = jest.fn().mockResolvedValue(answer(200, [change]));
+    (global as any).fetch = fetch;
+    expect(
+      await fetchChanges(
+        'https://support.x',
+        'component:default/petstore-oneke',
+        'tok',
+      ),
+    ).toEqual([change]);
+    expect(fetch).toHaveBeenCalledWith(
+      'https://support.x/api/elements/component%3Adefault%2Fpetstore-oneke/changes',
+      { headers: { Authorization: 'Bearer tok' } },
+    );
+    // an element the support does not know has no changes
+    (global as any).fetch = jest.fn().mockResolvedValue(answer(404));
+    expect(await fetchChanges('https://support.x', 'r', 't')).toEqual([]);
+    (global as any).fetch = jest.fn().mockResolvedValue(answer(403));
+    await expect(fetchChanges('https://support.x', 'r', 't')).rejects.toThrow(
+      'no role in the support',
+    );
+  });
+
+  it('lists the changes planned on the element and links to ask for one', async () => {
+    (global as any).fetch = support([], [change]);
+    const catalogApi = {
+      getEntities: jest.fn().mockResolvedValue({
+        items: [deployment('dev', 'https://support-dev.x')],
+      }),
+    };
+    await renderInTestApp(
+      <TestApiProvider
+        apis={[
+          [catalogApiRef, catalogApi],
+          [keycloakOIDCAuthApiRef, keycloak()],
+        ]}
+      >
+        <EntityProvider entity={petstore}>
+          <EntitySupportContent />
+        </EntityProvider>
+      </TestApiProvider>,
+    );
+    const what = await screen.findByText('Upgrade the Pet Store to 2.1');
+    expect(what.closest('a')?.getAttribute('href')).toBe(
+      'https://support-dev.x/changes/54',
+    );
+    expect(screen.getByText('Approved')).toBeTruthy();
+    expect(screen.getByText('Medium')).toBeTruthy();
+    expect(screen.getByText('Changes planned on it (1)')).toBeTruthy();
+    expect(
+      screen
+        .getByText('Ask for a change on Pet Store')
+        .closest('a')
+        ?.getAttribute('href'),
+    ).toBe(
+      'https://support-dev.x/changes/new?element=component%3Adefault%2Fpetstore-oneke',
+    );
+  });
+
+  it('says when no change is planned on the element', async () => {
+    (global as any).fetch = support([], []);
+    const catalogApi = {
+      getEntities: jest.fn().mockResolvedValue({
+        items: [deployment('dev', 'https://support-dev.x')],
+      }),
+    };
+    await renderInTestApp(
+      <TestApiProvider
+        apis={[
+          [catalogApiRef, catalogApi],
+          [keycloakOIDCAuthApiRef, keycloak()],
+        ]}
+      >
+        <EntityProvider entity={petstore}>
+          <EntitySupportContent />
+        </EntityProvider>
+      </TestApiProvider>,
+    );
+    expect(
+      await screen.findByText('No change planned on this element.'),
+    ).toBeTruthy();
   });
 });
