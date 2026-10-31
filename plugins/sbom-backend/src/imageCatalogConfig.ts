@@ -13,7 +13,7 @@ export function imageCatalogFromConfig(config: RootConfigService, logger: Logger
   const harborUrl = c?.getOptionalString('harborUrl');
   if (!harborUrl) return undefined;
   try {
-    new URL(harborUrl);
+    if (!new URL(harborUrl).host) throw new Error('no host');
   } catch {
     logger.warn(`sbom.imageCatalog.harborUrl is not a URL: ${harborUrl}`);
     return undefined;
