@@ -2,8 +2,10 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import { AppsV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
 import express, { Router } from 'express';
 import { readFileSync } from 'fs';
-import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, WORKLOAD_KINDS } from './clusterActions';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
+import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
+import { refuse, VmFile, type VmRequest, type VmSpec } from './clusterVms';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
@@ -102,9 +104,14 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *                                               Warning events of the last hour (signed-in; 15 s; Kubernetes API)
  *   GET /api/cluster/zone       ZoneView: the zone as the OpenNebula host publishes it (topology.json in the ConfigMap
  *                               refresquito-topology of this namespace, every 5 min); read-only
- *   GET /api/cluster/actions    { allowed, groups, log }: whether the user may act, and the last actions
+ *   GET /api/cluster/actions[?entity=<ref>]   { allowed, groups, owners, log }: whether the user may act (on that
+ *                               entity, as its owner when console.actions.owners), and the last actions
  *   POST /api/cluster/actions/sync     { app }                        sync an Argo CD application with git
  *   POST /api/cluster/actions/restart  { app, namespace, kind, name } restart a workload (Argo CD action)
+ *   GET  /api/cluster/zone/vms         { spec, allowed }: the VMs requested from the console (vms.json, opennebula)
+ *   POST /api/cluster/zone/vms         { zone, program, name, size, image }  request a VM (backstage-admin)
+ *   POST /api/cluster/zone/vms/state   { zone, program, name, state }        stop, start or delete it
+ *        The console writes vms.json on main of console.vms.repo; the OpenNebula host applies it every 2 min.
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
  *
  * Config: costs.prometheusUrl (the same Prometheus as the costs). Without it /overview answers 503. /network reads the
@@ -120,8 +127,9 @@ export default createBackendPlugin({
         userInfo: coreServices.userInfo,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
+        catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, userInfo, config, logger }) {
+      async init({ httpRouter, httpAuth, userInfo, config, logger, catalog }) {
         const prometheus = config.getOptionalString('costs.prometheusUrl')?.replace(/\/+$/, '');
         const query = prometheus ? prometheusQuery(prometheus) : undefined;
         let cache: { at: number; body: ClusterOverview } | undefined;
@@ -148,6 +156,8 @@ export default createBackendPlugin({
 
         // actions: Argo CD with the credentials of the Argo CD plugin; who may act
         const groups = config.getOptionalStringArray('console.actions.groups') ?? ['backstage-admin'];
+        // later: the owner of each resource acts on it (off until it is decided)
+        const owners = config.getOptionalBoolean('console.actions.owners') ?? false;
         const argoCfg = config.getOptionalConfigArray('argocd.appLocatorMethods')?.[0]?.getOptionalConfigArray('instances')?.[0];
         const argoInstance: ArgoInstance | undefined = argoCfg
           ? {
@@ -164,11 +174,44 @@ export default createBackendPlugin({
           actionLog.splice(100);
           logger.info(`console action ${r.action} ${r.target} by ${r.user}: ${r.result}${r.message ? ` (${r.message})` : ''}`);
         };
-        const actor = async (req: express.Request) => {
+        /** Who asks, whether they may act on anything (groups), and on what entity they may act as its owner. */
+        const actor = async (req: express.Request, entityRef?: string) => {
           const credentials = await httpAuth.credentials(req, { allow: ['user'] });
           const info = await userInfo.getUserInfo(credentials);
-          return { user: info.userEntityRef, allowed: mayAct(info.ownershipEntityRefs, groups) };
+          const admin = mayAct(info.ownershipEntityRefs, groups);
+          let owned: { namespace?: string; app: string } | undefined;
+          if (!admin && owners && entityRef) {
+            const entity = await catalog.getEntityByRef(entityRef, { credentials }).catch(() => undefined);
+            const owner = (entity?.spec as { owner?: string } | undefined)?.owner;
+            if (entity && ownsEntity(info.ownershipEntityRefs, owner)) {
+              owned = { namespace: entity.metadata.annotations?.['refresquito.io/namespace'], app: entity.metadata.name };
+            }
+          }
+          return { user: info.userEntityRef, allowed: admin || !!owned, admin, owned };
         };
+
+        // the VMs requested from the console: vms.json in the opennebula repository, applied by the host
+        const ghToken = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
+        const vmFile = new VmFile(
+          config.getOptionalString('console.vms.repo') ?? 'javivillar/opennebula',
+          config.getOptionalString('console.vms.path') ?? 'configuration/vms.json',
+          config.getOptionalString('console.vms.branch') ?? 'main',
+          ghToken,
+        );
+        /** The zone as the host publishes it (cached 1 min); undefined while it has not published topology.json. */
+        const readZone = async (): Promise<ZoneView | undefined> => {
+          if (!kc || !ownNamespace) return undefined;
+          if (!zoneCache || Date.now() - zoneCache.at > 60_000) {
+            const core = kc.makeApiClient(CoreV1Api);
+            const read = core.readNamespacedConfigMap as unknown as (name: string, namespace: string) => Promise<unknown>;
+            const r = (await read.call(core, zoneConfigMap, ownNamespace)) as { body?: { data?: Record<string, string> }; data?: Record<string, string> };
+            const json = (r.body?.data ?? r.data ?? {})['topology.json'];
+            if (!json) return undefined;
+            zoneCache = { at: Date.now(), body: summariseZone(JSON.parse(json)) };
+          }
+          return zoneCache.body;
+        };
+        const zonePrograms = async (): Promise<string[]> => ((await readZone())?.zones ?? []).flatMap(z => z.programs.map(p => `${z.name}/${p.name}`));
 
         const router = Router();
         router.use(express.json({ limit: '16kb' }));
@@ -284,18 +327,12 @@ export default createBackendPlugin({
             return;
           }
           try {
-            if (!zoneCache || Date.now() - zoneCache.at > 60_000) {
-              const core = kc.makeApiClient(CoreV1Api);
-              const read = core.readNamespacedConfigMap as unknown as (name: string, namespace: string) => Promise<unknown>;
-              const r = (await read.call(core, zoneConfigMap, ownNamespace)) as { body?: { data?: Record<string, string> }; data?: Record<string, string> };
-              const json = (r.body?.data ?? r.data ?? {})['topology.json'];
-              if (!json) {
-                res.status(404).json({ error: `The host has not published topology.json in ${zoneConfigMap} yet (opennebula: topology-publish).` });
-                return;
-              }
-              zoneCache = { at: Date.now(), body: summariseZone(JSON.parse(json)) };
+            const zone = await readZone();
+            if (!zone) {
+              res.status(404).json({ error: `The host has not published topology.json in ${zoneConfigMap} yet (opennebula: topology-publish).` });
+              return;
             }
-            res.json(zoneCache.body);
+            res.json(zone);
           } catch (e) {
             logger.error(`cluster zone: ${(e as Error).message}`);
             res.status(502).json({ error: `The zone could not be read: ${(e as Error).message}` });
@@ -304,24 +341,29 @@ export default createBackendPlugin({
 
         router.get('/actions', async (req, res) => {
           try {
-            const { allowed } = await actor(req);
-            res.json({ allowed: allowed && !!argo, groups, configured: !!argo, log: allowed ? actionLog.slice(0, 30) : [] });
+            const entity = typeof req.query.entity === 'string' ? req.query.entity : undefined;
+            const { allowed, admin } = await actor(req, entity);
+            res.json({ allowed: allowed && !!argo, groups, owners, configured: !!argo, log: admin ? actionLog.slice(0, 30) : actionLog.filter(a => entity && a.target.includes(entity.split('/').pop()!)).slice(0, 30) });
           } catch {
             res.status(401).json({ error: 'Sign in' });
           }
         });
 
-        const act = (name: string, run: (body: Record<string, unknown>) => { target: string; go: () => Promise<void> } | string) =>
+        type Who = Awaited<ReturnType<typeof actor>>;
+        const act = (
+          name: string,
+          run: (body: Record<string, unknown>) => { target: string; namespace?: string; app: string; go: () => Promise<void> } | string,
+        ) =>
           router.post(`/actions/${name}`, async (req, res) => {
-            let who: { user: string; allowed: boolean };
+            let who: Who;
             try {
-              who = await actor(req);
+              who = await actor(req, typeof req.body?.entity === 'string' ? req.body.entity : undefined);
             } catch {
               res.status(401).json({ error: 'Sign in' });
               return;
             }
             if (!who.allowed) {
-              res.status(403).json({ error: `Only ${groups.join(', ')} can do this for now.` });
+              res.status(403).json({ error: `Only ${groups.join(', ')}${owners ? ' or the owner of the service' : ''} can do this.` });
               return;
             }
             if (!argo) {
@@ -332,6 +374,14 @@ export default createBackendPlugin({
             if (typeof plan === 'string') {
               res.status(400).json({ error: plan });
               return;
+            }
+            // an owner acts only on what belongs to their entity: its namespace, its Argo CD application
+            if (!who.admin && who.owned) {
+              const mine = plan.namespace ? plan.namespace === who.owned.namespace : plan.app === who.owned.app;
+              if (!mine) {
+                res.status(403).json({ error: 'As its owner you can act only on the namespace and application of your service.' });
+                return;
+              }
             }
             try {
               await plan.go();
@@ -345,13 +395,69 @@ export default createBackendPlugin({
         act('sync', b => {
           const app = String(b.app ?? '');
           if (!NAME.test(app)) return 'app: the name of an Argo CD application';
-          return { target: app, go: () => argo!.sync(app) };
+          return { target: app, app, go: () => argo!.sync(app) };
         });
         act('restart', b => {
           const [app, namespace, kind, name] = [b.app, b.namespace, b.kind, b.name].map(v => String(v ?? ''));
           if (!NAME.test(app) || !NAMESPACE_NAME.test(namespace) || !NAME.test(name)) return 'app, namespace and name are names';
           if (!(WORKLOAD_KINDS as readonly string[]).includes(kind)) return `kind is one of ${WORKLOAD_KINDS.join(', ')}`;
-          return { target: `${kind} ${namespace}/${name} (${app})`, go: () => argo!.restart(app, namespace, kind, name) };
+          return { target: `${kind} ${namespace}/${name} (${app})`, namespace, app, go: () => argo!.restart(app, namespace, kind, name) };
+        });
+
+        router.get('/zone/vms', async (req, res) => {
+          try {
+            const { admin } = await actor(req);
+            const { spec } = await vmFile.read();
+            res.json({ spec: { limits: spec.limits, sizes: spec.sizes, images: spec.images, vms: spec.vms }, allowed: admin });
+          } catch (e) {
+            res.status(502).json({ error: (e as Error).message });
+          }
+        });
+        const vmChange = (path: string, change: (body: Record<string, string>, user: string, now: string, programs: string[]) => (spec: VmSpec) => string) =>
+          router.post(path, async (req, res) => {
+            let who: Awaited<ReturnType<typeof actor>>;
+            try {
+              who = await actor(req);
+            } catch {
+              res.status(401).json({ error: 'Sign in' });
+              return;
+            }
+            if (!who.admin) {
+              res.status(403).json({ error: `Only ${groups.join(', ')} can create or change VMs.` });
+              return;
+            }
+            try {
+              const { spec, sha } = await vmFile.read();
+              const body = Object.fromEntries(Object.entries(req.body ?? {}).map(([k, v]) => [k, String(v)]));
+              const message = change(body, who.user, new Date().toISOString(), await zonePrograms())(spec);
+              if (message.startsWith('!')) {
+                res.status(400).json({ error: message.slice(1) });
+                return;
+              }
+              await vmFile.write(spec, sha, `${message} (by ${who.user}, from the console)`);
+              record({ at: new Date().toISOString(), user: who.user, action: 'vm', target: message, result: 'done' });
+              res.json({ ok: true });
+            } catch (e) {
+              res.status(502).json({ error: (e as Error).message });
+            }
+          });
+        vmChange('/zone/vms', (b, user, now, programs) => spec => {
+          const v = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image };
+          const no = refuse(spec, v, programs);
+          if (no) return `!${no}`;
+          // a request deleted before can be asked again: the old entry goes
+          spec.vms = spec.vms.filter(x => !(x.zone === v.zone && x.program === v.program && x.name === v.name));
+          spec.vms.push({ ...v, state: 'running', requested_by: user, requested_at: now });
+          return `console: create VM ${v.name} in ${v.zone}/${v.program} (${v.size}, ${v.image})`;
+        });
+        vmChange('/zone/vms/state', b => spec => {
+          const state = b.state as VmRequest['state'];
+          if (!['running', 'stopped', 'deleted'].includes(state)) return '!state is running, stopped or deleted';
+          const v = spec.vms.find(x => x.zone === b.zone && x.program === b.program && x.name === b.name);
+          if (!v) return `!There is no VM ${b.name} in ${b.zone}/${b.program}.`;
+          v.state = state;
+          const verb = { running: 'start', stopped: 'stop', deleted: 'delete' }[state];
+          return `console: ${verb} VM ${v.name} in ${v.zone}/${v.program}`;
         });
 
         httpRouter.use(router);

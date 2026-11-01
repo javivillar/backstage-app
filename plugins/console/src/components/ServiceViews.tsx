@@ -1,4 +1,4 @@
-import type { Entity } from '@backstage/catalog-model';
+import { type Entity, stringifyEntityRef } from '@backstage/catalog-model';
 import { Link } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -86,7 +86,7 @@ export function vitals(d: NonNullable<ReturnType<typeof useService>>): Vital[] {
 /** Sync with git and restart a workload, through Argo CD; only the groups of console.actions.groups. */
 const ActionsPanel = () => {
   const d = useService();
-  const actions = useActions();
+  const actions = useActions(d ? stringifyEntityRef(d.entity) : undefined);
   const [pending, setPending] = useState<{ text: string; go: () => Promise<void> } | undefined>();
   const [result, setResult] = useState<{ ok: boolean; text: string } | undefined>();
   if (!d) return null;
@@ -110,7 +110,8 @@ const ActionsPanel = () => {
   return (
     <Box sx={{ mx: '22px', mb: 1.75, border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.5, display: 'grid', gap: 1.25, bgcolor: 'action.hover' }}>
       <Typography variant="caption" color="text.secondary">
-        Actions go through Argo CD. Only {info?.groups.join(', ') ?? 'backstage-admin'} for now; later the owner of each resource.
+        Actions go through Argo CD. Allowed: {info?.groups.join(', ') ?? 'backstage-admin'}
+        {info?.owners ? ', and the owner of this service on its own namespace' : ' (the owner of each service: not enabled yet)'}.
       </Typography>
       {info && !info.allowed && <Typography variant="body2">{info.configured ? 'You are not in those groups: the actions are shown but not available to you.' : 'Argo CD is not configured in this portal.'}</Typography>}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -400,7 +401,7 @@ export const ServiceOverview = () => {
 export const ServiceChanges = () => {
   const d = useService();
   const changes = useNamespaceChanges(d?.namespace);
-  const actions = useActions();
+  const actions = useActions(d ? stringifyEntityRef(d.entity) : undefined);
   if (!d) return null;
   const mine = (actions.data?.log ?? []).filter(a => (d.namespace && a.target.includes(d.namespace)) || (d.app && a.target.includes(d.app.name)));
   return (
@@ -494,6 +495,12 @@ export const ServiceSecurity = () => {
 
 /* ------------------------------------------------------------------ costs */
 
+const weekMessage = (s?: { loading: boolean; error?: string }) => {
+  if (s?.loading) return 'Reading OpenCost… it can take a couple of minutes for a week.';
+  if (s?.error) return `OpenCost did not answer: ${s.error}`;
+  return 'OpenCost has no cost for its namespace yet.';
+};
+
 export const ServiceCosts = () => {
   const d = useService();
   if (!d) return null;
@@ -522,7 +529,7 @@ export const ServiceCosts = () => {
             </Typography>
           </>
         ) : (
-          <Typography color="text.secondary">OpenCost has no cost for its namespace yet.</Typography>
+          <Typography color="text.secondary">{weekMessage(d.weekState)}</Typography>
         )}
       </Section>
       <Section title="Could cost less">

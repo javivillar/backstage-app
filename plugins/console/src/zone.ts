@@ -25,8 +25,10 @@ export type Zone = {
   programs: ZoneProgram[];
 };
 export type DriftItem = { zone: string; program?: string; kind: string; name: string; detail: string };
+export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 export type ZoneView = {
   generated?: string;
+  consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
   zones: Zone[];
@@ -39,3 +41,13 @@ export const useZone = () => useClusterGet<ZoneView>('/zone', 120_000);
 export function zoneVms(z: Zone): Array<ZoneVm & { program: string }> {
   return [...(z.router?.vms ?? []).map(v => ({ ...v, program: 'zone' })), ...z.programs.flatMap(p => p.vms.map(v => ({ ...v, program: p.name })))];
 }
+
+/** GET /api/cluster/zone/vms: the VMs requested from the console (vms.json of the opennebula repository). */
+export type VmRequest = { zone: string; program: string; name: string; size: string; image: string; state: 'running' | 'stopped' | 'deleted'; requested_by?: string; requested_at?: string };
+export type VmSpec = {
+  limits: { vms?: number; cpu?: number; memory_mb?: number; host_reserve_mb?: number };
+  sizes: Record<string, { cpu: number; memory_mb: number; disk_gb: number }>;
+  images: Record<string, string>;
+  vms: VmRequest[];
+};
+export const useVmRequests = () => useClusterGet<{ spec: VmSpec; allowed: boolean }>('/zone/vms', 60_000);

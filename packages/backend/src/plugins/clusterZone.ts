@@ -31,8 +31,11 @@ export type Zone = {
   programs: ZoneProgram[];
 };
 export type DriftItem = { zone: string; program?: string; kind: 'network' | 'security group' | 'router' | 'cluster'; name: string; detail: string };
+/** What vms-apply did with each VM requested from the console (configuration/vms.py of opennebula). */
+export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 export type ZoneView = {
   generated?: string;
+  consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
   zones: Zone[];
@@ -99,8 +102,10 @@ export function summariseZone(raw: Raw): ZoneView {
       return { name: zone, label: z.label || undefined, status: str(z.status), block: z.block || undefined, router, transit, programs };
     });
   const h = raw.host;
+  const cv = raw.console_vms;
   return {
     generated: raw.generated ? str(raw.generated) : undefined,
+    consoleVms: cv && Array.isArray(cv.vms) ? { applied: cv.applied ? str(cv.applied) : undefined, vms: cv.vms as ConsoleVmStatus[] } : undefined,
     warnings: (raw.warnings ?? []).map(str),
     host: h
       ? {

@@ -2,7 +2,8 @@
  * Actions of the console on what Argo CD deploys: sync an application with git, restart a workload. They go through
  * the Argo CD API with the credentials Backstage already has for the Argo CD plugin (argocd.appLocatorMethods), so
  * Backstage gets no write access to Kubernetes and Argo CD keeps the cluster equal to git. Who may act: the groups of
- * console.actions.groups (default backstage-admin); later, per resource (its owner).
+ * console.actions.groups (default backstage-admin) on anything; with console.actions.owners: true (default false), also
+ * the owner of an entity on its own namespace and Argo CD application.
  */
 
 export type ArgoInstance = { url: string; token?: string; username?: string; password?: string };
@@ -15,6 +16,20 @@ export const NAME = /^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/;
 export function mayAct(ownershipRefs: string[], groups: string[]): boolean {
   const want = new Set(groups.map(g => (g.includes(':') ? g : `group:default/${g}`).toLowerCase()));
   return ownershipRefs.some(r => want.has(r.toLowerCase()));
+}
+
+/** The owner of an entity as an entity ref (spec.owner may be "team", "group:team" or "group:default/team"). */
+export function ownerRef(owner?: string): string | undefined {
+  if (!owner) return undefined;
+  const o = owner.toLowerCase();
+  if (!o.includes(':')) return `group:default/${o}`;
+  return o.includes('/') ? o : o.replace(':', ':default/');
+}
+
+/** Whether the user owns the entity (one of their ownership refs is its owner). */
+export function ownsEntity(ownershipRefs: string[], owner?: string): boolean {
+  const ref = ownerRef(owner);
+  return !!ref && ownershipRefs.some(r => r.toLowerCase() === ref);
 }
 
 export class ArgoClient {
