@@ -34,11 +34,11 @@ describe('summariseZone', () => {
     const z = summariseZone(raw);
     expect(z.zones.map(x => x.name)).toEqual(['nato']);
     const nato = z.zones[0];
-    expect(nato.router).toEqual({ name: 'vr-nato', exists: true, vms: [{ id: '7', name: 'vr-nato-0', state: 'ACTIVE', role: 'zone router', ips: ['10.102.0.2'] }] });
+    expect(nato.router).toMatchObject({ name: 'vr-nato', exists: true, vms: [{ id: '7', name: 'vr-nato-0', state: 'ACTIVE', role: 'zone router', ips: ['10.102.0.2'] }] });
     expect(nato.transit).toMatchObject({ name: 'nato-transit', leases: 2, hostIp: '10.102.0.1', routerIp: '10.102.0.2' });
     const p = nato.programs[0];
     expect(p.cluster).toEqual({ name: 'oneke-nato-sirtap', state: 'RUNNING', vip: '10.102.1.200', roles: { master: 2, worker: 3 }, fqdn: '*.platform.nato.sirtap.iaas.refresquito.io' });
-    expect(p.vms[0]).toEqual({ id: '21', name: 'oneke-ip-10-102-101-17', state: 'ACTIVE', role: 'master', host: 'refresquito', vcpu: '4', memoryGb: 4, ips: ['10.102.101.17'] });
+    expect(p.vms[0]).toMatchObject({ id: '21', name: 'oneke-ip-10-102-101-17', state: 'ACTIVE', role: 'master', host: 'refresquito', vcpu: '4', memoryGb: 4, ips: ['10.102.101.17'] });
     expect(z.host).toMatchObject({ name: 'refresquito', cpus: 16, availableGiB: 21.9 });
   });
 

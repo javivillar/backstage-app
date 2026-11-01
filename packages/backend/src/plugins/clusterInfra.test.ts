@@ -1,4 +1,4 @@
-import { addSegregation, enableZone, refuseCluster, scaleCluster, tomlPrograms } from './clusterInfra';
+import { addSegregation, deleteCluster, enableZone, refuseCluster, removeSegregation, scaleCluster, tomlPrograms, withoutProgram } from './clusterInfra';
 import type { ZoneView } from './clusterZone';
 
 const TOML = `[general]
@@ -84,5 +84,34 @@ describe('infrastructure as code from the console', () => {
     expect(scaleCluster(view(10_000), undefined, ask, 'u')).toMatch(/memory/);
     expect(scaleCluster(view(), undefined, { ...ask, program: 'a400m' }, 'u')).toMatch(/no cluster/);
     expect(scaleCluster(view(), { zone: 'nato', program: 'sirtap', workers: 2, storage: 1 }, { ...ask, workers: 2 }, 'u')).toMatch(/already/);
+  });
+
+  it('removes a segregation block and nothing else', () => {
+    const t = `${TOML}\n[[exception]]\nfrom = "nato/sirtap"\nto = "nato/cistest"\n`;
+    const out = withoutProgram(t, 'nato', 'cistest')!;
+    expect(tomlPrograms(out)).toEqual([{ zone: 'nato', n: 1, name: 'sirtap' }]);
+    expect(out).toContain('[[exception]]\nfrom = "nato/sirtap"');
+    expect(withoutProgram(t, 'nato', 'nope')).toBeUndefined();
+    const v = view();
+    expect(removeSegregation(TOML, v, [], 0, ['nato/sirtap'], 'nato', 'sirtap')).toMatch(/this console/);
+    expect(removeSegregation(TOML, v, [], 0, [], 'nato', 'sirtap')).toMatch(/delete the cluster first/);
+    expect(removeSegregation(TOML, v, [{ zone: 'nato', program: 'cistest' }], 0, [], 'nato', 'cistest')).toMatch(/asked in git/);
+    expect(removeSegregation(TOML, v, [], 1, [], 'nato', 'cistest')).toMatch(/1 VM/);
+    expect(removeSegregation(TOML, v, [{ zone: 'nato', program: 'cistest', delete: true }], 0, [], 'nato', 'cistest')).toHaveProperty('text');
+  });
+
+  it('deletes a cluster, never the one of the console', () => {
+    expect(deleteCluster(view(), undefined, ['nato/sirtap'], 'nato', 'sirtap', 'u')).toMatch(/this console/);
+    expect(deleteCluster(view(), undefined, [], 'nato', 'sirtap', 'u')).toMatchObject({ zone: 'nato', program: 'sirtap', delete: true });
+    expect(deleteCluster(view(), undefined, [], 'nato', 'a400m', 'u')).toMatch(/no cluster/);
+    expect(deleteCluster(view(), { zone: 'nato', program: 'sirtap', delete: true }, [], 'nato', 'sirtap', 'u')).toMatch(/already/);
+  });
+
+  it('adds masters, never removes them', () => {
+    const ask = { zone: 'nato', program: 'sirtap', workers: 2, storage: 1 };
+    expect(scaleCluster(view(), undefined, { ...ask, masters: 3 }, 'u')).toMatchObject({ masters: 3, workers: 2 });
+    expect(scaleCluster(view(), undefined, { ...ask, masters: 1 }, 'u')).toMatch(/etcd/);
+    expect(scaleCluster(view(), undefined, { ...ask, masters: 9 }, 'u')).toMatch(/Masters/);
+    expect(scaleCluster(view(1000), undefined, { ...ask, masters: 3 }, 'u')).toMatch(/memory/);
   });
 });

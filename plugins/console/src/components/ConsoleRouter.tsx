@@ -18,6 +18,8 @@ import { ZoneNetworksPage, ZoneOverviewPage, ZoneSecurityGroupsPage, ZoneVmsPage
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { MarketplacePage, PlatformPage } from './InfraPages';
 import { ClusterScalePage } from './ClusterScalePage';
+import { ProgrammePage, VmDetailPage } from './InfraDetail';
+import { CisClusterPage } from './CisClusterPage';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { PortalHome } from './PortalHome';
@@ -77,6 +79,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/clusters/:id" element={<ClusterFrame />} />
         <Route path="/cluster" element={<ClusterOverviewPage />} />
         <Route path="/cluster/scale" element={<ClusterScalePage />} />
+        <Route path="/cis-cluster" element={<CisClusterPage />} />
         <Route path="/network" element={<NetworkPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/storage" element={<StoragePage />} />
@@ -87,6 +90,9 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/infrastructure/security-groups" element={<ZoneSecurityGroupsPage />} />
         <Route path="/infrastructure/platform" element={<PlatformPage />} />
         <Route path="/infrastructure/marketplace" element={<MarketplacePage />} />
+        <Route path="/infrastructure/platform/:zone/:program" element={<ProgrammePage />} />
+        <Route path="/infrastructure/clusters/:zone/:program" element={<ClusterScalePage />} />
+        <Route path="/infrastructure/vm/:name" element={<VmDetailPage />} />
         <Route path="*" element={<Message title="Page not found">This page of the console does not exist.</Message>} />
         </Routes>
       </ConsoleShell>

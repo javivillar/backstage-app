@@ -6,6 +6,8 @@ export type ConsoleClassicPage = {
   /** console path segment: /console/<id> */
   id: string;
   title: string;
+  /** the product behind it (the menu shows it on hover), e.g. Keycloak for IAM */
+  product?: string;
   /** menu group of the console */
   layer: 'portal' | 'cluster' | 'assistants' | 'managers';
   /** where the classic portal mounts it, e.g. /create */

@@ -10,9 +10,9 @@ import type { ZoneView } from './clusterZone';
 /** The programme name of configuration.py (PROGRAM_RE). */
 export const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 /** Limits of what the console may ask (the host checks the memory again). */
-export const SCALE_LIMITS = { workers: 8, storage: 3 };
+export const SCALE_LIMITS = { workers: 8, storage: 3, masters: 5 };
 
-export type ClusterFile = { zone: string; program: string; profile?: string; masters?: number; workers?: number; storage?: number; requested_by?: string; requested_at?: string };
+export type ClusterFile = { zone: string; program: string; profile?: string; masters?: number; workers?: number; storage?: number; delete?: boolean; requested_by?: string; requested_at?: string };
 export const clusterFileName = (zone: string, program: string) => `${zone}-${program}.json`;
 
 /** The [[program]] blocks of network.toml: zone and n. */
@@ -69,6 +69,51 @@ export function addSegregation(text: string, view: ZoneView, zone: string, progr
   return { text: out, n, enabled };
 }
 
+/** network.toml without the [[program]] block of zone/program (the host then destroys it). */
+export function withoutProgram(text: string, zone: string, program: string): string | undefined {
+  const lines = text.split('\n');
+  const heads = [...lines.flatMap((l, i) => (/^\s*\[/.test(l) ? [i] : [])), lines.length];
+  for (let h = 0; h < heads.length - 1; h++) {
+    const [i, end] = [heads[h], heads[h + 1]];
+    if (lines[i].trim() !== '[[program]]') continue;
+    const body = lines.slice(i, end);
+    const has = (k: string, v: string) => body.some(l => new RegExp(`^\\s*${k}\\s*=\\s*"${v}"`).test(l));
+    if (!(has('zone', zone) && has('name', program))) continue;
+    let from = i;
+    while (from > 0 && lines[from - 1].trim() === '') from--;
+    const out = [...lines.slice(0, from), ...(end < lines.length ? ['', ...lines.slice(end)] : [])].join('\n');
+    return `${out.replace(/\n+$/, '')}\n`;
+  }
+  return undefined;
+}
+
+/**
+ * Removing a segregation: never an admin programme (the console runs there), never one with a cluster (asked or
+ * running) or VMs (they would be destroyed with its networks). Returns the new network.toml or the reason.
+ */
+export function removeSegregation(text: string, view: ZoneView, files: ClusterFile[], vmCount: number, admins: string[], zone: string, program: string): string | { text: string } {
+  const id = `${zone}/${program}`;
+  if (admins.includes(id)) return `${id} is the programme of this console: it is not removed from here.`;
+  const live = view.zones.find(z => z.name === zone)?.programs.find(p => p.name === program);
+  if (live?.cluster) return `${id} has the cluster ${live.cluster.name}: delete the cluster first.`;
+  if (files.some(f => f.zone === zone && f.program === program && !f.delete)) return `A cluster of ${id} is asked in git: delete it first.`;
+  const vms = (live?.vms ?? []).filter(v => v.role !== 'zone router').length + vmCount;
+  if (vms > 0) return `${id} has ${vms} VM(s): delete them first.`;
+  const out = withoutProgram(text, zone, program);
+  if (!out) return `${id} is not in network.toml.`;
+  return { text: out };
+}
+
+/** Deleting a cluster: its file with delete = true (the host runs cluster-destroy); never the console's own. */
+export function deleteCluster(view: ZoneView, file: ClusterFile | undefined, admins: string[], zone: string, program: string, user: string): ClusterFile | string {
+  const id = `${zone}/${program}`;
+  if (admins.includes(id)) return `${id} is the cluster of this console: it is not deleted from here.`;
+  const live = view.zones.find(z => z.name === zone)?.programs.find(p => p.name === program);
+  if (!live?.cluster && !file) return `There is no cluster in ${id}.`;
+  if (file?.delete) return `The deletion of the cluster of ${id} is already asked.`;
+  return { ...(file ?? { zone, program }), delete: true, requested_by: user, requested_at: new Date().toISOString() };
+}
+
 /** What a new cluster asks, or why it cannot be asked. files: the cluster files already in git. */
 export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone: string; program: string; profile: string; workers?: number }): string | undefined {
   const z = view.catalog?.find(c => c.name === req.zone);
@@ -88,20 +133,24 @@ export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone:
 }
 
 /** The scale of a cluster: its file with the new counts, or why not. */
-export function scaleCluster(view: ZoneView, file: ClusterFile | undefined, req: { zone: string; program: string; workers: number; storage: number }, user: string): ClusterFile | string {
+export function scaleCluster(view: ZoneView, file: ClusterFile | undefined, req: { zone: string; program: string; workers: number; storage: number; masters?: number }, user: string): ClusterFile | string {
   const live = view.zones.find(x => x.name === req.zone)?.programs.find(p => p.name === req.program);
   if (!live?.cluster) return `There is no cluster in ${req.zone}/${req.program}.`;
   if (!(Number.isInteger(req.workers) && req.workers >= 0 && req.workers <= SCALE_LIMITS.workers)) return `Workers: 0 to ${SCALE_LIMITS.workers}.`;
   if (!(Number.isInteger(req.storage) && req.storage >= 0 && req.storage <= SCALE_LIMITS.storage)) return `Storage nodes: 0 to ${SCALE_LIMITS.storage}.`;
+  if (file?.delete) return `The cluster of ${req.zone}/${req.program} is being deleted.`;
   const roles = live.cluster.roles ?? {};
-  const now = { worker: Number(roles.worker ?? 0), storage: Number(roles.storage ?? 0) };
-  if (now.worker === req.workers && now.storage === req.storage && file?.workers === req.workers && file?.storage === req.storage) return 'The cluster already has these nodes.';
+  const now = { worker: Number(roles.worker ?? 0), storage: Number(roles.storage ?? 0), master: Number(roles.master ?? 0) };
+  const masters = req.masters ?? now.master;
+  if (!(Number.isInteger(masters) && masters >= 1 && masters <= SCALE_LIMITS.masters)) return `Masters: 1 to ${SCALE_LIMITS.masters}.`;
+  if (masters < now.master) return 'Masters are only added from the console: removing one can break the etcd quorum (cluster-scale on the host, one at a time).';
+  if (now.worker === req.workers && now.storage === req.storage && now.master === masters && file?.workers === req.workers && file?.storage === req.storage) return 'The cluster already has these nodes.';
   if (now.storage > 0 && req.storage < now.storage) return 'Storage nodes hold Longhorn replicas: the console only adds them (remove one with cluster-scale on the host, after draining it).';
   const profile = view.kubernetes?.profiles.find(p => p.name === (file?.profile ?? view.kubernetes?.defaultProfile));
   const free = view.capacity?.freeMemoryMb;
   if (profile && typeof free === 'number') {
-    const more = Math.max(0, req.workers - now.worker) * profile.roles.worker.memory_mb + Math.max(0, req.storage - now.storage) * profile.roles.storage.memory_mb;
+    const more = Math.max(0, req.workers - now.worker) * profile.roles.worker.memory_mb + Math.max(0, req.storage - now.storage) * profile.roles.storage.memory_mb + Math.max(0, masters - now.master) * profile.roles.master.memory_mb;
     if (more > free) return `The new nodes need ${Math.round(more / 1024)} GB of memory and the hosts have ${Math.round(free / 1024)} GB unallocated.`;
   }
-  return { ...(file ?? { zone: req.zone, program: req.program }), workers: req.workers, storage: req.storage, requested_by: user, requested_at: new Date().toISOString() };
+  return { ...(file ?? { zone: req.zone, program: req.program }), workers: req.workers, storage: req.storage, ...(masters !== now.master || file?.masters !== undefined ? { masters } : {}), requested_by: user, requested_at: new Date().toISOString() };
 }

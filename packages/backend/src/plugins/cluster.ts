@@ -6,7 +6,7 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
 import { type ConsolePull, GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
-import { addSegregation, type ClusterFile, clusterFileName, refuseCluster, scaleCluster } from './clusterInfra';
+import { addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
@@ -117,7 +117,9 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *   GET  /api/cluster/infra            { allowed, pulls, clusters }: open PRs of segregations/clusters, cluster files
  *   POST /api/cluster/infra/segregations    { zone, program }                       PR adding the programme to network.toml
  *   POST /api/cluster/infra/clusters        { zone, program, profile, workers? }    PR adding clusters/<zone>-<program>.json
- *   POST /api/cluster/infra/clusters/scale  { zone, program, workers, storage }     committed directly to main
+ *   POST /api/cluster/infra/clusters/scale  { zone, program, workers, storage, masters? }  committed directly to main
+ *   POST /api/cluster/infra/segregations/delete  { zone, program }                  PR removing the programme (host: destroy)
+ *   POST /api/cluster/infra/clusters/delete      { zone, program }                  PR with delete: true (host: cluster-destroy)
  *        In console.infra.repo (javivillar/opennebula), console.infra.dir (configuration): the host follows main
  *        (configuration.py reconcile) and applies them. Only console.actions.groups (backstage-admin).
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
@@ -243,6 +245,10 @@ export default createBackendPlugin({
           return Promise.all(files.map(async f => ({ ...(JSON.parse((await infraRepo.get(f.path)).text) as ClusterFile), file: f.path, sha: f.sha })));
         };
         const pullsOf = (repo: GitHubFiles) => repo.openPulls().catch(() => [] as ConsolePull[]);
+        const mergedOf = (repo: GitHubFiles) => repo.mergedPulls().catch(() => [] as ConsolePull[]);
+        // the programme of this console: its cluster and its segregation are never deleted from here
+        const ownProgram = [config.getOptionalString('console.cluster.zone'), config.getOptionalString('console.cluster.program')];
+        const admins = ownProgram[0] && ownProgram[1] ? [`${ownProgram[0]}/${ownProgram[1]}`] : [];
 
         const zonePrograms = async (): Promise<string[]> => ((await readZone())?.zones ?? []).flatMap(z => z.programs.map(p => `${z.name}/${p.name}`));
 
@@ -445,6 +451,7 @@ export default createBackendPlugin({
               policy,
               allowed: admin,
               pulls: pulls.filter(p => p.branch.startsWith('console/vm-')),
+              admins,
               vms: vms.map(({ sha: _sha, file: _file, ...v }) => ({ ...v, state: states.get(`vm-${v.zone}-${v.program}-${v.name}`) })),
             });
           } catch (e) {
@@ -454,8 +461,8 @@ export default createBackendPlugin({
         router.get('/infra', async (req, res) => {
           try {
             const { admin } = await actor(req);
-            const [pulls, clusters] = await Promise.all([pullsOf(infraRepo), readClusterFiles().catch(() => [])]);
-            res.json({ allowed: admin, repo: config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', pulls, clusters: clusters.map(({ sha: _s, file: _f, ...c }) => c) });
+            const [pulls, merged, clusters] = await Promise.all([pullsOf(infraRepo), mergedOf(infraRepo), readClusterFiles().catch(() => [])]);
+            res.json({ allowed: admin, admins, repo: config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', pulls, merged, clusters: clusters.map(({ sha: _s, file: _f, ...c }) => c) });
           } catch (e) {
             res.status(502).json({ error: (e as Error).message });
           }
@@ -526,6 +533,37 @@ export default createBackendPlugin({
           return { message, pull };
         });
 
+        adminAction('/infra/segregations/delete', 'remove network segregations', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const [toml, pulls, files, vms] = await Promise.all([infraRepo.get(`${infraDir}/network.toml`), pullsOf(infraRepo), readClusterFiles(), readRequests()]);
+          const slug = `segdel-${b.zone}-${b.program}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request removing ${b.zone}/${b.program}.`;
+          const vmCount = vms.vms.filter(v => v.zone === b.zone && v.program === b.program).length;
+          const out = removeSegregation(toml.text, view, files, vmCount, admins, b.zone, b.program);
+          if (typeof out === 'string') return out;
+          const message = `console: remove segregation ${b.zone}/${b.program}`;
+          const pull = await infraRepo.pullRequest(slug, message, `${body({ zone: b.zone, program: b.program }, user)}\nOnce merged, the host destroys its networks, security groups, group and VDC within 5 minutes (configuration.py reconcile → destroy).\n`,
+            [{ path: `${infraDir}/network.toml`, text: out.text }]);
+          return { message, pull };
+        });
+
+        adminAction('/infra/clusters/delete', 'delete Kubernetes clusters', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const [files, pulls] = await Promise.all([readClusterFiles(), pullsOf(infraRepo)]);
+          const slug = `clusterdel-${b.zone}-${b.program}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request deleting the cluster of ${b.zone}/${b.program}.`;
+          const current = files.find(f => f.zone === b.zone && f.program === b.program);
+          const out = deleteCluster(view, current, admins, b.zone, b.program, user);
+          if (typeof out === 'string') return out;
+          const { file: _f, sha: _s, ...clean } = out as ClusterFile & { file?: string; sha?: string };
+          const message = `console: delete the cluster of ${b.zone}/${b.program}`;
+          const pull = await infraRepo.pullRequest(slug, message, `${body(clean, user)}\nOnce merged, the host destroys the cluster within 5 minutes (configuration.py reconcile → cluster-destroy): its VMs and their disks. The segregation stays.\n`,
+            [{ path: `${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, text: `${JSON.stringify(clean, null, 2)}\n` }]);
+          return { message, pull };
+        });
+
         adminAction('/infra/clusters', 'create Kubernetes clusters', async (b, user) => {
           const view = await readZone();
           if (!view) return 'The host has not published the topology yet.';
@@ -547,9 +585,9 @@ export default createBackendPlugin({
           if (!view) return 'The host has not published the topology yet.';
           const files = await readClusterFiles();
           const current = files.find(f => f.zone === b.zone && f.program === b.program);
-          const out = scaleCluster(view, current, { zone: b.zone, program: b.program, workers: Number(b.workers), storage: Number(b.storage) }, user);
+          const out = scaleCluster(view, current, { zone: b.zone, program: b.program, workers: Number(b.workers), storage: Number(b.storage), ...(b.masters ? { masters: Number(b.masters) } : {}) }, user);
           if (typeof out === 'string') return out;
-          const message = `console: scale cluster ${b.zone}/${b.program} to ${out.workers} workers, ${out.storage} storage`;
+          const message = `console: scale cluster ${b.zone}/${b.program} to ${out.masters !== undefined ? `${out.masters} masters, ` : ''}${out.workers} workers, ${out.storage} storage`;
           const { file: _f, sha, ...clean } = { ...(current ?? {}), ...out } as ClusterFile & { file?: string; sha?: string };
           await infraRepo.put(`${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, `${JSON.stringify(clean, null, 2)}\n`, `${message} (by ${user})`, sha);
           return { message };

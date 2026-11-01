@@ -38,7 +38,7 @@ export function refuse(policy: VmPolicy, existing: VmRequest[], v: VmRequest, pr
 /** A file change of a pull request: text to write, or null to delete the file. */
 export type FileChange = { path: string; text: string | null };
 /** An open pull request of the console. */
-export type ConsolePull = { number: number; title: string; url: string; branch: string; created: string; body: string };
+export type ConsolePull = { number: number; title: string; url: string; branch: string; created: string; body: string; merged?: string };
 
 /** Branches of the console's pull requests start with this (how the console finds its pending requests). */
 export const PR_PREFIX = 'console/';
@@ -129,6 +129,17 @@ export class GitHubFiles {
     await this.check(pr, 'pull request');
     const made = (await pr.json()) as { number: number; html_url: string };
     return { number: made.number, url: made.html_url };
+  }
+
+  /** The pull requests of the console merged in the last `days` days, newest first (their lifecycle after review). */
+  async mergedPulls(days = 7): Promise<ConsolePull[]> {
+    const res = await this.fetchFn(this.api(`pulls?state=closed&base=${encodeURIComponent(this.branch)}&sort=updated&direction=desc&per_page=50`), { headers: this.headers() });
+    await this.check(res, 'pull requests');
+    const since = Date.now() - days * 86_400_000;
+    const list = (await res.json()) as Array<{ number: number; title: string; html_url: string; created_at: string; merged_at?: string | null; body?: string | null; head: { ref: string } }>;
+    return list
+      .filter(p => p.head.ref.startsWith(PR_PREFIX) && p.merged_at && Date.parse(p.merged_at) >= since)
+      .map(p => ({ number: p.number, title: p.title, url: p.html_url, branch: p.head.ref, created: p.created_at, body: p.body ?? '', merged: p.merged_at! }));
   }
 
   /** The open pull requests of the console (branch console/...), newest first. */

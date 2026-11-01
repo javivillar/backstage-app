@@ -7,7 +7,28 @@
 
 type Raw = Record<string, any>;
 
-export type ZoneVm = { id: string; name: string; state: string; role: string; host?: string; vcpu?: string; memoryGb?: number; ips: string[] };
+export type ZoneVm = {
+  id: string;
+  name: string;
+  state: string;
+  role: string;
+  host?: string;
+  vcpu?: string;
+  memoryGb?: number;
+  ips: string[];
+  /** detail page of the console */
+  owner?: string;
+  group?: string;
+  cpuReserved?: string;
+  started?: string;
+  labels?: string;
+  console?: boolean;
+  requestedBy?: string;
+  nics?: Array<{ network: string; ip: string; mac?: string; securityGroups?: string }>;
+  disks?: Array<{ image: string; sizeMb: number; datastore?: string; target?: string }>;
+  cpuPct?: number;
+  memoryUsedGb?: number;
+};
 export type ZoneNetwork = { name: string; role?: string; cidr: string; vlan?: number | string; exists: boolean; state?: string; leases: number; drift: string[] };
 export type ZoneSecurityGroup = { name: string; role?: string; exists: boolean; source?: string; rules: string[]; extra: string[]; missing: string[] };
 export type ZoneProgram = {
@@ -78,6 +99,17 @@ function vm(x: Raw): ZoneVm {
     vcpu: x.vcpu ? str(x.vcpu) : undefined,
     memoryGb: typeof x.memory_gb === 'number' ? x.memory_gb : undefined,
     ips: (x.nics ?? []).map((n: Raw) => str(n.ip)).filter(Boolean),
+    owner: x.owner || undefined,
+    group: x.group || undefined,
+    cpuReserved: x.cpu_reserved ? str(x.cpu_reserved) : undefined,
+    started: typeof x.started === 'number' ? new Date(x.started * 1000).toISOString() : undefined,
+    labels: x.labels || undefined,
+    console: x.console === true ? true : undefined,
+    requestedBy: x.requested_by || undefined,
+    nics: Array.isArray(x.nics) ? x.nics.map((n: Raw) => ({ network: str(n.network), ip: str(n.ip), mac: n.mac || undefined, securityGroups: n.security_groups || undefined })) : undefined,
+    disks: Array.isArray(x.disks) ? x.disks.map((d: Raw) => ({ image: str(d.image), sizeMb: Number(d.size_mb ?? 0), datastore: d.datastore || undefined, target: d.target || undefined })) : undefined,
+    cpuPct: typeof x.cpu_pct === 'number' ? x.cpu_pct : undefined,
+    memoryUsedGb: typeof x.memory_used_gb === 'number' ? x.memory_used_gb : undefined,
   };
 }
 

@@ -29,6 +29,8 @@ import { imageCatalogFromConfig, imageDetailFromConfig } from './imageCatalogCon
  *   GET /api/sbom/vulnerabilities?ref=<image>                  its vulnerabilities, from Wazuh's daily image scan
  *   GET /api/sbom/quality?ref=<image>                          the quality report the CI attached next to the SBOM
  *                                                              (tests, coverage, linters; quality.json of the app)
+ *   GET /api/sbom/kubebench                                    the CIS Kubernetes Benchmark of the cluster (kube-bench): the
+ *                                                              newest run of each node and its failures (wazuh-oneke >= 0.25.10)
  *   GET /api/sbom/compliance                                   the CIS compliance of the nodes (operating system): the
  *                                                              newest SCA scan of each node as Wazuh scored it with the
  *                                                              scope of the platform (wazuh-oneke >= 0.25.0, Part M)
@@ -152,6 +154,18 @@ export const sbomPlugin = createBackendPlugin({
           return compliance.body;
         };
 
+        // the CIS Kubernetes Benchmark (kube-bench runs daily): same cache as the compliance of the nodes
+        let kubebench: { at: number; body: unknown } | undefined;
+        const lookupKubebench = async () => {
+          if (kubebench && Date.now() - kubebench.at < COMPLIANCE_TTL) return kubebench.body;
+          const res = await fetch(`${vulnerabilitiesUrl.replace(/\/+$/, '')}/kubebench`, { signal: AbortSignal.timeout(20000) });
+          const body = await res.json().catch(() => ({}));
+          if (res.status === 404) return { configured: false, nodes: [] };
+          if (!res.ok) throw new RegistryError(`Wazuh: ${(body as { error?: string }).error ?? res.statusText}`, 502);
+          kubebench = { at: Date.now(), body: { configured: true, ...body } };
+          return kubebench.body;
+        };
+
         const releaseOf = (req: Request): string => {
           const ref = String(req.query.ref ?? '').trim();
           if (!ref) throw new RegistryError('Missing ?ref=<owner/repo@tag>', 400);
@@ -273,6 +287,21 @@ export const sbomPlugin = createBackendPlugin({
             } catch (e) {
               if (e instanceof RegistryError) throw e;
               throw new RegistryError(`Wazuh's CIS compliance could not be read: ${(e as Error).message}`, 502);
+            }
+          }),
+        );
+        router.get(
+          '/kubebench',
+          guarded('kubebench', async (_req, res) => {
+            if (!vulnerabilitiesUrl) {
+              res.json({ configured: false, nodes: [] });
+              return;
+            }
+            try {
+              res.json(await lookupKubebench());
+            } catch (e) {
+              if (e instanceof RegistryError) throw e;
+              throw new RegistryError(`Wazuh's CIS Kubernetes Benchmark could not be read: ${(e as Error).message}`, 502);
             }
           }),
         );

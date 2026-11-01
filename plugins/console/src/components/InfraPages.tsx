@@ -5,13 +5,14 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
+import { Link } from '@backstage/core-components';
 import { useClusterPost } from '../post';
 import { type CatalogZone, type ClusterProfile, type InfraView, type ReconcileStatus, SCALE_LIMITS, useInfra, useZone } from '../zone';
 import { Badge } from './Badge';
 import { Flow, type FlowLane, TONES, type Tone } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
-import { PullList, ResultNote, useChange } from './Requests';
+import { ConfirmBar, RequestsTable, ResultNote, useChange } from './Requests';
 
 const gb = (mb?: number) => (typeof mb === 'number' ? `${Math.round(mb / 1024)} GB` : '—');
 const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
@@ -75,7 +76,7 @@ export function catalogLanes(catalog: CatalogZone[]): FlowLane[] {
       nodes: z.programs.length
         ? z.programs.map(p => {
             const [state, tone] = programState(p);
-            return { title: `${z.name}/${p.name}`, sub: `n=${p.n ?? '?'}${p.cluster ? ` · cluster ${p.cluster}` : ' · no cluster'}`, state, tone };
+            return { title: `${z.name}/${p.name}`, sub: `n=${p.n ?? '?'}${p.cluster ? ` · cluster ${p.cluster}` : ' · no cluster'}`, state, tone, href: `/console/infrastructure/platform/${z.name}/${p.name}` };
           })
         : [{ title: z.enabled ? 'No programme yet' : 'Reserved', sub: z.enabled ? 'enabled, empty' : 'a new segregation enables it', tone: 'off' as Tone, dashed: true }],
     }));
@@ -146,7 +147,7 @@ export const PlatformPage = () => {
   const post = useClusterPost();
   const { note, busy, run } = useChange(() => { infra.reload(); zone.reload(); });
   const [form, setForm] = useState({ zone: '', program: '' });
-  const pulls = (infra.data?.pulls ?? []).filter(p => p.branch.startsWith('console/seg-'));
+  const isSeg = (p: { branch: string }) => /^console\/seg(del)?-/.test(p.branch);
   return (
     <InfraFrame title="Platform" sub="Every zone of the catalog and its programmes (network segregations), across the OpenNebula hosts">
       {view => {
@@ -164,7 +165,7 @@ export const PlatformPage = () => {
               <Kpi label="Memory free for VMs" value={gb(view.capacity?.freeMemoryMb)} sub={`OpenNebula keeps ${gb(view.capacity?.reservedMemoryMb)} of every host`} />
               <Kpi label="Hosts" value={view.host ? `${view.host.cpus ?? '?'} CPU · ${view.host.memoryGiB ?? '?'} GiB` : '—'} sub={view.host?.name} />
             </Kpis>
-            <Card title="Zones and segregations" sub="One lane per classification zone; each programme has its own public and private networks, security groups, group and VDC.">
+            <Card title="Zones and segregations" sub="One lane per classification zone; each programme has its own public and private networks, security groups, group and VDC. Open a programme to see them, or to remove it.">
               <Flow lanes={catalogLanes(catalog)} label="Zones of the catalog and their programmes" />
             </Card>
             <Card title="New network segregation" sub="Adds a programme to network.toml through a pull request (and enables its zone when it is reserved). Once merged, the host applies it: networks, security groups, router, group, VDC and console user.">
@@ -191,7 +192,9 @@ export const PlatformPage = () => {
                 </Button>
               </Box>
               <ResultNote note={note} />
-              <PullList pulls={pulls} />
+            </Card>
+            <Card title="Requests" sub="Segregations asked from the console in the last 7 days and where they are: waiting for review, merged and waiting for the host, applied or failed.">
+              <RequestsTable open={infra.data?.pulls ?? []} merged={infra.data?.merged ?? []} reconcile={view.reconcile} only={isSeg} />
             </Card>
             <ReconcileCard status={view.reconcile} />
           </>
@@ -230,11 +233,54 @@ const ProfileCard = ({ p, free, onPick, picked }: { p: ClusterProfile; free?: nu
         </Typography>
       )}
       <Button variant={picked ? 'contained' : 'outlined'} onClick={onPick} sx={{ textTransform: 'none', justifySelf: 'start' }}>
-        {picked ? 'Chosen' : 'Choose'}
+        {picked ? 'Chosen: fill the form below' : 'Create with this profile'}
       </Button>
     </Box>
   );
 };
+
+/** Every OneKE cluster of the platform, with Scale and Delete (not the cluster of this console). */
+export const ClustersCard = ({
+  view,
+  infra,
+  onDelete,
+}: {
+  view: InfraView;
+  infra?: { allowed: boolean; admins?: string[]; clusters: Array<{ zone: string; program: string; delete?: boolean }> };
+  onDelete: (zone: string, program: string, name: string) => void;
+}) => (
+  <Card title="Clusters of the platform" sub="Every OneKE cluster the host runs. Scale changes its nodes at once; Delete asks it through a pull request. The cluster of this console is not deleted from here.">
+    <Table
+      head={['Programme', 'Cluster', 'Nodes', 'State', '']}
+      rows={view.zones.flatMap(z =>
+        z.programs
+          .filter(p => p.cluster)
+          .map(p => {
+            const id = `${z.name}/${p.name}`;
+            const own = (infra?.admins ?? []).includes(id);
+            const deleting = infra?.clusters.some(c => c.zone === z.name && c.program === p.name && c.delete);
+            const running = !deleting && /RUNNING/.test(p.cluster!.state);
+            return [
+              <Link to={`/console/infrastructure/platform/${z.name}/${p.name}`}>{id}</Link>,
+              p.cluster!.name,
+              Object.entries(p.cluster!.roles ?? {}).map(([r, n]) => `${n} ${r}`).join(' · '),
+              <Badge label={deleting ? 'Being deleted' : p.cluster!.state} {...TONES[running ? 'ok' : 'warn']} />,
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Button size="small" component={Link} to={`/console/infrastructure/clusters/${z.name}/${p.name}`} disabled={deleting} sx={{ textTransform: 'none' }}>
+                  Scale
+                </Button>
+                {!own && infra?.allowed && (
+                  <Button size="small" color="error" disabled={deleting} onClick={() => onDelete(z.name, p.name, p.cluster!.name)} sx={{ textTransform: 'none' }}>
+                    Delete
+                  </Button>
+                )}
+              </Box>,
+            ];
+          }),
+      )}
+    />
+  </Card>
+);
 
 /** Infrastructure › Marketplace: the OneKE profiles; a new cluster in a segregation by PR. */
 export const MarketplacePage = () => {
@@ -243,7 +289,13 @@ export const MarketplacePage = () => {
   const post = useClusterPost();
   const { note, busy, run } = useChange(() => { infra.reload(); zone.reload(); });
   const [form, setForm] = useState({ target: '', profile: '', workers: '' });
-  const pulls = (infra.data?.pulls ?? []).filter(p => p.branch.startsWith('console/cluster-'));
+  const isCluster = (p: { branch: string }) => /^console\/cluster(del)?-/.test(p.branch);
+  const [confirm, setConfirm] = useState<{ zone: string; program: string; name: string } | undefined>();
+  const pick = (name: string) => {
+    setForm(f => ({ ...f, profile: name }));
+    // the form is under the cards: bring it into view
+    setTimeout(() => document.getElementById('create-cluster')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }), 0);
+  };
   return (
     <InfraFrame title="Marketplace" sub="Kubernetes clusters (OneKE) ready to create in a programme: hardened images, CIS profile, Calico segments">
       {view => {
@@ -260,9 +312,10 @@ export const MarketplacePage = () => {
           <>
             <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))' }}>
               {profiles.map(p => (
-                <ProfileCard key={p.name} p={p} free={free} picked={p.name === profile?.name} onPick={() => setForm(f => ({ ...f, profile: p.name }))} />
+                <ProfileCard key={p.name} p={p} free={free} picked={p.name === profile?.name} onPick={() => pick(p.name)} />
               ))}
             </Box>
+            <Box id="create-cluster" />
             <Card title="Create a cluster" sub="Adds clusters/<zone>-<programme>.json to the opennebula repository through a pull request. Once merged, the host creates it (cluster-create, about 30 minutes) with its Keycloak groups, namespaces and Calico segments.">
               {!infra.data?.allowed && infra.data && <Typography variant="body2" color="text.secondary">Only backstage-admin can create clusters for now.</Typography>}
               {targets.length === 0 ? (
@@ -300,22 +353,21 @@ export const MarketplacePage = () => {
                 </Box>
               )}
               <ResultNote note={note} />
-              <PullList pulls={pulls} />
             </Card>
-            <Card title="Clusters of the platform" sub="Every OneKE cluster the host runs; scale this one from its Kubernetes layer (Scale).">
-              <Table
-                head={['Programme', 'Cluster', 'Nodes', 'State']}
-                rows={view.zones.flatMap(z =>
-                  z.programs
-                    .filter(p => p.cluster)
-                    .map(p => [
-                      `${z.name}/${p.name}`,
-                      p.cluster!.name,
-                      Object.entries(p.cluster!.roles ?? {}).map(([r, n]) => `${n} ${r}`).join(' · '),
-                      <Badge label={p.cluster!.state} {...TONES[/RUNNING/.test(p.cluster!.state) ? 'ok' : 'warn']} />,
-                    ]),
-                )}
+            <ClustersCard view={view} infra={infra.data} onDelete={(z, program, name) => setConfirm({ zone: z, program, name })} />
+            {confirm && (
+              <ConfirmBar
+                text={`Delete the cluster ${confirm.name} of ${confirm.zone}/${confirm.program}? A pull request asks it; once merged, the host destroys its VMs and their disks (the segregation stays). It cannot be undone.`}
+                onYes={() => {
+                  const c = confirm;
+                  setConfirm(undefined);
+                  run(() => post('/infra/clusters/delete', { zone: c.zone, program: c.program }), a => `Pull request #${a.pull?.number} opened: once merged, the host deletes the cluster of ${c.zone}/${c.program}.`);
+                }}
+                onNo={() => setConfirm(undefined)}
               />
+            )}
+            <Card title="Requests" sub="Clusters asked or deleted from the console in the last 7 days and where they are.">
+              <RequestsTable open={infra.data?.pulls ?? []} merged={infra.data?.merged ?? []} reconcile={view.reconcile} only={isCluster} />
             </Card>
             <ReconcileCard status={view.reconcile} />
           </>

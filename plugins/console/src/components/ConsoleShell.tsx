@@ -4,6 +4,7 @@ import Button from '@mui/material/Button';
 import ListSubheader from '@mui/material/ListSubheader';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import OpenInNew from '@mui/icons-material/OpenInNew';
@@ -13,6 +14,7 @@ import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from '../pages';
 import { type Layer, LAYER_HOME, LAYER_LOOK, layerOf } from '../layers';
 import { rq } from './tokens';
+import { NAV_ICONS } from '../navIcons';
 import { Badge } from './Badge';
 import { QuickFind } from './QuickFind';
 
@@ -38,7 +40,7 @@ export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] 
   return '/home';
 }
 
-type NavItem = { label: string; to: string };
+type NavItem = { label: string; to: string; hint?: string };
 
 const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => (
   <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: 0.25, mb: 2 }}>
@@ -50,14 +52,17 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
         current === i.to ||
         (!['/console', '/console/infrastructure', '/console/cluster'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
-      return (
+      const Icon = NAV_ICONS[i.to];
+      const link = (
         <Link
           key={i.to}
           to={i.to}
           underline="none"
           aria-current={on ? 'page' : undefined}
           style={{
-            display: 'block',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
             padding: '7px 16px',
             borderLeft: `3px solid ${on ? rq.blue : 'transparent'}`,
             background: on ? 'rgba(26,141,255,0.10)' : 'transparent',
@@ -65,8 +70,20 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
             fontWeight: on ? 600 : 400,
           }}
         >
+          {Icon && (
+            <Box component="span" aria-hidden sx={{ display: 'inline-flex', color: on ? rq.blue : 'text.secondary' }}>
+              <Icon fontSize="small" />
+            </Box>
+          )}
           {i.label}
         </Link>
+      );
+      return i.hint ? (
+        <Tooltip key={i.to} title={i.hint} placement="right" arrow>
+          {link}
+        </Tooltip>
+      ) : (
+        link
       );
     })}
   </Box>
@@ -114,7 +131,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   const pages = useConsolePages();
   const layer = layerOf(current, pages);
   const look = LAYER_LOOK[layer];
-  const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: p.title, to: `/console/${p.id}` }));
+  const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: p.title, to: `/console/${p.id}`, hint: p.product }));
   const zoneName = own.zone ? `Zone ${own.zone}` : 'Infrastructure';
 
   const groups: Array<{ title: string; items: NavItem[] }> = [];
@@ -146,11 +163,12 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: 'Applications', to: '/console/applications' },
         { label: 'Storage', to: '/console/storage' },
         ...navOf('cluster'),
+        { label: 'CIS Kubernetes cluster', to: '/console/cis-cluster' },
       ],
     });
     groups.push({ title: 'Its portal', items: [{ label: 'Open the portal', to: '/console' }] });
   } else {
-    groups.push({ title: 'Portal', items: [{ label: 'Home', to: '/console' }, ...navOf('portal')] });
+    groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
     if (navOf('managers').length) groups.push({ title: 'Manage', items: navOf('managers') });
   }

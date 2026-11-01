@@ -122,6 +122,24 @@ ones. The OpenNebula host applies opennebula `main` with `configuration.py recon
 catalog, the profiles and the free memory in `topology.json` (`summariseZone`: `catalog`, `kubernetes`, `capacity`,
 `reconcile`). Host side and a step-by-step test: opennebula `installation-standalone.md` 11.28.
 
+## 1.3: removing, deleting, following a request, detail pages
+
+| Page | Route | Backend | Git |
+|---|---|---|---|
+| Platform › a programme (networks, security groups, router, cluster, VMs) | `/console/infrastructure/platform/:zone/:program` | `POST /api/cluster/infra/segregations/delete` | PR removing its `[[program]]` (host: `destroy`) |
+| Clusters of the platform › Delete | Marketplace | `POST /api/cluster/infra/clusters/delete` | PR with `"delete": true` (host: `cluster-destroy`) |
+| Scale any cluster, masters only added | `/console/infrastructure/clusters/:zone/:program` | `POST /api/cluster/infra/clusters/scale` (`masters`) | commit to `main` |
+| A VM (OpenNebula data, request, Crossplane) | `/console/infrastructure/vm/:name` | `GET /api/cluster/zone` + `/zone/vms` | — |
+| CIS Kubernetes cluster (kube-bench) | `/console/cis-cluster` | `GET /api/sbom/kubebench` (wazuh-oneke >= 0.25.10) | — |
+
+**Requests** (Platform, Marketplace, a programme): the open PRs and the ones merged in the last 7 days
+(`GitHubFiles.mergedPulls`), each with its state from what the host reported (`lifecycle` in `zone.ts`: waiting for
+review → merged, waiting for the host → applied/done or failed). The programme and the cluster of this console
+(`console.cluster.zone/program`) are never removed or deleted from the console.
+
+**Menus**: one icon per entry in `navIcons.ts` (by path); the managers have functional names (IAM, API management…) and
+show the product on hover (`product` of each page in `App.tsx`); Portal › Home is called **Catalogue**.
+
 ## Configuration
 
 ```yaml
