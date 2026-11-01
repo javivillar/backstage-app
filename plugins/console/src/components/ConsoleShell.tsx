@@ -17,6 +17,11 @@ import { rq } from './tokens';
 import { NAV_ICONS } from '../navIcons';
 import { usePortalLinks } from '../portalApps';
 import LaunchIcon from '@mui/icons-material/Launch';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import BadgeIcon from '@mui/icons-material/Badge';
+
+/** Icons of the applications of the Portal menu (console.portalApps[].icon). */
+const APP_ICONS: Record<string, typeof LaunchIcon> = { incidents: ReportProblemIcon, accreditation: BadgeIcon };
 import { Badge } from './Badge';
 import { QuickFind } from './QuickFind';
 
@@ -42,7 +47,7 @@ export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] 
   return '/home';
 }
 
-type NavItem = { label: string; to: string; hint?: string; external?: boolean };
+type NavItem = { label: string; to: string; hint?: string; external?: boolean; icon?: string };
 
 const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => (
   <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: 0.25, mb: 2 }}>
@@ -54,7 +59,7 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
         current === i.to ||
         (!['/console', '/console/infrastructure', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
-      const Icon = i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')];
+      const Icon = (i.icon && APP_ICONS[i.icon]) || (i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')]);
       const link = (
         <Link
           key={i.to}
@@ -173,7 +178,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({ title: 'Its portal', items: [{ label: 'Open the portal', to: '/console' }] });
   } else {
     groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
-    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint })) });
+    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint, icon: l.icon })) });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
     if (navOf('managers').length)
       groups.push({
