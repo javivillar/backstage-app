@@ -130,3 +130,21 @@ describe('docs reader', () => {
     expect(p.nav.map((n: { path: string }) => n.path)).toEqual(['', 'arch/']);
   });
 });
+
+describe('kubernetes tabs', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { topologyLanes } = require('./EntityKubernetes');
+  it('draws the path of the traffic', () => {
+    const lanes = topologyLanes({
+      namespace: 'shop',
+      workloads: [{ kind: 'Deployment', name: 'api', desired: 1, ready: 1, images: [] }],
+      services: [{ name: 'api', type: 'ClusterIP', ports: ['80/TCP'], workloads: ['api'] }],
+      ingresses: [{ name: 'web', tls: true, routes: [{ host: 'shop.x', path: '/', service: 'api', port: '80' }] }],
+      pods: [{ name: 'api-1', phase: 'Running', ready: true, restarts: 0, workload: 'api' }],
+      jobs: [], configMaps: [], autoscalers: [], networkPolicies: [], errors: [],
+    });
+    expect(lanes.map((l: { label: string }) => l.label)).toEqual(['Ingress', 'Services', 'Workloads', 'Pods']);
+    expect(lanes[0].nodes[0]).toMatchObject({ title: 'shop.x/', state: 'TLS', tone: 'ok' });
+    expect(lanes[3].nodes[0]).toMatchObject({ title: 'api-1', state: 'Ready' });
+  });
+});

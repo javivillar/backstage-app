@@ -12,3 +12,4 @@ export { EntityApiContent, EntityCicdContent } from './components/EntityBuild';
 export { EntityDocsContent } from './components/EntityDocs';
 export { ClassicTabNote } from './components/ClassicTabNote';
 export { TechInsightsChecks } from './components/TechInsightsChecks';
+export { EntityKubernetesContent, EntityTopologyContent } from './components/EntityKubernetes';
