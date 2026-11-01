@@ -52,6 +52,8 @@ backend.add(import('@backstage/plugin-user-settings-backend'));
 backend.add(import('./plugins/topology'));
 // the deployments of each namespace (new image versions), charged in its cost (page Costs)
 backend.add(import('./plugins/costs'));
+// the overview of this cluster (nodes, Argo CD applications, volumes) for the console (page /console/cluster)
+backend.add(import('./plugins/cluster'));
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));

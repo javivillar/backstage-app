@@ -7,6 +7,7 @@ import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, ConsolePagesContext } from '../pages';
 import { ClassicPage } from './ClassicPage';
 import { ClusterFrame } from './ClusterFrame';
+import { ClusterOverviewPage } from './ClusterOverviewPage';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
@@ -60,22 +61,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         ))}
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/clusters/:id" element={<ClusterFrame />} />
-        <Route
-          path="/cluster"
-          element={
-            <PlannedPage
-              title={`Cluster ${cfg.cluster.id}`}
-              phase="3"
-              summary="Nodes, Refresquito services installed, scale, network, storage, hardening and backups of this cluster, read from Kubernetes, Argo CD and Longhorn."
-              classic={[
-                { label: 'Topology', path: '/topology' },
-                { label: 'CIS nodes', path: '/cis-nodes' },
-                { label: 'Costs', path: '/costs' },
-                { label: 'Images', path: '/images' },
-              ]}
-            />
-          }
-        />
+        <Route path="/cluster" element={<ClusterOverviewPage />} />
         <Route
           path="/infrastructure"
           element={
