@@ -290,6 +290,7 @@ const AboutSection = ({ e, hosts }: { e: Entity; hosts: string[] }) => {
   const s = spec(e);
   const ann = e.metadata.annotations ?? {};
   const labels = e.metadata.labels ?? {};
+  const apiRefs = (e.relations ?? []).filter(r => r.type === 'providesApi' || r.type === 'consumesApi').map(r => [r.type, r.targetRef] as [string, string]);
   const source = ann['backstage.io/source-location']?.replace(/^url:/, '');
   const repo = source?.match(/github\.com\/([^/]+\/[^/]+)/)?.[1];
   const rows: Array<[string, ReactNode]> = [
@@ -317,6 +318,31 @@ const AboutSection = ({ e, hosts }: { e: Entity; hosts: string[] }) => {
           </Fragment>
         ))}
       </Box>
+      {apiRefs.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            APIs
+          </Typography>
+          {apiRefs.map(([kind, ref]) => {
+            const n = ref.split('/').pop() ?? ref;
+            return (
+              <Link key={kind + ref} to={`/console/entity/default/api/${n}`} title={kind === 'providesApi' ? 'it provides' : 'it consumes'} style={{ fontSize: 13, background: kind === 'providesApi' ? 'rgba(26,141,255,0.10)' : 'transparent', border: '1px solid rgba(26,141,255,0.35)', borderRadius: 6, padding: '2px 8px', textDecoration: 'none' }}>
+                {kind === 'providesApi' ? '↑ ' : '↓ '}
+                {n}
+              </Link>
+            );
+          })}
+        </Box>
+      )}
+      {(e.metadata.links ?? []).length > 0 && (
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          {(e.metadata.links ?? []).map(l => (
+            <a key={l.url} href={l.url} target="_blank" rel="noreferrer" style={{ color: rq.primary, fontSize: 14 }}>
+              {l.title ?? l.url}
+            </a>
+          ))}
+        </Box>
+      )}
       {(e.metadata.tags ?? []).length > 0 && (
         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
           {(e.metadata.tags ?? []).map(t => (
@@ -561,7 +587,7 @@ const weekMessage = (s?: { loading: boolean; error?: string }) => {
   return 'OpenCost has no cost for its namespace yet.';
 };
 
-export const ServiceCosts = () => {
+export const ServiceCosts = ({ extra }: { extra?: ReactNode }) => {
   const d = useService();
   if (!d) return null;
   const w = d.week;
@@ -570,6 +596,7 @@ export const ServiceCosts = () => {
   // reserved and not used is paid all the same: the pods whose memory request is far above what they use
   const idle = (d.live?.pods ?? []).filter(p => p.memory !== undefined && p.memoryRequest && p.memory < p.memoryRequest * 0.4 && p.memoryRequest - p.memory > 64 * 2 ** 20);
   return (
+    <Box sx={{ display: 'grid', gap: 2 }}>
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
       <Section title={w ? `Where the ${d.money(w.total)} of the week go` : 'Cost of the week'} sub="OpenCost, our prices: an estimate, not a bill">
         {w ? (
@@ -603,6 +630,9 @@ export const ServiceCosts = () => {
           <Typography color="text.secondary">Its pods use most of what they reserve: nothing to change.</Typography>
         )}
       </Section>
+    </Box>
+    {/* what the AI assistants cost when asked about it (tokens charged to it), from the app */}
+    {extra && <Box sx={{ minWidth: 0 }}>{extra}</Box>}
     </Box>
   );
 };

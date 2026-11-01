@@ -113,3 +113,20 @@ describe('build tabs', () => {
     expect(runStats([run('success', 60), run('failure', 30), run('success', 120), run('cancelled', 1)])).toEqual({ rate: 67, median: 60 });
   });
 });
+
+describe('docs reader', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { parseDocPage } = require('./EntityDocs');
+  it('keeps the article, cleans it and reads the pages and headings of an MkDocs page', () => {
+    const html = `<html><head><title>Petstore</title></head><body>
+      <nav class="md-nav md-nav--primary"><ul><li><a class="md-nav__link" href="./">Home</a></li><li><a class="md-nav__link" href="arch/">Architecture</a></li></ul></nav>
+      <article><h1>Petstore</h1><script>alert(1)</script><p onclick="x()">Hi <a href="javascript:evil()">x</a></p>
+      <h2 id="run">Run it</h2><img src="img/a.png"></article></body></html>`;
+    const p = parseDocPage(html, 'http://b/api/techdocs/static/docs/default/component/petstore', '');
+    expect(p.title).toBe('Petstore');
+    expect(p.html).not.toMatch(/script|onclick|javascript/);
+    expect(p.html).toContain('src="http://b/api/techdocs/static/docs/default/component/petstore/img/a.png"');
+    expect(p.toc).toEqual([{ id: 'run', title: 'Run it', level: 2 }]);
+    expect(p.nav.map((n: { path: string }) => n.path)).toEqual(['', 'arch/']);
+  });
+});
