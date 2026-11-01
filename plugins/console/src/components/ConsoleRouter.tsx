@@ -5,6 +5,7 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import { useConsoleAccess } from '../access';
 import { classicUrl, useConsoleConfig } from '../config';
 import { ClusterFrame } from './ClusterFrame';
+import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { PlannedPage } from './PlannedPage';
@@ -21,8 +22,11 @@ const Message = ({ title, children }: { title: string; children: React.ReactNode
   </Box>
 );
 
-/** /console/*: off unless console.enabled, and only for console.allowedGroups. */
-export const ConsoleRouter = () => {
+/**
+ * /console/*: off unless console.enabled, and only for console.allowedGroups.
+ * entityContent: the classic entity page (EntityLayout with its tabs), reused in /console/entity/...
+ */
+export const ConsoleRouter = ({ entityContent }: { entityContent?: React.ReactNode }) => {
   const access = useConsoleAccess();
   const cfg = useConsoleConfig();
   const embedded = useEmbedded(useLocation().search);
@@ -46,6 +50,7 @@ export const ConsoleRouter = () => {
     <ConsoleShell embedded={embedded}>
       <Routes>
         <Route path="/" element={<PortalHome />} />
+        <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} />} />
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/clusters/:id" element={<ClusterFrame />} />
         <Route

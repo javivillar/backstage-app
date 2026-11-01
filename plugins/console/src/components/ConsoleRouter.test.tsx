@@ -1,6 +1,7 @@
 import { configApiRef, identityApiRef } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { MockConfigApi, renderInTestApp, TestApiProvider } from '@backstage/test-utils';
+import { useEntity } from '@backstage/plugin-catalog-react';
 import { screen } from '@testing-library/react';
 import { ConsoleRouter } from './ConsoleRouter';
 
@@ -11,7 +12,14 @@ const identity = (refs: string[]) => ({
   signOut: async () => {},
 });
 
+const petstore = {
+  kind: 'Component',
+  metadata: { name: 'petstore', namespace: 'default', annotations: { 'refresquito.io/application': 'petstore' } },
+  spec: { owner: 'group:default/sirtap-dev', lifecycle: 'production' },
+};
+
 const catalog = {
+  getEntityByRef: async ({ name }: { name: string }) => (name === 'petstore' ? petstore : undefined),
   getEntities: async ({ filter }: { filter: { kind: string } }) => ({
     items:
       filter.kind === 'api'
@@ -23,7 +31,12 @@ const catalog = {
   }),
 };
 
-const render = (consoleCfg: object, refs: string[] = ['user:default/ana']) =>
+const Cards = () => {
+  const { entity } = useEntity();
+  return <a href="/catalog/default/api/petstore-api">cards of {entity.metadata.name}</a>;
+};
+
+const render = (consoleCfg: object, refs: string[] = ['user:default/ana'], route = '/') =>
   renderInTestApp(
     <TestApiProvider
       apis={[
@@ -32,8 +45,9 @@ const render = (consoleCfg: object, refs: string[] = ['user:default/ana']) =>
         [catalogApiRef, catalog],
       ]}
     >
-      <ConsoleRouter />
+      <ConsoleRouter entityContent={<Cards />} />
     </TestApiProvider>,
+    { routeEntries: [route] },
   );
 
 describe('ConsoleRouter', () => {
@@ -53,9 +67,20 @@ describe('ConsoleRouter', () => {
       ['user:default/ana', 'group:default/console-beta'],
     );
     expect(await screen.findByText('Portal of nato-sirtap')).toBeInTheDocument();
-    expect(screen.getByText('petstore')).toHaveAttribute('href', '/catalog/default/component/petstore');
+    expect(screen.getByText('petstore')).toHaveAttribute('href', '/console/entity/default/component/petstore');
     expect(screen.getByText('iam-oneke')).toBeInTheDocument();
     // a programme cluster has no infrastructure layer
     expect(screen.queryByText('Infrastructure')).not.toBeInTheDocument();
+  });
+
+  it('shows the classic entity cards under the console header', async () => {
+    await render(
+      { enabled: true, allowedGroups: ['console-beta'], cluster: { id: 'nato-sirtap', kind: 'program' } },
+      ['user:default/ana', 'group:default/console-beta'],
+      '/entity/default/component/petstore',
+    );
+    expect(await screen.findByText('cards of petstore')).toBeInTheDocument();
+    expect(screen.getByText('Business application')).toBeInTheDocument();
+    expect(screen.getByText('Open in the classic portal')).toHaveAttribute('href', '/catalog/default/component/petstore');
   });
 });

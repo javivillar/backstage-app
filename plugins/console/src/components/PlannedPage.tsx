@@ -1,8 +1,8 @@
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { classicUrl, useConsoleConfig } from '../config';
+import { Badge } from './Badge';
 
 type Props = { title: string; phase: string; summary: string; classic: Array<{ label: string; path: string }> };
 
@@ -15,7 +15,7 @@ export const PlannedPage = ({ title, phase, summary, classic }: Props) => {
         <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
           {title}
         </Typography>
-        <Chip size="small" label={`phase ${phase}`} variant="outlined" />
+        <Badge label={`phase ${phase}`} outlined />
       </Box>
       <Typography color="text.secondary">{summary}</Typography>
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, display: 'grid', gap: 1 }}>

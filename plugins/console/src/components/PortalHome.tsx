@@ -1,15 +1,15 @@
 import type { Entity } from '@backstage/catalog-model';
-import { Progress, WarningPanel } from '@backstage/core-components';
+import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import { classicUrl, useConsoleConfig } from '../config';
-import { classify, entityPath } from './classify';
+import { useConsoleConfig } from '../config';
+import { classify, consoleEntityPath } from './classify';
 import { rq } from './tokens';
+import { Badge } from './Badge';
 
 const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.lifecycle', 'spec.system'];
 
@@ -42,11 +42,10 @@ const Kpi = ({ label, value, color }: { label: string; value: number; color?: st
 );
 
 const EntityList = ({ title, items, palette }: { title: string; items: Entity[]; palette: { bg: string; fg: string } }) => {
-  const cfg = useConsoleConfig();
   return (
     <Paper variant="outlined" component="section" sx={{ borderRadius: 2, overflow: 'hidden' }}>
       <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip size="small" label={title} sx={{ bgcolor: palette.bg, color: palette.fg, fontWeight: 600 }} />
+        <Badge label={title} bg={palette.bg} fg={palette.fg} />
         <Typography variant="body2" color="text.secondary">
           {items.length}
         </Typography>
@@ -66,14 +65,13 @@ const EntityList = ({ title, items, palette }: { title: string; items: Entity[];
             key={e.metadata.name}
             sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}
           >
-            {/* the detail of the console comes in phase 1; until then, the classic page of the entity */}
-            <a href={classicUrl(cfg, entityPath(e))} style={{ fontWeight: 600, color: palette.fg, minWidth: 0 }}>
+            <Link to={consoleEntityPath(e)} underline="none" style={{ fontWeight: 600, color: palette.fg, minWidth: 0 }}>
               {e.metadata.title ?? e.metadata.name}
-            </a>
+            </Link>
             <Box sx={{ flex: 1 }} />
-            {stage && <Chip size="small" variant="outlined" label={stage} />}
-            {segment && <Chip size="small" variant="outlined" label={segment} />}
-            {suspended && <Chip size="small" label="suspended" color="warning" />}
+            {stage && <Badge outlined label={stage} />}
+            {segment && <Badge outlined label={segment} />}
+            {suspended && <Badge label="suspended" bg="#FFF3E0" fg="#B45F06" />}
           </Box>
         );
       })}

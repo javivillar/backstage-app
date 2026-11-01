@@ -179,7 +179,7 @@ const routes = (
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={<CatalogGraphPage />} />
     {/* the cloud-style console: off unless console.enabled (plugins/console); the classic pages above do not change */}
-    <Route path="/console/*" element={<ConsolePage />} />
+    <Route path="/console/*" element={<ConsolePage entityContent={entityPage} />} />
   </FlatRoutes>
 );
 

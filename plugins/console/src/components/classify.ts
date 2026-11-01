@@ -14,3 +14,7 @@ export function classify(e: Entity): Kind {
 
 export const entityPath = (e: Entity) =>
   `/catalog/${e.metadata.namespace ?? 'default'}/${e.kind.toLowerCase()}/${e.metadata.name}`;
+
+/** The page of an entity inside the console (same tabs and cards as the classic page). */
+export const consoleEntityPath = (e: Entity) =>
+  `/console/entity/${e.metadata.namespace ?? 'default'}/${e.kind.toLowerCase()}/${e.metadata.name}`;
