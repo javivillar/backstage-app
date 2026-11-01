@@ -34,6 +34,17 @@ export interface CatalogTag {
   sourceSignatureVerified?: boolean;
   signatures?: string[];
   platforms?: { platform: string; digest: string; attestations: string[] }[];
+  /** signed in Harbor with the key of Refresquito: it passed the gate of the quarantine (opennebula #65) */
+  refresquitoSigned?: boolean;
+  /** a newer version of the tag held in the quarantine (the digest held, why); the project keeps `digest` */
+  quarantine?: { digest: string; reasons: string[] };
+}
+
+/** Facts of the supply chain of this Harbor (catalog field supplyChain, opennebula #68). */
+export interface SupplyChain {
+  airgapped: boolean;
+  vulnerabilityDb?: { updatedAt?: string; nextUpdate?: string; javaUpdatedAt?: string; source?: 'online' | 'bundle' };
+  lastBundle?: { direction: 'import' | 'export'; id: string; createdAt?: string; importedAt?: string; exportedAt?: string } | null;
 }
 
 export interface CatalogDocument {
@@ -42,6 +53,7 @@ export interface CatalogDocument {
   catalogCommit: string;
   categories: Record<string, string>;
   images: { project: string; name: string; repository: string; source: string; tags: CatalogTag[] }[];
+  supplyChain?: SupplyChain;
 }
 
 export interface ScanSummary {
@@ -78,6 +90,8 @@ export interface ImageTagView {
   scan?: ScanSummary;
   sourceSignatureVerified: boolean;
   attestations: string[];
+  refresquitoSigned: boolean;
+  quarantine?: { digest: string; reasons: string[] };
 }
 
 export interface ImageView {
@@ -95,6 +109,7 @@ export interface ImageCatalogView {
   catalog?: { published: boolean; generatedAt?: string; commit?: string; error?: string };
   categories: Record<string, string>;
   images: ImageView[];
+  supplyChain?: SupplyChain;
   errors: string[];
 }
 
@@ -292,6 +307,8 @@ export class ImageCatalogService {
             scan: a ? scanOf(a) : undefined,
             sourceSignatureVerified: !!c?.sourceSignatureVerified,
             attestations,
+            refresquitoSigned: !!c?.refresquitoSigned,
+            ...(c?.quarantine ? { quarantine: { digest: c.quarantine.digest, reasons: (c.quarantine.reasons ?? []).slice(0, 20) } } : {}),
           };
         }),
       });
@@ -305,6 +322,7 @@ export class ImageCatalogService {
         : { published: false, error: catalogError },
       categories: catalog?.categories ?? {},
       images,
+      ...(catalog?.supplyChain ? { supplyChain: catalog.supplyChain } : {}),
       errors,
     };
   }

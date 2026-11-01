@@ -41,6 +41,10 @@ export type ImageTag = {
   scan?: { status: string; severity: string; critical: number; high: number; medium: number; low: number; scannedAt?: string };
   sourceSignatureVerified: boolean;
   attestations: string[];
+  /** signed in Harbor with the key of Refresquito: it passed the gate of the quarantine */
+  refresquitoSigned?: boolean;
+  /** a newer version held in the quarantine (the project keeps serving `digest`) */
+  quarantine?: { digest: string; reasons: string[] };
 };
 export type Image = { repository: string; project: string; name: string; source: string; harborUrl: string; tags: ImageTag[] };
 export type ImageCatalog = {
@@ -49,6 +53,12 @@ export type ImageCatalog = {
   catalog?: { published: boolean; generatedAt?: string; commit?: string; error?: string };
   categories: Record<string, string>;
   images: Image[];
+  /** facts of the supply chain of the Harbor of this zone (vulnerability database, air-gapped, last bundle) */
+  supplyChain?: {
+    airgapped: boolean;
+    vulnerabilityDb?: { updatedAt?: string; nextUpdate?: string; javaUpdatedAt?: string; source?: string };
+    lastBundle?: { direction: 'import' | 'export'; id: string; createdAt?: string; importedAt?: string; exportedAt?: string } | null;
+  };
   errors: string[];
 };
 
@@ -116,10 +126,24 @@ function VulnChips({ scan }: { scan?: ImageTag['scan'] }) {
   );
 }
 
+/** What needs a look: past (or within 90 days of) its end of life, critical CVEs, an update held, not signed, not copied. */
+export function needsAttention(r: Pick<ImageTag, 'eol' | 'scan' | 'quarantine' | 'inHarbor' | 'refresquitoSigned'>): string[] {
+  const why: string[] = [];
+  const days = r.eol ? daysUntil(r.eol) : undefined;
+  if (days !== undefined && days < 0) why.push('past its end of life');
+  else if (days !== undefined && days <= 90) why.push(`end of life in ${days} days`);
+  if (r.scan?.status === 'Success' && r.scan.critical > 0) why.push(`${r.scan.critical} critical`);
+  if (r.quarantine) why.push('update held in the quarantine');
+  if (!r.inHarbor) why.push('not in Harbor yet');
+  else if (r.refresquitoSigned === false) why.push('not signed by Refresquito');
+  return why;
+}
+
 function SupplyChain({ row }: { row: Row }) {
   const has = (k: string) => row.attestations.some(a => a.startsWith(k));
   const items: [string, boolean, string][] = [
-    ['signed', row.sourceSignatureVerified, 'signature of the source verified by the Harbor sync'],
+    ['Refresquito', !!row.refresquitoSigned, 'signed by Refresquito in Harbor: it passed the gate of the quarantine (scan + VEX)'],
+    ['source signed', row.sourceSignatureVerified, 'signature of the source (Docker) verified by the Harbor sync'],
     ['SBOM', has('sbom'), 'SBOM of the source (CycloneDX / SPDX)'],
     ['VEX', has('vex'), 'VEX of the source: findings declared not affected'],
     ['provenance', has('provenance'), 'SLSA provenance of the build'],
@@ -129,6 +153,54 @@ function SupplyChain({ row }: { row: Row }) {
       {items.map(([label, ok, why]) => (
         <Tooltip key={label} title={`${why}: ${ok ? 'yes' : 'no'}`}>
           <Chip size="small" label={label} color={ok ? 'success' : 'default'} variant={ok ? 'filled' : 'outlined'} sx={ok ? {} : { opacity: 0.5 }} />
+        </Tooltip>
+      ))}
+      {row.quarantine && (
+        <Tooltip
+          title={`A newer version (${row.quarantine.digest.slice(7, 19)}) did not pass the gate; Harbor keeps serving this one. ${row.quarantine.reasons.join(' · ')}`}
+        >
+          <Chip size="small" label="update held" sx={{ bgcolor: '#ed6c02', color: '#fff' }} />
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+/** The vulnerability database, air-gapped or not, the last bundle, and what needs a look: one line over the table. */
+function SupplyChainStatus({ data, rows }: { data: ImageCatalog; rows: Row[] }) {
+  const sc = data.supplyChain;
+  const parts: { text: string; warn?: boolean; tip?: string }[] = [];
+  if (sc?.vulnerabilityDb?.updatedAt) {
+    const age = Math.floor((Date.now() - Date.parse(sc.vulnerabilityDb.updatedAt)) / 86400000);
+    const limit = sc.airgapped ? 8 : 2;
+    parts.push({
+      text: `Vulnerability database of ${new Date(sc.vulnerabilityDb.updatedAt).toLocaleDateString()}${age >= 1 ? ` (${age} days old)` : ''}`,
+      warn: age > limit,
+      tip: sc.airgapped
+        ? 'Air-gapped: it arrives with each bundle; scans miss every CVE published since. Import a bundle at least weekly.'
+        : 'Harbor (Trivy) downloads it daily.',
+    });
+  }
+  if (sc?.airgapped) {
+    const b = sc.lastBundle;
+    parts.push({
+      text: b ? `air-gapped zone · last bundle ${b.id}${b.importedAt ? `, imported ${new Date(b.importedAt).toLocaleDateString()}` : ''}` : 'air-gapped zone · no bundle imported yet',
+      warn: !b,
+    });
+  } else if (sc?.lastBundle?.direction === 'export') {
+    parts.push({ text: `last bundle exported for air-gapped zones: ${sc.lastBundle.id}` });
+  }
+  const inHarbor = rows.filter(r => r.inHarbor);
+  parts.push({ text: `${inHarbor.filter(r => r.refresquitoSigned).length} of ${inHarbor.length} signed by Refresquito` });
+  const held = rows.filter(r => r.quarantine).length;
+  if (held) parts.push({ text: `${held} update(s) held in the quarantine`, warn: true });
+  const eol = rows.filter(r => r.eol && (daysUntil(r.eol) ?? 1) < 0).length;
+  if (eol) parts.push({ text: `${eol} past their end of life`, warn: true });
+  return (
+    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: 1 }} aria-label="supply chain status">
+      {parts.map(p => (
+        <Tooltip key={p.text} title={p.tip ?? ''}>
+          <Chip size="small" label={p.text} variant={p.warn ? 'filled' : 'outlined'} sx={p.warn ? { bgcolor: '#ed6c02', color: '#fff' } : {}} />
         </Tooltip>
       ))}
     </Box>
@@ -177,6 +249,7 @@ export function ImagesPage() {
   const [project, setProject] = useState('all');
   const [category, setCategory] = useState('all');
   const [audience, setAudience] = useState<Audience | undefined>(undefined);
+  const [attention, setAttention] = useState(false);
   // with the catalog published, start with what a system may use; without it nobody knows the audience
   const shownAudience: Audience = audience ?? (data?.catalog?.published ? 'apps' : 'all');
 
@@ -190,6 +263,7 @@ export function ImagesPage() {
     .filter(r => project === 'all' || r.image.project === project)
     .filter(r => category === 'all' || r.category === category)
     .filter(r => shownAudience === 'all' || r.audience === shownAudience)
+    .filter(r => !attention || needsAttention(r).length > 0)
     .filter(r => {
       const q = text.trim().toLowerCase();
       return !q || `${r.image.repository}:${r.tag} ${r.summary} ${r.title} ${r.version}`.toLowerCase().includes(q);
@@ -223,6 +297,7 @@ export function ImagesPage() {
             {data.errors.length > 0 && (
               <WarningPanel severity="warning" title="Some data could not be read from Harbor" message={data.errors.join(' · ')} />
             )}
+            <SupplyChainStatus data={data} rows={rows} />
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', my: 2 }}>
               <ToggleButtonGroup size="small" exclusive value={shownAudience} onChange={(_e, v) => v && setAudience(v)} aria-label="audience">
                 <ToggleButton value="apps">For systems</ToggleButton>
@@ -242,6 +317,9 @@ export function ImagesPage() {
                 ))}
               </TextField>
               <TextField size="small" label="Search" value={text} onChange={e => setText(e.target.value)} sx={{ minWidth: 240 }} />
+              <ToggleButton size="small" value="attention" selected={attention} onChange={() => setAttention(!attention)} aria-label="needs attention">
+                Needs attention ({rows.filter(r => needsAttention(r).length > 0).length})
+              </ToggleButton>
               <Typography variant="body2" color="text.secondary">
                 {visible.length} of {rows.length} images
                 {data.catalog?.generatedAt ? ` · catalog of ${new Date(data.catalog.generatedAt).toLocaleString()}` : ''}
@@ -270,6 +348,11 @@ export function ImagesPage() {
                         </Link>
                         {r.audience === 'platform' && <Chip size="small" variant="outlined" label="platform" sx={{ ml: 1 }} />}
                         <StateChip row={r} />
+                        {!r.inHarbor && (
+                          <Tooltip title="In the catalog (requested) but not copied yet: the next sync of Harbor brings it through the quarantine; version, licence, end of life and scan come with it.">
+                            <Chip size="small" variant="outlined" label="requested, not in Harbor yet" sx={{ ml: 1 }} />
+                          </Tooltip>
+                        )}
                       </Box>
                       <Typography variant="body2" color="text.secondary">
                         {r.summary || r.title}
@@ -304,7 +387,8 @@ export function ImagesPage() {
             </Table>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
               Vulnerabilities: Harbor's scan (Trivy). A critical declared not affected in the VEX of the image does not block its pull
-              (allowlist of the project, rebuilt by every sync). The copy button gives the reference pinned by digest. Source:{' '}
+              (allowlist of the project, rebuilt by every sync). Refresquito: the image passed the gate of the quarantine of Harbor
+              and carries the signature of Refresquito; source signed: the signature of its maker (Docker) was verified. The copy button gives the reference pinned by digest. Source:{' '}
               <Link to={data.harbor ?? '#'}>{data.harbor}</Link>
               {data.catalog?.commit ? ` · catalog.toml ${data.catalog.commit.slice(0, 7)}` : ''}
             </Typography>

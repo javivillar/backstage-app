@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { TestApiProvider, renderInTestApp } from '@backstage/test-utils';
-import { ImagesPage, daysUntil } from './ImagesPage';
+import { ImagesPage, daysUntil, needsAttention } from './ImagesPage';
 // what GET /api/sbom/images answers with a published catalog (shape of plugins/sbom-backend/src/imageCatalog.ts)
 import fixture from './images.fixture.json';
 
@@ -64,6 +64,39 @@ describe('ImagesPage', () => {
   it('shows the error of the API', async () => {
     render({ error: 'boom' }, 502);
     expect(await screen.findByText('boom')).toBeInTheDocument();
+  });
+
+  it('shows the supply chain: signature of Refresquito, held update, not copied yet, status and the attention filter', async () => {
+    const body = JSON.parse(JSON.stringify(fixture));
+    const tags = body.images.flatMap((i: { tags: object[] }) => i.tags);
+    for (const t of tags) t.refresquitoSigned = true;
+    tags[0].quarantine = { digest: 'sha256:0123456789abcdef', reasons: ['postgres:18 (linux/amd64) CVE-1 zlib Critical (no VEX statement)'] };
+    tags[3].inHarbor = false;
+    tags[3].refresquitoSigned = false;
+    body.supplyChain = { airgapped: false, vulnerabilityDb: { updatedAt: new Date().toISOString(), source: 'online' }, lastBundle: null };
+    render(body);
+    const table = await screen.findByRole('table', { name: 'images' });
+    expect(within(table).getAllByText('Refresquito').length).toBeGreaterThan(0);
+    expect(within(table).getByText('update held')).toBeInTheDocument();
+    expect(within(table).getByText('requested, not in Harbor yet')).toBeInTheDocument();
+    const status = screen.getByLabelText('supply chain status');
+    expect(within(status).getByText(/^Vulnerability database of/)).toBeInTheDocument();
+    expect(within(status).getByText('3 of 3 signed by Refresquito')).toBeInTheDocument();
+    expect(within(status).getByText('1 update(s) held in the quarantine')).toBeInTheDocument();
+    // needs attention: the held update, postgres 14 (end of life soon), python (1 critical, not in Harbor)
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    fireEvent.click(screen.getByRole('button', { name: 'needs attention' }));
+    expect(within(table).queryByText('common/grafana')).not.toBeInTheDocument();
+    expect(within(table).getByText('framework-python/python')).toBeInTheDocument();
+  });
+
+  it('says why an image needs attention', () => {
+    const base = { eol: '', scan: undefined, quarantine: undefined, inHarbor: true, refresquitoSigned: true };
+    expect(needsAttention(base)).toEqual([]);
+    expect(needsAttention({ ...base, eol: '2000-01-01' })).toEqual(['past its end of life']);
+    expect(needsAttention({ ...base, refresquitoSigned: false })).toEqual(['not signed by Refresquito']);
+    expect(needsAttention({ ...base, inHarbor: false, refresquitoSigned: false })).toEqual(['not in Harbor yet']);
+    expect(needsAttention({ ...base, quarantine: { digest: 'sha256:x', reasons: [] } })).toEqual(['update held in the quarantine']);
   });
 
   it('counts days to an end of life', () => {
