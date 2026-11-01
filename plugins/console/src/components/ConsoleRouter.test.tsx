@@ -3,6 +3,7 @@ import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { MockConfigApi, renderInTestApp, TestApiProvider } from '@backstage/test-utils';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import { screen } from '@testing-library/react';
+import { Route, Routes } from 'react-router-dom';
 import { ConsoleRouter } from './ConsoleRouter';
 
 const identity = (refs: string[]) => ({
@@ -98,5 +99,29 @@ describe('ConsoleRouter', () => {
     expect(await screen.findByText('costs page')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Costs' })).toBeInTheDocument();
     expect(screen.getByText('Open in the classic portal')).toHaveAttribute('href', '/costs');
+  });
+
+  it('shows one layer at a time and moves between them', async () => {
+    await renderInTestApp(
+      <TestApiProvider
+        apis={[
+          [configApiRef, new MockConfigApi({ console: { enabled: true, allowedGroups: ['console-beta'], cluster: { id: 'nato-sirtap', kind: 'program', zone: 'nato', program: 'sirtap' } } })],
+          [identityApiRef, identity(['user:default/ana', 'group:default/console-beta'])],
+          [catalogApiRef, catalog],
+          [discoveryApiRef, { getBaseUrl: async (id: string) => `http://b/api/${id}` }],
+          [fetchApiRef, { fetch: async () => new Response(JSON.stringify({ error: 'not in this test' }), { status: 503 }) }],
+        ]}
+      >
+        <Routes>
+          <Route path="/console/*" element={<ConsoleRouter />} />
+        </Routes>
+      </TestApiProvider>,
+      { routeEntries: ['/console/cluster'] },
+    );
+    expect(await screen.findByRole('note', { name: 'Layer: Kubernetes' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the portal' })).toBeInTheDocument();
+    // the menu of the cluster layer only
+    expect(screen.queryByRole('link', { name: 'Virtual machines' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Zone\s*nato/ })).toBeInTheDocument();
   });
 });
