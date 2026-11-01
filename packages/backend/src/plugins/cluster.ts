@@ -207,7 +207,7 @@ export default createBackendPlugin({
           const custom = kc.makeApiClient(CustomObjectsApi);
           const list = custom.listNamespacedCustomObject as unknown as (g: string, v: string, ns: string, plural: string) => Promise<unknown>;
           try {
-            const r = await list.call(custom, 'tf.m.crossplane.io', 'v1beta1', ownNamespace, 'workspaces');
+            const r = await list.call(custom, 'tf.m.upbound.io', 'v1beta1', ownNamespace, 'workspaces');
             const workspaces = items<Parameters<typeof workspaceState>[0]>(r);
             return new Map(workspaces.filter(w => w.metadata.labels?.['refresquito.io/console-vm'] === 'true').map(w => [w.metadata.name, workspaceState(w)]));
           } catch {

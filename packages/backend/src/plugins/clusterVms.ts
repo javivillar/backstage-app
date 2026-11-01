@@ -92,7 +92,7 @@ export class GitHubFiles {
   }
 }
 
-/** What Crossplane says of a VM: its Workspace (tf.m.crossplane.io) summarised. */
+/** What Crossplane says of a VM: its Workspace (tf.m.upbound.io) summarised. */
 export type VmState = { synced?: boolean; ready?: boolean; message?: string; outputs?: Record<string, unknown> };
 type WorkspaceObj = {
   metadata: { name: string; labels?: Record<string, string> };
