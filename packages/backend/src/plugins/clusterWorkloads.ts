@@ -24,11 +24,11 @@ export type K8sEvent = {
   reason?: string;
   message?: string;
   count?: number;
-  lastTimestamp?: string;
-  eventTime?: string;
-  metadata?: { creationTimestamp?: string };
+  lastTimestamp?: string | Date;
+  eventTime?: string | Date;
+  metadata?: { creationTimestamp?: string | Date };
   involvedObject?: { kind?: string; name?: string };
-  series?: { count?: number; lastObservedTime?: string };
+  series?: { count?: number; lastObservedTime?: string | Date };
 };
 
 export type WorkloadSummary = {
@@ -66,8 +66,11 @@ export function summariseEvents(events: K8sEvent[], now = new Date(), withinMs =
   const out = new Map<string, EventSummary>();
   for (const e of events) {
     if (e.type !== 'Warning') continue;
-    const last = e.series?.lastObservedTime ?? e.lastTimestamp ?? e.eventTime ?? e.metadata?.creationTimestamp;
-    if (!last || now.getTime() - Date.parse(last) > withinMs) continue;
+    // @kubernetes/client-node turns the timestamps into Date objects; JSON gives strings
+    const raw = e.series?.lastObservedTime ?? e.lastTimestamp ?? e.eventTime ?? e.metadata?.creationTimestamp;
+    const t = raw ? new Date(raw as string | Date).getTime() : NaN;
+    if (Number.isNaN(t) || now.getTime() - t > withinMs) continue;
+    const last = new Date(t).toISOString();
     const object = `${e.involvedObject?.kind ?? ''} ${e.involvedObject?.name ?? ''}`.trim();
     const key = `${object}|${e.reason}`;
     const count = e.series?.count ?? e.count ?? 1;

@@ -138,6 +138,19 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'topology', title: 'Topology', layer: 'cluster', classicPath: '/topology', element: topologyPage },
   { id: 'cis-nodes', title: 'CIS nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
+  { id: 'ops-assistant', title: 'Operations', layer: 'assistants', classicPath: '/ops-assistant', element: <OpsAssistantPage /> },
+  { id: 'sec-assistant', title: 'Security', layer: 'assistants', classicPath: '/sec-assistant', element: <SecAssistantPage /> },
+  { id: 'functional-assistant', title: 'Functional', layer: 'assistants', classicPath: '/functional-assistant', element: <FunctionalAssistantPage /> },
+  { id: 'architect-assistant', title: 'Architect', layer: 'assistants', classicPath: '/architect-assistant', element: <ArchitectAssistantPage /> },
+  { id: 'developer-assistant', title: 'Developer', layer: 'assistants', classicPath: '/developer-assistant', element: <DeveloperAssistantPage /> },
+  { id: 'keycloak', title: 'Keycloak', layer: 'managers', classicPath: '/keycloak-manager', element: <KeycloakManagerPage /> },
+  { id: 'gravitee', title: 'Gravitee', layer: 'managers', classicPath: '/gravitee-manager', element: <GraviteeManagerPage /> },
+  { id: 'datahub', title: 'DataHub', layer: 'managers', classicPath: '/datahub', element: <DatahubCatalogPage /> },
+  { id: 'superset', title: 'Superset', layer: 'managers', classicPath: '/superset-manager', element: <SupersetManagerPage /> },
+  { id: 'camunda', title: 'Camunda', layer: 'managers', classicPath: '/camunda-manager', element: <CamundaManagerPage /> },
+  { id: 'seaweedfs', title: 'SeaweedFS', layer: 'managers', classicPath: '/seaweedfs-manager', element: <SeaweedfsManagerPage /> },
+  { id: 'alfresco', title: 'Alfresco', layer: 'managers', classicPath: '/alfresco-manager', element: <AlfrescoManagerPage /> },
+  { id: 'activepieces', title: 'Activepieces', layer: 'managers', classicPath: '/activepieces-manager', element: <ActivepiecesManagerPage /> },
 ];
 
 const routes = (

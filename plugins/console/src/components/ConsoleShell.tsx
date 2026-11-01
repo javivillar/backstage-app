@@ -47,7 +47,7 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
     {items.map(i => {
       const on =
         current === i.to ||
-        (i.to !== '/console' && current.startsWith(`${i.to}/`)) ||
+        (i.to !== '/console' && i.to !== '/console/infrastructure' && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
       return (
         <Link
@@ -84,11 +84,20 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     pages.filter(p => p.layer === layer).map(p => ({ label: p.title, to: `/console/${p.id}` }));
 
   const layers: Array<{ title: string; items: NavItem[] }> = [];
-  if (own.kind === 'zone') {
-    layers.push({ title: 'Infrastructure', items: [{ label: 'Overview', to: '/console/infrastructure' }] });
-  }
+  // the zone: read-only, as the OpenNebula host publishes it (also from a programme cluster)
+  layers.push({
+    title: own.zone ? `Zone ${own.zone}` : 'Infrastructure',
+    items: [
+      { label: 'Overview', to: '/console/infrastructure' },
+      { label: 'Virtual machines', to: '/console/infrastructure/vms' },
+      { label: 'Networks', to: '/console/infrastructure/networks' },
+      { label: 'Security groups', to: '/console/infrastructure/security-groups' },
+    ],
+  });
   layers.push({ title: 'Cluster', items: [{ label: 'Overview', to: '/console/cluster' }, { label: 'Network', to: '/console/network' }, { label: 'Applications', to: '/console/applications' }, { label: 'Storage', to: '/console/storage' }, ...navOf('cluster')] });
   layers.push({ title: 'Portal', items: [{ label: 'Home', to: '/console' }, ...navOf('portal')] });
+  if (navOf('assistants').length) layers.push({ title: 'Assistants', items: navOf('assistants') });
+  if (navOf('managers').length) layers.push({ title: 'Manage', items: navOf('managers') });
   layers.push({ title: 'Clusters', items: [{ label: 'All clusters', to: '/console/clusters' }] });
 
   return (

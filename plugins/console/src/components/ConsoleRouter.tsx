@@ -12,10 +12,10 @@ import { NetworkPage } from './NetworkPage';
 import { ApplicationsPage } from './ApplicationsPage';
 import { StoragePage } from './StoragePage';
 import { NamespacePage } from './NamespacePage';
+import { ZoneNetworksPage, ZoneOverviewPage, ZoneSecurityGroupsPage, ZoneVmsPage } from './ZonePages';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
-import { PlannedPage } from './PlannedPage';
 import { PortalHome } from './PortalHome';
 
 const Message = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -70,17 +70,10 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/storage" element={<StoragePage />} />
         <Route path="/namespaces/:ns" element={<NamespacePage />} />
-        <Route
-          path="/infrastructure"
-          element={
-            <PlannedPage
-              title={`Infrastructure of ${cfg.cluster.zone ?? cfg.cluster.id}`}
-              phase="4"
-              summary="The OpenNebula of the zone (hosts, VMs, networks, security groups) and the marketplace of programme clusters. Only in zone clusters."
-              classic={[{ label: 'Topology', path: '/topology' }]}
-            />
-          }
-        />
+        <Route path="/infrastructure" element={<ZoneOverviewPage />} />
+        <Route path="/infrastructure/vms" element={<ZoneVmsPage />} />
+        <Route path="/infrastructure/networks" element={<ZoneNetworksPage />} />
+        <Route path="/infrastructure/security-groups" element={<ZoneSecurityGroupsPage />} />
         <Route path="*" element={<Message title="Page not found">This page of the console does not exist.</Message>} />
         </Routes>
       </ConsoleShell>
