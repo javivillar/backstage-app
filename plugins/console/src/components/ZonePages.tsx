@@ -5,7 +5,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
 import { useConsoleConfig } from '../config';
-import { type Zone, type ZoneView, useZone, zoneVms } from '../zone';
+import { type Zone, type ZoneView, useZone, vmHref, zoneVms } from '../zone';
 import { Badge } from './Badge';
 import { Flow, type FlowLane, type FlowNode, TONES } from './Flow';
 import { Card } from './NamespaceSections';
@@ -167,7 +167,9 @@ export const ZoneVmsPage = () => {
             <Table
               head={['VM', 'Programme', 'Role', 'State', 'vCPU', 'Memory', 'Addresses', 'Host']}
               rows={vms.map(v => [
-                <b>{v.name}</b>,
+                <Link to={vmHref(v.name)}>
+                  <b>{v.name}</b>
+                </Link>,
                 v.program,
                 v.role || '—',
                 <Badge label={v.state} {...vmTone(v.state)} />,

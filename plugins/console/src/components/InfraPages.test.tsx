@@ -2,7 +2,10 @@ import { configApiRef, discoveryApiRef, fetchApiRef } from '@backstage/core-plug
 import { MockConfigApi, renderInTestApp, TestApiProvider } from '@backstage/test-utils';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { pullKind } from '../zone';
+import { lifecycle, pullKind } from '../zone';
+import { groupFailures } from './CisClusterPage';
+import { ProgrammePage, VmDetailPage } from './InfraDetail';
+import { Route, Routes } from 'react-router-dom';
 import { ClusterScalePage } from './ClusterScalePage';
 import { catalogLanes, MarketplacePage, PlatformPage } from './InfraPages';
 
@@ -21,7 +24,11 @@ const zone = {
   ],
   zones: [{ name: 'nato', status: 'complete', programs: [
     { name: 'sirtap', id: 'nato-sirtap', status: '', ok: true, cluster: { name: 'nato-sirtap-oneke', state: 'RUNNING', roles: { master: 2, worker: 2, storage: 1 } }, networks: [], securityGroups: [], vms: [] },
-    { name: 'a400m', id: 'nato-a400m', status: '', ok: true, networks: [], securityGroups: [], vms: [] },
+    { name: 'a400m', id: 'nato-a400m', status: 'complete', ok: true,
+      networks: [{ name: 'nato-a400m-pub', role: 'public', cidr: '10.102.2.0/24', vlan: 2002, exists: true, leases: 1, drift: [] }],
+      securityGroups: [{ name: 'sg-nato-a400m-pub', role: 'public', exists: true, rules: ['inbound TCP 443'], extra: [], missing: [] }],
+      vms: [{ id: '40', name: 'vm-nato-a400m-tools', state: 'RUNNING', role: 'vm', ips: ['10.102.102.11'], owner: 'console-nato-a400m', group: 'nato-a400m', console: true,
+        disks: [{ image: 'oneke-cis', sizeMb: 30720, target: 'vda' }], nics: [{ network: 'nato-a400m-priv', ip: '10.102.102.11', mac: '02:00:0a', securityGroups: '0,7' }] }] },
   ] }],
   kubernetes: { profiles: [standard, minimal], defaultProfile: 'standard' },
   capacity: { freeMemoryMb: 30720, reservedMemoryMb: 8192 },
@@ -35,11 +42,12 @@ const fetchFake = async (url: RequestInfo | URL, init?: RequestInit) => {
     posts.push({ url: u, body: JSON.parse(String(init.body)) });
     return new Response(u.endsWith('/scale') ? '{"ok":true}' : '{"ok":true,"pull":{"number":9,"url":"https://github.com/x/pull/9"}}');
   }
+  if (u.endsWith('/zone/vms')) return new Response(JSON.stringify({ policy: { images: {}, sizes: {}, limits: {} }, vms: [], allowed: true }));
   if (u.endsWith('/infra')) return new Response(JSON.stringify(infra));
   if (u.endsWith('/zone')) return new Response(JSON.stringify(zone));
   return new Response('{}', { status: 404 });
 };
-const wrap = (children: ReactNode) =>
+const wrap = (children: ReactNode, route?: string) =>
   renderInTestApp(
     <TestApiProvider
       apis={[
@@ -50,6 +58,7 @@ const wrap = (children: ReactNode) =>
     >
       {children}
     </TestApiProvider>,
+    route ? { routeEntries: [route] } : undefined,
   );
 
 describe('Infrastructure layer', () => {
@@ -76,7 +85,7 @@ describe('Infrastructure layer', () => {
     await wrap(<MarketplacePage />);
     expect(await screen.findByText('OneKE · standard')).toBeInTheDocument();
     expect(screen.getByText('Does not fit now')).toBeInTheDocument(); // 56 GB > 30 GB free
-    fireEvent.click(screen.getAllByRole('button', { name: 'Choose' })[0]); // minimal
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create with this profile' })[0]); // minimal
     fireEvent.click(screen.getByRole('button', { name: 'Open the pull request' }));
     await waitFor(() => expect(posts.find(p => p.url.endsWith('/infra/clusters'))?.body).toEqual({ zone: 'nato', program: 'a400m', profile: 'minimal' }));
   });
@@ -87,9 +96,55 @@ describe('Infrastructure layer', () => {
     fireEvent.change(workers, { target: { value: '3' } });
     expect(screen.getByText(/New nodes need 20 GB/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Scale' }));
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Scale nato-sirtap-oneke to 3 workers and 1 storage nodes?');
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Scale nato-sirtap-oneke to 2 masters, 3 workers and 1 storage nodes?');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(posts.find(p => p.url.endsWith('/infra/clusters/scale'))?.body).toEqual({ zone: 'nato', program: 'sirtap', workers: 3, storage: 1 }));
-    expect(await screen.findByText(/Committed: 3 workers/)).toBeInTheDocument();
+    expect(await screen.findByText(/Committed: 2 masters, 3 workers/)).toBeInTheDocument();
+  });
+
+  it('follows a request from review to the host', () => {
+    const p = { number: 3, title: 't', url: 'u', created: '2026-11-01T09:00:00Z', branch: 'console/seg-occar-a400m-1', body: '```json\n{"zone":"occar","program":"a400m"}\n```' };
+    expect(lifecycle(p).label).toBe('Waiting for review');
+    const merged = { ...p, merged: '2026-11-01T10:00:00Z' };
+    expect(lifecycle(merged, { clusters: [], segregation: { state: 'applied', at: '2026-11-01T09:30:00Z' } }).label).toBe('Merged · waiting for the host');
+    expect(lifecycle(merged, { clusters: [], segregation: { state: 'applied', at: '2026-11-01T10:04:00Z' } }).label).toBe('Applied');
+    expect(lifecycle(merged, { clusters: [], segregation: { state: 'failed', at: '2026-11-01T10:04:00Z', detail: 'boom' } }).label).toBe('Failed');
+    const c = { ...merged, branch: 'console/cluster-nato-a400m-1', body: '```json\n{"zone":"nato","program":"a400m"}\n```' };
+    expect(lifecycle(c, { clusters: [{ zone: 'nato', program: 'a400m', action: 'cluster-create', state: 'pending', last: { action: 'cluster-create', state: 'done', at: '2026-11-01T10:05:00Z' } }] }).label).toBe('In progress');
+    expect(lifecycle(c, { clusters: [{ zone: 'nato', program: 'a400m', action: 'ok', state: 'ok', last: { action: 'cluster-create', state: 'done', at: '2026-11-01T10:05:00Z' } }] }).label).toBe('Done');
+  });
+
+  it('shows the networks of a programme', async () => {
+    await wrap(
+      <Routes>
+        <Route path="/p/:zone/:program" element={<ProgrammePage />} />
+      </Routes>,
+      '/p/nato/a400m',
+    );
+    expect(await screen.findByText('nato-a400m-pub')).toBeInTheDocument();
+    expect(screen.getByText('10.102.2.0/24')).toBeInTheDocument();
+    expect(screen.getByText('sg-nato-a400m-pub')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove nato/a400m' })).toBeDisabled(); // it has a VM
+    expect(screen.getByText('Delete its VMs first.')).toBeInTheDocument();
+  });
+
+  it('shows the detail of a VM', async () => {
+    await wrap(
+      <Routes>
+        <Route path="/vm/:name" element={<VmDetailPage />} />
+      </Routes>,
+      '/vm/vm-nato-a400m-tools',
+    );
+    expect(await screen.findByText('console-nato-a400m')).toBeInTheDocument();
+    expect(screen.getByText('02:00:0a')).toBeInTheDocument();
+    expect(screen.getByText('30 GB')).toBeInTheDocument();
+  });
+
+  it('groups the kube-bench failures by check', () => {
+    const g = groupFailures([
+      { node: 'm0', failures: [{ id: '1.2.10', desc: 'a' }, { id: '1.1.9', desc: 'b', change: 'new_fail' }] },
+      { node: 'm1', failures: [{ id: '1.2.10', desc: 'a' }] },
+    ]);
+    expect(g.map(x => [x.id, x.nodes.length, x.isNew])).toEqual([['1.1.9', 1, true], ['1.2.10', 2, false]]);
   });
 });

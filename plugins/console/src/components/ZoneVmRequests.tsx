@@ -4,7 +4,8 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
-import { type Zone, useVmRequests, type VmRequest, vmStatus } from '../zone';
+import { consoleVmName, type Zone, useVmRequests, type VmRequest, vmHref, vmStatus } from '../zone';
+import { Link } from '@backstage/core-components';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
@@ -109,7 +110,9 @@ export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
             const st = vmStatus(v);
             return [
               <span>
-                <b>{v.name}</b>
+                <Link to={vmHref(consoleVmName(v))}>
+                  <b>{v.name}</b>
+                </Link>
                 <br />
                 <Typography component="span" variant="caption" color="text.secondary">
                   {v.requested_by?.replace(/^user:default\//, '') ?? ''}

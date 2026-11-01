@@ -7,7 +7,7 @@ import type { ConsoleClassicPage } from './pages';
  */
 export type Layer = 'infra' | 'cluster' | 'portal';
 
-const CLUSTER_PATHS = ['/console/cluster', '/console/network', '/console/applications', '/console/storage', '/console/namespaces'];
+const CLUSTER_PATHS = ['/console/cluster', '/console/cis-cluster', '/console/network', '/console/applications', '/console/storage', '/console/namespaces'];
 
 export function layerOf(path: string, pages: ConsoleClassicPage[] = []): Layer {
   const p = path.replace(/\/+$/, '') || '/console';

@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import type { PostAnswer } from '../post';
-import { type ConsolePull, pullKind } from '../zone';
+import { type ConsolePull, lifecycle, pullKind, pullTarget, type ReconcileStatus } from '../zone';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
@@ -77,3 +77,36 @@ export const PullList = ({ pulls }: { pulls: ConsolePull[] }) =>
       ])}
     />
   );
+
+/**
+ * Every request of the console of the last days, open or merged, with where it is now: waiting for review, merged and
+ * waiting for the host, done or failed (from what the host reported).
+ */
+export const RequestsTable = ({ open, merged, reconcile, only }: { open: ConsolePull[]; merged: ConsolePull[]; reconcile?: ReconcileStatus; only?: (p: ConsolePull) => boolean }) => {
+  const rows = [...open, ...merged].filter(p => !only || only(p));
+  if (!rows.length) return <Typography color="text.secondary">No request in the last 7 days.</Typography>;
+  return (
+    <Table
+      head={['Request', 'Change', 'Target', 'State']}
+      rows={rows.map(p => {
+        const l = lifecycle(p, reconcile);
+        const t = pullTarget(p);
+        return [
+          <a href={p.url} target="_blank" rel="noopener noreferrer">
+            #{p.number}
+          </a>,
+          <Badge label={pullKind(p)} {...TONES.info} />,
+          t.zone ? `${t.zone}/${t.program ?? ''}${t.name ? ` · ${t.name}` : ''}` : p.title.replace(/^console: /, ''),
+          <span>
+            <Badge label={l.label} {...TONES[l.tone]} />
+            {l.detail && (
+              <Typography variant="caption" color="text.secondary" component="div">
+                {l.detail}
+              </Typography>
+            )}
+          </span>,
+        ];
+      })}
+    />
+  );
+};
