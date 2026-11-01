@@ -495,6 +495,12 @@ export const ServiceSecurity = () => {
 
 /* ------------------------------------------------------------------ costs */
 
+const weekMessage = (s?: { loading: boolean; error?: string }) => {
+  if (s?.loading) return 'Reading OpenCost… it can take a couple of minutes for a week.';
+  if (s?.error) return `OpenCost did not answer: ${s.error}`;
+  return 'OpenCost has no cost for its namespace yet.';
+};
+
 export const ServiceCosts = () => {
   const d = useService();
   if (!d) return null;
@@ -523,7 +529,7 @@ export const ServiceCosts = () => {
             </Typography>
           </>
         ) : (
-          <Typography color="text.secondary">OpenCost has no cost for its namespace yet.</Typography>
+          <Typography color="text.secondary">{weekMessage(d.weekState)}</Typography>
         )}
       </Section>
       <Section title="Could cost less">

@@ -18,6 +18,8 @@ export type ServiceData = {
   ns?: NamespaceNetwork;
   findings: ImageFindings[];
   week?: NamespaceWeek;
+  /** OpenCost can take minutes to answer a week: still reading, or why it failed */
+  weekState?: { loading: boolean; error?: string };
   money: (v: number) => string;
   certDays?: number;
   images: string[];
@@ -36,7 +38,7 @@ export const ServiceDataProvider = ({ entity, children }: PropsWithChildren<{ en
   const overview = useClusterOverview().data;
   const images = useMemo(() => [...new Set((workloads?.workloads ?? []).flatMap(w => w.images))].sort(), [workloads]);
   const { findings } = useImageFindings(images);
-  const { week, money } = useNamespaceWeek(namespace);
+  const { week, money, loading: weekLoading, error: weekError } = useNamespaceWeek(namespace);
   const value = useMemo<ServiceData>(
     () => ({
       entity,
@@ -49,11 +51,12 @@ export const ServiceDataProvider = ({ entity, children }: PropsWithChildren<{ en
       ns: network?.namespaces.find(n => n.name === namespace),
       findings,
       week,
+      weekState: { loading: weekLoading, error: weekError },
       money,
       certDays: network ? certificateDays(network) : undefined,
       images,
     }),
-    [entity, namespace, overview, live, workloads, network, findings, week, money, images],
+    [entity, namespace, overview, live, workloads, network, findings, week, weekLoading, weekError, money, images],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };
