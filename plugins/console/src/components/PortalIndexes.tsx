@@ -403,3 +403,102 @@ export const PortalQualityPage = () => {
     </PortalList>
   );
 };
+
+const KIND_LABEL: Record<string, string> = { system: 'systems', component: 'components', api: 'APIs', resource: 'resources', domain: 'domains', template: 'templates' };
+
+/**
+ * Support › Resolution groups: the teams of the catalog that answer for something (they own systems, components,
+ * APIs…), who is in them and what they own. A group opens its page inside the console.
+ */
+export const ResolutionGroupsPage = () => {
+  const { loading, items, error } = useEntities({ kind: 'group' }, ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.description', 'spec.profile', 'spec.parent', 'relations']);
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+  const groups = items
+    .map(e => {
+      const owns = (e.relations ?? []).filter(r => r.type === 'ownerOf').map(r => parseEntityRef(r.targetRef));
+      const members = (e.relations ?? []).filter(r => r.type === 'hasMember').map(r => parseEntityRef(r.targetRef).name);
+      return { e, owns, members };
+    })
+    .filter(g => g.owns.length);
+  const isTeam = (name: string) => name.endsWith('-team');
+  const shown = groups
+    .filter(g => filter === 'all' || (filter === 'teams' ? isTeam(g.e.metadata.name) : !isTeam(g.e.metadata.name)))
+    .filter(g => matches(q, g.e.metadata.name, g.e.metadata.title, g.e.metadata.description, ...g.members, ...g.owns.map(o => o.name)))
+    .sort((a, b) => b.owns.length - a.owns.length);
+  return (
+    <PortalList
+      title="Resolution groups"
+      sub="The teams that answer for the platform: what each one owns and who is in it. Incidents on an element go to the team that owns it."
+      q={q}
+      setQ={setQ}
+      filter={filter}
+      setFilter={setFilter}
+      filters={[
+        ['all', 'All', groups.length],
+        ['teams', 'Teams', groups.filter(g => isTeam(g.e.metadata.name)).length],
+        ['other', 'Other owners', groups.filter(g => !isTeam(g.e.metadata.name)).length],
+      ]}
+    >
+      {loading && <Progress />}
+      {error && <WarningPanel title="The catalog could not be read" message={error} />}
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))' }}>
+        {shown.map(({ e, owns, members }) => {
+          const byKind = Object.entries(
+            owns.reduce<Record<string, number>>((m, o) => {
+              const k = o.kind.toLowerCase();
+              return { ...m, [k]: (m[k] ?? 0) + 1 };
+            }, {}),
+          ).sort((a, b) => b[1] - a[1]);
+          const systems = owns.filter(o => o.kind.toLowerCase() === 'system').map(o => o.name);
+          const profile = (e.spec?.profile ?? {}) as { displayName?: string; email?: string };
+          return (
+            <Box key={stringifyEntityRef(e)} component={Link} to={consoleEntityPath(e)} sx={cardSx}>
+              <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center' }}>
+                <Box sx={{ width: 38, height: 38, borderRadius: '11px', display: 'grid', placeItems: 'center', bgcolor: rq.svc.bg, color: rq.svc.fg, fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
+                  {(profile.displayName ?? e.metadata.title ?? e.metadata.name).charAt(0).toUpperCase()}
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.displayName ?? titleOf(e)}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {members.length ? `${members.length} ${members.length === 1 ? 'member' : 'members'}` : 'no members in the catalog'}
+                    {profile.email ? ` · ${profile.email}` : ''}
+                  </Typography>
+                </Box>
+              </Box>
+              {e.metadata.description && (
+                <Typography variant="body2" color="text.secondary">
+                  {e.metadata.description}
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                {byKind.map(([k, n]) => (
+                  <Badge key={k} label={`${n} ${KIND_LABEL[k] ?? k}`} outlined />
+                ))}
+              </Box>
+              {systems.length > 0 && (
+                <Typography variant="body2">
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    Systems{' '}
+                  </Box>
+                  {systems.slice(0, 5).join(', ')}
+                  {systems.length > 5 ? ` and ${systems.length - 5} more` : ''}
+                </Typography>
+              )}
+              {members.length > 0 && (
+                <Typography variant="body2">
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    Members{' '}
+                  </Box>
+                  {members.slice(0, 5).join(', ')}
+                  {members.length > 5 ? ` and ${members.length - 5} more` : ''}
+                </Typography>
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+      {!loading && !shown.length && <Typography color="text.secondary">No group matches.</Typography>}
+    </PortalList>
+  );
+};
