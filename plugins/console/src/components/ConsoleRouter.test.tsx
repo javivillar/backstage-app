@@ -45,7 +45,10 @@ const render = (consoleCfg: object, refs: string[] = ['user:default/ana'], route
         [catalogApiRef, catalog],
       ]}
     >
-      <ConsoleRouter entityContent={<Cards />} />
+      <ConsoleRouter
+        entityContent={<Cards />}
+        pages={[{ id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: <p>costs page</p> }]}
+      />
     </TestApiProvider>,
     { routeEntries: [route] },
   );
@@ -82,5 +85,16 @@ describe('ConsoleRouter', () => {
     expect(await screen.findByText('cards of petstore')).toBeInTheDocument();
     expect(screen.getByText('Business application')).toBeInTheDocument();
     expect(screen.getByText('Open in the classic portal')).toHaveAttribute('href', '/catalog/default/component/petstore');
+  });
+
+  it('shows classic pages in the console menu and under its header', async () => {
+    await render(
+      { enabled: true, allowedGroups: ['console-beta'], cluster: { id: 'nato-sirtap', kind: 'program' } },
+      ['user:default/ana', 'group:default/console-beta'],
+      '/costs',
+    );
+    expect(await screen.findByText('costs page')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Costs' })).toBeInTheDocument();
+    expect(screen.getByText('Open in the classic portal')).toHaveAttribute('href', '/costs');
   });
 });

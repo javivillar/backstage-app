@@ -4,6 +4,8 @@ import Typography from '@mui/material/Typography';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { useConsoleAccess } from '../access';
 import { classicUrl, useConsoleConfig } from '../config';
+import { type ConsoleClassicPage, ConsolePagesContext } from '../pages';
+import { ClassicPage } from './ClassicPage';
 import { ClusterFrame } from './ClusterFrame';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { ClustersPage } from './ClustersPage';
@@ -25,8 +27,9 @@ const Message = ({ title, children }: { title: string; children: React.ReactNode
 /**
  * /console/*: off unless console.enabled, and only for console.allowedGroups.
  * entityContent: the classic entity page (EntityLayout with its tabs), reused in /console/entity/...
+ * pages: classic pages shown in the console menus (create, docs, costs...), reused in /console/<id>/...
  */
-export const ConsoleRouter = ({ entityContent }: { entityContent?: React.ReactNode }) => {
+export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: React.ReactNode; pages?: ConsoleClassicPage[] }) => {
   const access = useConsoleAccess();
   const cfg = useConsoleConfig();
   const embedded = useEmbedded(useLocation().search);
@@ -47,10 +50,14 @@ export const ConsoleRouter = ({ entityContent }: { entityContent?: React.ReactNo
     );
   }
   return (
-    <ConsoleShell embedded={embedded}>
-      <Routes>
+    <ConsolePagesContext.Provider value={pages}>
+      <ConsoleShell embedded={embedded}>
+        <Routes>
         <Route path="/" element={<PortalHome />} />
         <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} />} />
+        {pages.map(p => (
+          <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage page={p} />} />
+        ))}
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/clusters/:id" element={<ClusterFrame />} />
         <Route
@@ -81,7 +88,8 @@ export const ConsoleRouter = ({ entityContent }: { entityContent?: React.ReactNo
           }
         />
         <Route path="*" element={<Message title="Page not found">This page of the console does not exist.</Message>} />
-      </Routes>
-    </ConsoleShell>
+        </Routes>
+      </ConsoleShell>
+    </ConsolePagesContext.Provider>
   );
 };

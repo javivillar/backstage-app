@@ -10,7 +10,7 @@ import OpenInNew from '@mui/icons-material/OpenInNew';
 import { type PropsWithChildren, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
-import { catalogPathForConsole } from '../paths';
+import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from '../pages';
 import { rq } from './tokens';
 import { Badge } from './Badge';
 
@@ -28,9 +28,9 @@ export function useEmbedded(search: string): boolean {
 }
 
 /** The classic page that shows the same thing as a page of the console. */
-export function classicPathFor(consolePath: string): string {
-  const entity = catalogPathForConsole(consolePath);
-  if (entity) return entity;
+export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] = []): string {
+  const same = classicPathForConsole(consolePath, pages);
+  if (same) return same;
   if (consolePath.startsWith('/console/cluster') && !consolePath.startsWith('/console/clusters')) return '/topology';
   if (consolePath.startsWith('/console/infrastructure')) return '/topology';
   return '/home';
@@ -44,7 +44,10 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
       {title}
     </Typography>
     {items.map(i => {
-      const on = current === i.to || (i.to === '/console' && current.startsWith('/console/entity/'));
+      const on =
+        current === i.to ||
+        (i.to !== '/console' && current.startsWith(`${i.to}/`)) ||
+        (i.to === '/console' && current.startsWith('/console/entity/'));
       return (
         <Link
           key={i.to}
@@ -75,13 +78,16 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const current = pathname.replace(/\/+$/, '') || '/console';
   const own = cfg.cluster;
+  const pages = useConsolePages();
+  const navOf = (layer: ConsoleClassicPage['layer']) =>
+    pages.filter(p => p.layer === layer).map(p => ({ label: p.title, to: `/console/${p.id}` }));
 
   const layers: Array<{ title: string; items: NavItem[] }> = [];
   if (own.kind === 'zone') {
     layers.push({ title: 'Infrastructure', items: [{ label: 'Overview', to: '/console/infrastructure' }] });
   }
-  layers.push({ title: 'Cluster', items: [{ label: 'Overview', to: '/console/cluster' }] });
-  layers.push({ title: 'Portal', items: [{ label: 'Home', to: '/console' }] });
+  layers.push({ title: 'Cluster', items: [{ label: 'Overview', to: '/console/cluster' }, ...navOf('cluster')] });
+  layers.push({ title: 'Portal', items: [{ label: 'Home', to: '/console' }, ...navOf('portal')] });
   layers.push({ title: 'Clusters', items: [{ label: 'All clusters', to: '/console/clusters' }] });
 
   return (
@@ -119,7 +125,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
           <Badge label="beta" bg={rq.accent} fg="#14202E" />
           <Box sx={{ flex: 1 }} />
           <Button
-            href={classicUrl(cfg, classicPathFor(current))}
+            href={classicUrl(cfg, classicPathFor(current, pages))}
             endIcon={<OpenInNew fontSize="small" />}
             size="small"
             sx={{ color: '#fff', textTransform: 'none' }}
