@@ -1,4 +1,4 @@
-import { ArgoClient, mayAct } from './clusterActions';
+import { ArgoClient, mayAct, ownerRef, ownsEntity } from './clusterActions';
 
 describe('clusterActions', () => {
   it('lets act only the allowed groups', () => {
@@ -29,5 +29,13 @@ describe('clusterActions', () => {
   it('says what Argo CD answered when it refuses', async () => {
     const fake = (async () => new Response(JSON.stringify({ message: 'permission denied' }), { status: 403 })) as unknown as typeof fetch;
     await expect(new ArgoClient({ url: 'http://argo', token: 'x' }, fake).sync('a')).rejects.toThrow('Argo CD answered 403: permission denied');
+  });
+
+  it('knows the owner of an entity', () => {
+    expect(ownerRef('team-pets')).toBe('group:default/team-pets');
+    expect(ownerRef('group:Team-Pets')).toBe('group:default/team-pets');
+    expect(ownsEntity(['user:default/ana', 'group:default/team-pets'], 'group:default/team-pets')).toBe(true);
+    expect(ownsEntity(['user:default/ana'], 'team-pets')).toBe(false);
+    expect(ownsEntity(['group:default/team-pets'], undefined)).toBe(false);
   });
 });

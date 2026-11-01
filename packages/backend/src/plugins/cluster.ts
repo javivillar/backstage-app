@@ -2,7 +2,8 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import { AppsV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
 import express, { Router } from 'express';
 import { readFileSync } from 'fs';
-import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, WORKLOAD_KINDS } from './clusterActions';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
+import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
@@ -102,7 +103,8 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *                                               Warning events of the last hour (signed-in; 15 s; Kubernetes API)
  *   GET /api/cluster/zone       ZoneView: the zone as the OpenNebula host publishes it (topology.json in the ConfigMap
  *                               refresquito-topology of this namespace, every 5 min); read-only
- *   GET /api/cluster/actions    { allowed, groups, log }: whether the user may act, and the last actions
+ *   GET /api/cluster/actions[?entity=<ref>]   { allowed, groups, owners, log }: whether the user may act (on that
+ *                               entity, as its owner when console.actions.owners), and the last actions
  *   POST /api/cluster/actions/sync     { app }                        sync an Argo CD application with git
  *   POST /api/cluster/actions/restart  { app, namespace, kind, name } restart a workload (Argo CD action)
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
@@ -120,8 +122,9 @@ export default createBackendPlugin({
         userInfo: coreServices.userInfo,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
+        catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, userInfo, config, logger }) {
+      async init({ httpRouter, httpAuth, userInfo, config, logger, catalog }) {
         const prometheus = config.getOptionalString('costs.prometheusUrl')?.replace(/\/+$/, '');
         const query = prometheus ? prometheusQuery(prometheus) : undefined;
         let cache: { at: number; body: ClusterOverview } | undefined;
@@ -148,6 +151,8 @@ export default createBackendPlugin({
 
         // actions: Argo CD with the credentials of the Argo CD plugin; who may act
         const groups = config.getOptionalStringArray('console.actions.groups') ?? ['backstage-admin'];
+        // later: the owner of each resource acts on it (off until it is decided)
+        const owners = config.getOptionalBoolean('console.actions.owners') ?? false;
         const argoCfg = config.getOptionalConfigArray('argocd.appLocatorMethods')?.[0]?.getOptionalConfigArray('instances')?.[0];
         const argoInstance: ArgoInstance | undefined = argoCfg
           ? {
@@ -164,10 +169,20 @@ export default createBackendPlugin({
           actionLog.splice(100);
           logger.info(`console action ${r.action} ${r.target} by ${r.user}: ${r.result}${r.message ? ` (${r.message})` : ''}`);
         };
-        const actor = async (req: express.Request) => {
+        /** Who asks, whether they may act on anything (groups), and on what entity they may act as its owner. */
+        const actor = async (req: express.Request, entityRef?: string) => {
           const credentials = await httpAuth.credentials(req, { allow: ['user'] });
           const info = await userInfo.getUserInfo(credentials);
-          return { user: info.userEntityRef, allowed: mayAct(info.ownershipEntityRefs, groups) };
+          const admin = mayAct(info.ownershipEntityRefs, groups);
+          let owned: { namespace?: string; app: string } | undefined;
+          if (!admin && owners && entityRef) {
+            const entity = await catalog.getEntityByRef(entityRef, { credentials }).catch(() => undefined);
+            const owner = (entity?.spec as { owner?: string } | undefined)?.owner;
+            if (entity && ownsEntity(info.ownershipEntityRefs, owner)) {
+              owned = { namespace: entity.metadata.annotations?.['refresquito.io/namespace'], app: entity.metadata.name };
+            }
+          }
+          return { user: info.userEntityRef, allowed: admin || !!owned, admin, owned };
         };
 
         const router = Router();
@@ -304,24 +319,29 @@ export default createBackendPlugin({
 
         router.get('/actions', async (req, res) => {
           try {
-            const { allowed } = await actor(req);
-            res.json({ allowed: allowed && !!argo, groups, configured: !!argo, log: allowed ? actionLog.slice(0, 30) : [] });
+            const entity = typeof req.query.entity === 'string' ? req.query.entity : undefined;
+            const { allowed, admin } = await actor(req, entity);
+            res.json({ allowed: allowed && !!argo, groups, owners, configured: !!argo, log: admin ? actionLog.slice(0, 30) : actionLog.filter(a => entity && a.target.includes(entity.split('/').pop()!)).slice(0, 30) });
           } catch {
             res.status(401).json({ error: 'Sign in' });
           }
         });
 
-        const act = (name: string, run: (body: Record<string, unknown>) => { target: string; go: () => Promise<void> } | string) =>
+        type Who = Awaited<ReturnType<typeof actor>>;
+        const act = (
+          name: string,
+          run: (body: Record<string, unknown>) => { target: string; namespace?: string; app: string; go: () => Promise<void> } | string,
+        ) =>
           router.post(`/actions/${name}`, async (req, res) => {
-            let who: { user: string; allowed: boolean };
+            let who: Who;
             try {
-              who = await actor(req);
+              who = await actor(req, typeof req.body?.entity === 'string' ? req.body.entity : undefined);
             } catch {
               res.status(401).json({ error: 'Sign in' });
               return;
             }
             if (!who.allowed) {
-              res.status(403).json({ error: `Only ${groups.join(', ')} can do this for now.` });
+              res.status(403).json({ error: `Only ${groups.join(', ')}${owners ? ' or the owner of the service' : ''} can do this.` });
               return;
             }
             if (!argo) {
@@ -332,6 +352,14 @@ export default createBackendPlugin({
             if (typeof plan === 'string') {
               res.status(400).json({ error: plan });
               return;
+            }
+            // an owner acts only on what belongs to their entity: its namespace, its Argo CD application
+            if (!who.admin && who.owned) {
+              const mine = plan.namespace ? plan.namespace === who.owned.namespace : plan.app === who.owned.app;
+              if (!mine) {
+                res.status(403).json({ error: 'As its owner you can act only on the namespace and application of your service.' });
+                return;
+              }
             }
             try {
               await plan.go();
@@ -345,13 +373,13 @@ export default createBackendPlugin({
         act('sync', b => {
           const app = String(b.app ?? '');
           if (!NAME.test(app)) return 'app: the name of an Argo CD application';
-          return { target: app, go: () => argo!.sync(app) };
+          return { target: app, app, go: () => argo!.sync(app) };
         });
         act('restart', b => {
           const [app, namespace, kind, name] = [b.app, b.namespace, b.kind, b.name].map(v => String(v ?? ''));
           if (!NAME.test(app) || !NAMESPACE_NAME.test(namespace) || !NAME.test(name)) return 'app, namespace and name are names';
           if (!(WORKLOAD_KINDS as readonly string[]).includes(kind)) return `kind is one of ${WORKLOAD_KINDS.join(', ')}`;
-          return { target: `${kind} ${namespace}/${name} (${app})`, go: () => argo!.restart(app, namespace, kind, name) };
+          return { target: `${kind} ${namespace}/${name} (${app})`, namespace, app, go: () => argo!.restart(app, namespace, kind, name) };
         });
 
         httpRouter.use(router);
