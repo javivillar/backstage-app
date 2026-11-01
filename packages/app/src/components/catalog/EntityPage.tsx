@@ -9,7 +9,6 @@ import {
   EntityNetworkContent,
   EntityUserJourneyContent,
   ServiceChanges,
-  ServiceCosts,
   ServiceOverview,
   ServiceSecurity,
   ConsoleEntityLayout,
@@ -102,7 +101,7 @@ import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugi
 import { TopologyPage } from '@backstage-community/plugin-topology';
 import { FillTopology } from './FillTopology';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
-import { EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
+import { EntityQualityConsoleContent, EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
@@ -111,6 +110,7 @@ import { EntitySupportContent } from './EntitySupportContent';
 import { EntityImageContent, isImageAvailable } from '../images/EntityImageContent';
 import { EntityCostCard } from '../cost/EntityCostCard';
 import { EntityAssistantUsageCard } from '../cost/EntityAssistantUsageCard';
+import { ConsoleCosts } from '../cost/ConsoleCosts';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
 
 // services of the stack: the catalog entities that say which namespace they run in
@@ -847,6 +847,12 @@ export const consoleEntityPage = entityPageWith(
     <EntityLayout.Route path="/api" title={tabLabel(<Api />, 'API')}>
       <EntityApiContent />
     </EntityLayout.Route>
+    <EntityLayout.Route path="/quality" title={tabLabel(<VerifiedUser />, 'Quality & Security')} if={isApplication}>
+      <EntityQualityConsoleContent
+        ask={<AskSecurityAssistant />}
+        scorecard={<EntityTechInsightsScorecardContent title="Checks" description="Its catalog entry, the SBOM and vulnerabilities of its images, the line of the Python Framework it is built on." />}
+      />
+    </EntityLayout.Route>
     {/* TechDocs, Kubernetes and Topology only route under the classic entity page: the console reads the docs itself */}
     <EntityLayout.Route path="/docs" title={tabLabel(<Description />, 'Docs')}>
       <EntityDocsContent />
@@ -867,7 +873,7 @@ export const consoleEntityPage = entityPageWith(
       <ServiceSecurity />
     </EntityLayout.Route>
     <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
-      <ServiceCosts extra={<EntityAssistantUsageCard />} />
+      <ConsoleCosts />
     </EntityLayout.Route>
   </>,
   <ConsoleOverview />,
