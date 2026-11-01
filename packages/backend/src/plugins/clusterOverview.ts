@@ -1,26 +1,28 @@
 /**
  * The overview of this cluster for the console (/console/cluster), read from the Prometheus that scrapes
  * kube-state-metrics, node-exporter, kubelet and Argo CD (observability-oneke). Read-only: no Kubernetes permissions.
+ * The kube_* series are taken only from job kube-state-metrics: OpenCost exports some of them too, which counted
+ * every request twice.
  */
 
 type Sample = { metric: Record<string, string>; value: [number, string] };
 export type Query = (promql: string) => Promise<Sample[]>;
 
 export const QUERIES = {
-  info: 'kube_node_info',
-  roles: 'kube_node_role',
-  ready: 'kube_node_status_condition{condition="Ready",status="true"}',
-  unschedulable: 'kube_node_spec_unschedulable',
-  allocatable: 'kube_node_status_allocatable{resource=~"cpu|memory"}',
+  info: 'kube_node_info{job="kube-state-metrics"}',
+  roles: 'kube_node_role{job="kube-state-metrics"}',
+  ready: 'kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"}',
+  unschedulable: 'kube_node_spec_unschedulable{job="kube-state-metrics"}',
+  allocatable: 'kube_node_status_allocatable{job="kube-state-metrics",resource=~"cpu|memory"}',
   requested:
-    'sum by (node, resource) (kube_pod_container_resource_requests{resource=~"cpu|memory"} * on (namespace, pod) group_left () (kube_pod_status_phase{phase="Running"} == 1))',
-  pods: 'count by (node) (kube_pod_info * on (namespace, pod) group_left () (kube_pod_status_phase{phase="Running"} == 1))',
+    'sum by (node, resource) (kube_pod_container_resource_requests{job="kube-state-metrics",resource=~"cpu|memory"} * on (namespace, pod) group_left () (kube_pod_status_phase{job="kube-state-metrics",phase="Running"} == 1))',
+  pods: 'count by (node) (kube_pod_info{job="kube-state-metrics"} * on (namespace, pod) group_left () (kube_pod_status_phase{job="kube-state-metrics",phase="Running"} == 1))',
   cpuUsed: '1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))',
   memUsed: '1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes',
   apps: 'argocd_app_info',
-  pvcRequested: 'kube_persistentvolumeclaim_resource_requests_storage_bytes',
+  pvcRequested: 'kube_persistentvolumeclaim_resource_requests_storage_bytes{job="kube-state-metrics"}',
   pvcUsed: 'kubelet_volume_stats_used_bytes',
-  pvcInfo: 'kube_persistentvolumeclaim_info',
+  pvcInfo: 'kube_persistentvolumeclaim_info{job="kube-state-metrics"}',
 } as const;
 
 export type Resource = { allocatable: number; requested: number; used?: number };
