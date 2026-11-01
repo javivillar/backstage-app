@@ -48,7 +48,7 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
     {items.map(i => {
       const on =
         current === i.to ||
-        (i.to !== '/console' && i.to !== '/console/infrastructure' && current.startsWith(`${i.to}/`)) ||
+        (!['/console', '/console/infrastructure', '/console/cluster'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
       return (
         <Link
@@ -120,6 +120,13 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   const groups: Array<{ title: string; items: NavItem[] }> = [];
   if (layer === 'infra') {
     groups.push({
+      title: 'Platform',
+      items: [
+        { label: 'Zones and segregations', to: '/console/infrastructure/platform' },
+        { label: 'Marketplace', to: '/console/infrastructure/marketplace' },
+      ],
+    });
+    groups.push({
       title: zoneName,
       items: [
         { label: 'Overview', to: '/console/infrastructure' },
@@ -134,6 +141,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
       title: `Cluster ${own.id}`,
       items: [
         { label: 'Overview', to: '/console/cluster' },
+        { label: 'Scale', to: '/console/cluster/scale' },
         { label: 'Network', to: '/console/network' },
         { label: 'Applications', to: '/console/applications' },
         { label: 'Storage', to: '/console/storage' },
@@ -148,8 +156,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   }
 
   const band: Record<Layer, { text: string; next?: { label: string; to: string } }> = {
-    infra: { text: `${zoneName} · OpenNebula: hosts, VMs, networks, security groups and the Kubernetes clusters of its programmes. Read-only.`, next: { label: `Enter cluster ${own.id}`, to: '/console/cluster' } },
-    cluster: { text: `Cluster ${own.id} · nodes, network, applications, storage and hardening of this Kubernetes cluster.`, next: { label: 'Open its portal', to: '/console' } },
+    infra: { text: `${zoneName} · OpenNebula: hosts, VMs, networks, security groups and the Kubernetes clusters of its programmes; new segregations and clusters through pull requests.`, next: { label: `Enter cluster ${own.id}`, to: '/console/cluster' } },
+    cluster: { text: `Cluster ${own.id} · nodes (scale), network, applications, storage and hardening of this Kubernetes cluster.`, next: { label: 'Open its portal', to: '/console' } },
     portal: { text: `Portal of ${own.id} · the business applications and Refresquito services that run in this cluster.` },
   };
 
