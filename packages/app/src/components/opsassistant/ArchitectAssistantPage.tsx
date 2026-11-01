@@ -7,6 +7,7 @@ import { AssistantPage, type AssistantProfile } from './AssistantPage';
  * security to review and a person to approve by merging. Its tools are the MCP server architectassistant-oneke.
  */
 export const ARCHITECT: AssistantProfile = {
+  role: { does: 'Designs only with platform blocks; installation dossier and DR plan', reads: 'the approved specification', writes: 'architecture, manifest, DR plan', never: 'chooses a product outside the catalogue' },
   path: '/architect',
   store: 'architect-assistant-conversation',
   title: 'Architect assistant',

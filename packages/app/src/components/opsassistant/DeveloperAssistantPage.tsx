@@ -7,6 +7,7 @@ import { AssistantPage, type AssistantProfile } from './AssistantPage';
  * are the MCP server developerassistant-oneke.
  */
 export const DEVELOPER: AssistantProfile = {
+  role: { does: 'From an approved change to draft pull requests', reads: 'specification, architecture, the repository', writes: 'draft pull requests with tests', never: 'merges or deploys' },
   path: '/developer',
   store: 'developer-assistant-conversation',
   title: 'Developer assistant',

@@ -14,6 +14,8 @@ export type ConsoleClassicPage = {
   classicPath: string;
   /** the page has sub-routes of its own (e.g. the scaffolder): /create/x → /console/create/x */
   nested?: boolean;
+  /** a page only the console has: its classicPath is the nearest classic page, never mapped back to it */
+  consoleOnly?: boolean;
   element: ReactNode;
 };
 
@@ -27,7 +29,7 @@ export function consolePathForClassic(path: string, pages: ConsoleClassicPage[])
   const entity = consolePathForCatalog(path);
   if (entity) return entity;
   const p = strip(path);
-  for (const pg of pages) {
+  for (const pg of pages.filter(x => !x.consoleOnly)) {
     if (p === pg.classicPath) return `/console/${pg.id}`;
     if (pg.nested && p.startsWith(`${pg.classicPath}/`)) return `/console/${pg.id}${p.slice(pg.classicPath.length)}`;
   }

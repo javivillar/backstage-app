@@ -96,7 +96,7 @@ const Figure = ({ label, value, note }: { label: string; value: string; note?: s
  */
 export const CostsPage = () => {
   const pricing = usePricing();
-  const { loading, error, week, day } = useAllocations();
+  const { loading, weekLoading, error, week, day } = useAllocations();
   const deployments = useDeployments();
   const incidents = useIncidentCounts();
   const { byNs, nsOfRef } = useEntitiesByNamespace();
@@ -142,7 +142,7 @@ export const CostsPage = () => {
         const incidentCost = incidents.value ? incidentsCost(inc, pricing) : undefined;
         return { ns, entity, system, week: week?.get(ns), day: day?.get(ns), deploys: d, deployCost, incidents: inc, incidentCost };
       })
-      .sort((a, b) => (b.week?.total ?? 0) - (a.week?.total ?? 0));
+      .sort((a, b) => (b.week?.total ?? 0) - (a.week?.total ?? 0) || (b.day?.total ?? 0) - (a.day?.total ?? 0));
   }, [week, day, byNs, deployments.value, incidents.value, incidentsByNs, pricing]);
 
   const systems = useMemo(() => {
@@ -174,6 +174,8 @@ export const CostsPage = () => {
   if (loading) body = <Progress />;
   else if (error) body = <WarningPanel severity="warning" title="Costs are not available" message={`OpenCost could not be queried: ${error.message}`} />;
   else {
+    // the week comes from OpenCost tens of seconds after the day
+    const wk = (n?: number) => (weekLoading ? '…' : money(n, c));
     const totalWeek = rows.reduce((s, r) => s + (r.week?.total ?? 0), 0);
     const totalDay = rows.reduce((s, r) => s + (r.day?.total ?? 0), 0);
     const idleWeek = week?.get(IDLE)?.total;
@@ -222,7 +224,7 @@ export const CostsPage = () => {
       <>
         <InfoCard title="The cluster">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 28 }}>
-            <Figure label="Last 7 days" value={money(totalWeek, c)} note={`${rows.length} namespaces`} />
+            <Figure label="Last 7 days" value={wk(totalWeek)} note={`${rows.length} namespaces`} />
             <Figure
               label="Per month"
               value={money(monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost), c)}
@@ -249,7 +251,7 @@ export const CostsPage = () => {
             />
             <Figure
               label="Capacity nobody reserved"
-              value={money(idleWeek, c)}
+              value={wk(idleWeek)}
               note="last 7 days: nodes paid and not requested by any pod"
             />
           </div>
@@ -272,7 +274,7 @@ export const CostsPage = () => {
                 <TableRow key={name}>
                   <TableCell>{name === '(no system)' ? name : <EntityRefLink entityRef={{ kind: 'System', namespace: 'default', name }} />}</TableCell>
                   <TableCell align="right">{s.count}</TableCell>
-                  <TableCell align="right">{money(s.week, c)}</TableCell>
+                  <TableCell align="right">{wk(s.week)}</TableCell>
                   <TableCell align="right">
                     {s.questions ? `${money(s.assistants, c)} · ${Math.round(s.questions)} q.` : '—'}
                   </TableCell>
@@ -355,7 +357,7 @@ export const CostsPage = () => {
                   <TableRow key={r.ns}>
                     <TableCell>{r.ns}</TableCell>
                     <TableCell>{r.entity ? <EntityRefLink entityRef={r.entity} /> : '—'}</TableCell>
-                    <TableCell align="right">{money(r.week?.total, c)}</TableCell>
+                    <TableCell align="right">{wk(r.week?.total)}</TableCell>
                     <TableCell align="right" title={r.deploys?.versions.map(v => v.image).join('\n')}>
                       {deployments.value ? `${r.deploys?.count ?? 0}${r.deployCost ? ` · ${money(r.deployCost, c)}` : ''}` : '—'}
                     </TableCell>

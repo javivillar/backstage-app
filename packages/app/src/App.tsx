@@ -55,12 +55,14 @@ import { TopologyPage } from './components/topology/TopologyPage';
 import { NodesCompliancePage } from './components/compliance/NodesCompliancePage';
 import { ImagesPage } from './components/images/ImagesPage';
 import { CostsPage } from './components/cost/CostsPage';
-import { OpsAssistantPage, OPS } from './components/opsassistant/OpsAssistantPage';
-import { SecAssistantPage, SEC } from './components/opsassistant/SecAssistantPage';
-import { FunctionalAssistantPage, FUNCTIONAL } from './components/opsassistant/FunctionalAssistantPage';
-import { ArchitectAssistantPage, ARCHITECT } from './components/opsassistant/ArchitectAssistantPage';
-import { DeveloperAssistantPage, DEVELOPER } from './components/opsassistant/DeveloperAssistantPage';
-import { AssistantPage, type AssistantProfile } from './components/opsassistant/AssistantPage';
+import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
+import { SecAssistantPage } from './components/opsassistant/SecAssistantPage';
+import { FunctionalAssistantPage } from './components/opsassistant/FunctionalAssistantPage';
+import { ArchitectAssistantPage } from './components/opsassistant/ArchitectAssistantPage';
+import { DeveloperAssistantPage } from './components/opsassistant/DeveloperAssistantPage';
+import { AssistantPage } from './components/opsassistant/AssistantPage';
+import { CONSOLE_ASSISTANTS } from './components/opsassistant/consoleAssistants';
+import { ConsoleAssistantsTeam } from './components/opsassistant/ConsoleAssistantsTeam';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
 import { ConsolePage, type ConsoleClassicPage } from '@internal/plugin-console';
@@ -129,17 +131,23 @@ const topologyPage = <TopologyPage />;
 const cisNodesPage = <NodesCompliancePage />;
 const imagesPage = <ImagesPage />;
 
-/** An assistant inside the console: the same page in its console layout, with the other assistants beside it. */
-const CONSOLE_ASSISTANTS: Array<[string, string, AssistantProfile]> = [
-  ['ops-assistant', 'Operations', OPS],
-  ['sec-assistant', 'Security', SEC],
-  ['functional-assistant', 'Functional', FUNCTIONAL],
-  ['architect-assistant', 'Architect', ARCHITECT],
-  ['developer-assistant', 'Developer', DEVELOPER],
-];
+/** An assistant inside the console: its workspace, with the conversations of the whole team beside it. */
 const ConsoleAssistant = ({ id }: { id: string }) => {
-  const profile = CONSOLE_ASSISTANTS.find(([x]) => x === id)![2];
-  return <AssistantPage profile={profile} variant="console" others={CONSOLE_ASSISTANTS.map(([x, title]) => ({ title, to: `/console/${x}`, current: x === id }))} />;
+  const me = CONSOLE_ASSISTANTS.find(a => a.id === id)!;
+  return (
+    <AssistantPage
+      profile={me.profile}
+      variant="console"
+      others={CONSOLE_ASSISTANTS.map(({ id: x, name, colour, Icon, profile }) => ({
+        title: name,
+        to: `/console/${x}`,
+        current: x === id,
+        colour,
+        icon: <Icon sx={{ fontSize: 'inherit' }} />,
+        path: profile.path,
+      }))}
+    />
+  );
 };
 
 const consolePages: ConsoleClassicPage[] = [
@@ -151,6 +159,7 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: costsPage },
   { id: 'cis-nodes', title: 'CIS Kubernetes nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
+  { id: 'assistants', title: 'The team', product: 'The assistants: who does what, and how they hand over', layer: 'assistants', classicPath: '/ops-assistant', consoleOnly: true, element: <ConsoleAssistantsTeam /> },
   { id: 'ops-assistant', title: 'Operations', product: 'Operations assistant: what happens in the cluster and why', layer: 'assistants', classicPath: '/ops-assistant', element: <ConsoleAssistant id="ops-assistant" /> },
   { id: 'sec-assistant', title: 'Security', product: 'Security assistant: vulnerabilities, exposure and risk', layer: 'assistants', classicPath: '/sec-assistant', element: <ConsoleAssistant id="sec-assistant" /> },
   { id: 'functional-assistant', title: 'Functional', product: 'Functional assistant: specifications of a system', layer: 'assistants', classicPath: '/functional-assistant', element: <ConsoleAssistant id="functional-assistant" /> },

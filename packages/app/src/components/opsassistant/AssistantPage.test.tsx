@@ -231,10 +231,10 @@ describe('AssistantPage in the console', () => {
     Element.prototype.scrollIntoView = jest.fn();
   });
 
-  it('lists the other assistants and the kept conversations, which can be deleted', async () => {
+  it('filters by assistant and lists the kept conversations, which can be deleted', async () => {
     const view = await render({}, { c1: { title: 'Why is Loki restarting?', state: { messages: [], exchanges: [] } } }, 'console');
     expect(await screen.findByText('Why is Loki restarting?')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Security' })).toHaveAttribute('href', '/console/sec-assistant');
+    expect(screen.getByRole('button', { name: 'Security' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Delete Why is Loki restarting?' }));
     await waitFor(() => expect(view.calls.filter(u => u.endsWith('/conversations/c1')).length).toBeGreaterThan(0));
   });
