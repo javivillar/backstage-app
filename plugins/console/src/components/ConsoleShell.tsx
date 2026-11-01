@@ -8,7 +8,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import OpenInNew from '@mui/icons-material/OpenInNew';
-import { type PropsWithChildren, useState } from 'react';
+import { type PropsWithChildren, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from '../pages';
@@ -136,6 +136,11 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const current = pathname.replace(/\/+$/, '') || '/console';
   const own = cfg.cluster;
+  // the global CSS of the classic portal restyles MUI buttons and chips; body.rq-console keeps the console out of it
+  useEffect(() => {
+    document.body.classList.add('rq-console');
+    return () => document.body.classList.remove('rq-console');
+  }, []);
   const pages = useConsolePages();
   const portalLinks = usePortalLinks();
   const layer = layerOf(current, pages);

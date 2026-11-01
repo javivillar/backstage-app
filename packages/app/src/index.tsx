@@ -201,17 +201,18 @@ style.textContent = `
   }
 
   /* ===== ORANGE ACCENT BUTTONS ===== */
-  [class*="BackstageContentHeader"] button,
-  [class*="BackstageContentHeader"] a[class*="MuiButton"],
-  button[class*="MuiButton-containedPrimary"],
-  a[class*="MuiButton-containedPrimary"] {
+  /* the console (body.rq-console) keeps its own look: these accents are of the classic portal */
+  body:not(.rq-console) [class*="BackstageContentHeader"] button,
+  body:not(.rq-console) [class*="BackstageContentHeader"] a[class*="MuiButton"],
+  body:not(.rq-console) button[class*="MuiButton-containedPrimary"],
+  body:not(.rq-console) a[class*="MuiButton-containedPrimary"] {
     background: linear-gradient(180deg, #FFB74D 0%, #FF9800 100%) !important;
     background-image: linear-gradient(180deg, #FFB74D 0%, #FF9800 100%) !important;
     color: #fff !important;
     border: none !important;
   }
-  button[class*="MuiButton-containedPrimary"]:hover,
-  a[class*="MuiButton-containedPrimary"]:hover {
+  body:not(.rq-console) button[class*="MuiButton-containedPrimary"]:hover,
+  body:not(.rq-console) a[class*="MuiButton-containedPrimary"]:hover {
     background: linear-gradient(180deg, #FF9800 0%, #F57C00 100%) !important;
     background-image: linear-gradient(180deg, #FF9800 0%, #F57C00 100%) !important;
     box-shadow: 0 4px 12px rgba(255,152,0,0.3) !important;
@@ -224,8 +225,8 @@ style.textContent = `
   }
 
   /* ===== OUTLINED BUTTONS — match Filters button style (orange outline, pill shape, subtle gradient) ===== */
-  button[class*="MuiButton-outlined"],
-  a[class*="MuiButton-outlined"] {
+  body:not(.rq-console) button[class*="MuiButton-outlined"],
+  body:not(.rq-console) a[class*="MuiButton-outlined"] {
     color: #FF9800 !important;
     border: 1px solid rgba(255,152,0,0.35) !important;
     border-radius: 20px !important;
@@ -237,8 +238,8 @@ style.textContent = `
     background: linear-gradient(180deg, rgba(255,152,0,0.04) 0%, rgba(255,152,0,0.01) 100%) !important;
     box-shadow: 0 1px 3px rgba(255,152,0,0.08), 0 1px 2px rgba(0,0,0,0.04) !important;
   }
-  button[class*="MuiButton-outlined"]:hover,
-  a[class*="MuiButton-outlined"]:hover {
+  body:not(.rq-console) button[class*="MuiButton-outlined"]:hover,
+  body:not(.rq-console) a[class*="MuiButton-outlined"]:hover {
     background: linear-gradient(180deg, rgba(255,152,0,0.12) 0%, rgba(255,152,0,0.06) 100%) !important;
     border-color: rgba(255,152,0,0.6) !important;
     box-shadow: 0 3px 8px rgba(255,152,0,0.15), 0 1px 3px rgba(0,0,0,0.06) !important;
@@ -246,7 +247,7 @@ style.textContent = `
   }
 
   /* ===== OWNERSHIP / ENTITY TAGS — stand out with accent color ===== */
-  [class*="MuiChip-root"] {
+  body:not(.rq-console) [class*="MuiChip-root"] {
     transition: all 0.15s ease !important;
     font-weight: 500 !important;
     background: linear-gradient(135deg, rgba(0,86,140,0.08) 0%, rgba(26,141,255,0.06) 100%) !important;
@@ -254,7 +255,7 @@ style.textContent = `
     border: 1px solid rgba(0,86,140,0.15) !important;
     box-shadow: 0 1px 3px rgba(0,86,140,0.08) !important;
   }
-  [class*="MuiChip-root"]:hover {
+  body:not(.rq-console) [class*="MuiChip-root"]:hover {
     background: linear-gradient(135deg, rgba(0,86,140,0.14) 0%, rgba(26,141,255,0.10) 100%) !important;
     box-shadow: 0 2px 6px rgba(0,86,140,0.12) !important;
     transform: translateY(-1px);
@@ -331,14 +332,14 @@ style.textContent = `
     box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 1.5px 6px rgba(0,0,0,0.15) !important;
   }
   /* Orange accent buttons in dark mode */
-  .backstage-dark button[class*="MuiButton-containedPrimary"],
-  .backstage-dark a[class*="MuiButton-containedPrimary"] {
+  .backstage-dark body:not(.rq-console) button[class*="MuiButton-containedPrimary"],
+  .backstage-dark body:not(.rq-console) a[class*="MuiButton-containedPrimary"] {
     background: linear-gradient(180deg, #FFB74D 0%, #FF9800 100%) !important;
     background-image: linear-gradient(180deg, #FFB74D 0%, #FF9800 100%) !important;
     color: #fff !important;
   }
-  .backstage-dark button[class*="MuiButton-containedPrimary"]:hover,
-  .backstage-dark a[class*="MuiButton-containedPrimary"]:hover {
+  .backstage-dark body:not(.rq-console) button[class*="MuiButton-containedPrimary"]:hover,
+  .backstage-dark body:not(.rq-console) a[class*="MuiButton-containedPrimary"]:hover {
     background: linear-gradient(180deg, #FF9800 0%, #F57C00 100%) !important;
     background-image: linear-gradient(180deg, #FF9800 0%, #F57C00 100%) !important;
   }

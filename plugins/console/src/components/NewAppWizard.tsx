@@ -3,7 +3,6 @@ import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -35,6 +34,74 @@ const LOOK: Record<string, { logo: string; accent: string; stack: string[]; arch
   'spring-framework-app': { logo: 'Sp', accent: '#4E9A2E', stack: ['Angular', 'Spring Boot', 'PostgreSQL per service', 'Events'], arch: 'micro' },
 };
 const DEFAULT_LOOK = { logo: 'App', accent: '#0060C0', stack: [] as string[], arch: 'monolith' as const };
+
+/**
+ * A button in the console look: the global CSS of the classic portal restyles every MUI Button (orange gradient), so
+ * the console draws its own. variant: contained (primary), outlined, text; to: a route; href: a link.
+ */
+const Btn = ({
+  variant = 'text',
+  to,
+  href,
+  children,
+  sx,
+  size: _size,
+  disableElevation: _de,
+  component: _c,
+  ...rest
+}: {
+  variant?: 'contained' | 'outlined' | 'text';
+  to?: string;
+  href?: string;
+  children: ReactNode;
+  sx?: Record<string, unknown>;
+  size?: string;
+  disableElevation?: boolean;
+  component?: unknown;
+  [k: string]: unknown;
+}) => {
+  const look = {
+    all: 'unset',
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0.75,
+    borderRadius: '8px',
+    px: variant === 'text' ? 0.75 : 1.75,
+    py: 0.8,
+    fontSize: 14,
+    fontWeight: 500,
+    border: variant === 'text' ? '1px solid transparent' : '1px solid',
+    borderColor: variant === 'outlined' ? 'divider' : undefined,
+    bgcolor: variant === 'contained' ? '#0060C0' : 'transparent',
+    color: variant === 'contained' ? '#fff' : '#0060C0',
+    textDecoration: 'none',
+    '&:hover': { bgcolor: variant === 'contained' ? '#004F9E' : 'action.hover' },
+    '&:focus-visible': { outline: '2px solid #0060C0', outlineOffset: 2 },
+    '&:disabled': { opacity: 0.45, cursor: 'default' },
+    ...(variant === 'outlined' ? { color: 'text.primary' } : {}),
+    ...(sx ?? {}),
+  };
+  if (to)
+    return (
+      <Box to={to} sx={look} {...rest}>
+        {children}
+      </Box>
+    );
+  if (href)
+    return (
+      <Box component="a" href={href} sx={look} {...rest}>
+        {children}
+      </Box>
+    );
+  return (
+    <Box component="button" type="button" sx={look} {...rest}>
+      {children}
+    </Box>
+  );
+};
 
 const s = (v: unknown) => (typeof v === 'string' ? v : '');
 const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
@@ -73,13 +140,13 @@ const ListField = ({ id, p, value, onChange, prefix, accent }: { id: string; p: 
           ) : (
             <span />
           )}
-          <Button size="small" aria-label={`Remove ${v || 'this one'}`} onClick={() => onChange(value.filter((_, j) => j !== i))} sx={{ minWidth: 0, px: 1 }}>
+          <Btn size="small" aria-label={`Remove ${v || 'this one'}`} onClick={() => onChange(value.filter((_, j) => j !== i))} sx={{ minWidth: 0, px: 1 }}>
             ×
-          </Button>
+          </Btn>
         </Box>
       ))}
       <Box>
-        <Button
+        <Btn
           size="small"
           onClick={() => {
             onChange([...value, '']);
@@ -88,7 +155,7 @@ const ListField = ({ id, p, value, onChange, prefix, accent }: { id: string; p: 
           sx={{ textTransform: 'none', color: accent, px: 0.5 }}
         >
           + Add
-        </Button>
+        </Btn>
       </Box>
     </Box>
   );
@@ -185,23 +252,23 @@ const TaskView = ({ id, accent, title }: { id: string; accent: string; title: st
             if (l.entityRef) {
               const r = parseEntityRef(l.entityRef);
               return (
-                <Button key={l.title} component={Link} to={`/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`} variant="contained" disableElevation sx={{ textTransform: 'none', bgcolor: accent }}>
+                <Btn key={l.title} to={`/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`} variant="contained" disableElevation sx={{ textTransform: 'none', bgcolor: accent }}>
                   {l.title}
-                </Button>
+                </Btn>
               );
             }
             return (
-              <Button key={l.title} href={l.url} target="_blank" rel="noreferrer" variant="outlined" sx={{ textTransform: 'none' }}>
+              <Btn key={l.title} href={l.url} target="_blank" rel="noreferrer" variant="outlined" sx={{ textTransform: 'none' }}>
                 {l.title}
-              </Button>
+              </Btn>
             );
           })}
         </Box>
       ) : null}
       <Box>
-        <Button size="small" onClick={() => setShowLog(x => !x)} sx={{ textTransform: 'none' }}>
+        <Btn size="small" onClick={() => setShowLog(x => !x)} sx={{ textTransform: 'none' }}>
           {showLog ? 'Hide the log' : 'Show the log'}
-        </Button>
+        </Btn>
       </Box>
       {showLog && (
         <Box component="pre" sx={{ m: 0, p: 1.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10px', fontSize: 12, maxHeight: 420, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
@@ -331,9 +398,9 @@ export const NewAppWizard = () => {
           </Box>
           {lines.length > shown.length || oldLines ? (
             <Box>
-              <Button size="small" onClick={() => setOldLines(x => !x)} sx={{ textTransform: 'none', px: 0.5 }}>
+              <Btn size="small" onClick={() => setOldLines(x => !x)} sx={{ textTransform: 'none', px: 0.5 }}>
                 {oldLines ? 'Hide older lines' : `Show older lines (${lines.length - shown.length})`}
-              </Button>
+              </Btn>
             </Box>
           ) : null}
           {help}
@@ -378,9 +445,9 @@ export const NewAppWizard = () => {
           <Typography sx={{ fontWeight: 500 }}>{label}</Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             {p.enum.map((o, i) => (
-              <Button key={o} variant={values[k] === o ? 'contained' : 'outlined'} disableElevation aria-pressed={values[k] === o} onClick={() => set(k, o)} sx={{ textTransform: 'none', bgcolor: values[k] === o ? accent : undefined }}>
+              <Btn key={o} variant={values[k] === o ? 'contained' : 'outlined'} disableElevation aria-pressed={values[k] === o} onClick={() => set(k, o)} sx={{ textTransform: 'none', bgcolor: values[k] === o ? accent : undefined }}>
                 {p.enumNames?.[i] ?? o}
-              </Button>
+              </Btn>
             ))}
           </Box>
           {help}
@@ -456,9 +523,9 @@ export const NewAppWizard = () => {
         <Box key={st.title} sx={{ border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.25, display: 'grid', gap: 0.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <b>{st.title}</b>
-            <Button size="small" onClick={() => setStep(i)} sx={{ textTransform: 'none' }}>
+            <Btn size="small" onClick={() => setStep(i)} sx={{ textTransform: 'none' }}>
               Change
-            </Button>
+            </Btn>
           </Box>
           {Object.entries(st.properties)
             .filter(([k]) => {
@@ -541,7 +608,7 @@ export const NewAppWizard = () => {
         ))}
       </Box>
 
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 380px' }, alignItems: 'start' }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 360px' }, alignItems: 'start' }}>
         <Box component="form" onSubmit={e => e.preventDefault()} sx={card}>
           <Box>
             <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 17 }}>
@@ -556,25 +623,25 @@ export const NewAppWizard = () => {
           {isReview ? review : stepBody(steps[step])}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
             {step > 0 ? (
-              <Button variant="outlined" onClick={() => setStep(step - 1)} sx={{ textTransform: 'none' }}>
+              <Btn variant="outlined" onClick={() => setStep(step - 1)} sx={{ textTransform: 'none' }}>
                 Back
-              </Button>
+              </Btn>
             ) : (
               <span />
             )}
             {isReview ? (
-              <Button variant="contained" disableElevation disabled={task.starting} onClick={create} sx={{ textTransform: 'none', bgcolor: accent }}>
+              <Btn variant="contained" disableElevation disabled={task.starting} onClick={create} sx={{ textTransform: 'none', bgcolor: accent }}>
                 {task.starting ? 'Starting…' : 'Create'}
-              </Button>
+              </Btn>
             ) : (
-              <Button variant="contained" disableElevation onClick={next} sx={{ textTransform: 'none', bgcolor: accent }}>
+              <Btn variant="contained" disableElevation onClick={next} sx={{ textTransform: 'none', bgcolor: accent }}>
                 Next
-              </Button>
+              </Btn>
             )}
           </Box>
         </Box>
 
-        <Box component="aside" aria-label="What you will get" sx={{ display: 'grid', gap: 1.5, position: { xl: 'sticky' }, top: 12 }}>
+        <Box component="aside" aria-label="What you will get" sx={{ display: 'grid', gap: 1.5, position: { lg: 'sticky' }, top: 12 }}>
           <Box sx={card}>
             {overline('What you will get')}
             <Box sx={{ display: 'grid', gap: 0.75 }}>
