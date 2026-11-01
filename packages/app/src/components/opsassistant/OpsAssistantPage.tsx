@@ -6,6 +6,7 @@ import { AssistantPage, type AssistantProfile } from './AssistantPage';
  * the operator acts.
  */
 export const OPS: AssistantProfile = {
+  role: { does: 'Looks at the cluster with read-only tools and proposes what to do', reads: 'Kubernetes, Argo CD, logs, metrics, docs', writes: 'diagnoses and what to do next', never: 'changes the cluster' },
   path: '',
   store: 'ops-assistant-conversation',
   title: 'Operations assistant',

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Content, Header, MarkdownContent, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
@@ -49,6 +49,8 @@ export interface AssistantProfile {
   /** shown while it works: "Looking at the cluster…" */
   working: string;
   notConfigured: string;
+  /** what it does, reads, writes and never does (the Team page of the console) */
+  role?: { does: string; reads: string; writes: string; never: string };
   /** a question about one project: the page was opened with ?project=<name> (the button of an entity) */
   aboutProject?: (project: string) => { examples: string[]; prefix: string };
 }
@@ -107,8 +109,12 @@ const describe = (t: ToolCall) => {
  * The page of an assistant: questions answered by a model that looks with the READ-ONLY tools of its MCP server. It
  * proposes; the operator acts. OpsAssistantPage and SecAssistantPage are this page with their profile.
  */
-/** The other assistants, for the switcher of the console variant: [title, console path]. */
-export type AssistantLink = { title: string; to: string; current: boolean };
+/**
+ * The assistants of the console variant (this one included, current): its title, console page, colour, icon and the
+ * path of its API under /api/ops-assistant, to list its conversations next to this one's.
+ */
+export type AssistantLink = { title: string; to: string; current: boolean; colour?: string; icon?: ReactNode; path?: string };
+type OtherSummary = Summary & { assistant: AssistantLink };
 
 export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { profile: AssistantProfile; variant?: 'classic' | 'console'; others?: AssistantLink[] }) => {
   const discovery = useApi(discoveryApiRef);
@@ -116,6 +122,9 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
   const catalog = useApi(catalogApiRef);
   const [params] = useSearchParams();
   const project = params.get('project')?.trim() || undefined;
+  // ?conversation=<id> opens that conversation; ?ask=<question> fills the box (a hand-over from another assistant)
+  const wanted = params.get('conversation') ?? undefined;
+  const prefill = params.get('ask') ?? undefined;
   /** the system the page was opened for (?system=<name>, or the system of ?project=<name>) */
   const asked = params.get('system')?.trim().toLocaleLowerCase('en-US') || undefined;
   /** the systems of the catalog, to choose the one the questions are charged to */
@@ -140,6 +149,9 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
   const mounted = useRef(true);
   /** the conversation whose question left waiting was already taken up */
   const resumed = useRef<string | undefined>();
+  /** console: the conversations of the other assistants, and the assistant the list shows ('all' or its page) */
+  const [otherConversations, setOtherConversations] = useState<OtherSummary[]>([]);
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     mounted.current = true;
@@ -230,7 +242,7 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
     })().then(
       list => {
         setConversations(list);
-        if (!stored.current && list.length) open(list[0].id).catch(e => setKeepError((e as Error).message));
+        if (!stored.current && !wanted && !prefill && list.length) open(list[0].id).catch(e => setKeepError((e as Error).message));
       },
       e => {
         setConversations([]);
@@ -239,6 +251,40 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info]);
+
+  // console: the other assistants' conversations, listed with this one's (each opens in its own page)
+  useEffect(() => {
+    if (variant !== 'console') return;
+    const rest = others.filter(o => !o.current && o.path !== undefined);
+    (async () => {
+      const base = await discovery.getBaseUrl('ops-assistant');
+      const lists = await Promise.all(
+        rest.map(async o => {
+          const res = await fetch(`${base}${o.path}/conversations`).catch(() => undefined);
+          const list: Summary[] = res?.ok ? await res.json().catch(() => []) : [];
+          return (Array.isArray(list) ? list : []).map(c => ({ ...c, assistant: o }));
+        }),
+      );
+      return lists.flat();
+    })().then(l => mounted.current && setOtherConversations(l), () => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variant, discovery, fetch, others.map(o => o.to).join()]);
+
+  useEffect(() => {
+    if (wanted && info?.allowed && info.enabled && wanted !== state.id) open(wanted).catch(e => setKeepError((e as Error).message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, info]);
+  useEffect(() => {
+    if (!prefill) return;
+    if (stored.current?.exchanges.length) {
+      const next = empty(asked ?? stored.current.system);
+      lastSaved.current = saved(next);
+      resumed.current = next.id;
+      setState(next);
+    }
+    setQuestion(prefill);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   const reset = () => {
     // a new conversation goes on being charged to the same system
@@ -508,145 +554,215 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
 
   if (variant === 'console') {
     const usage = state.exchanges.reduce((t, x) => t + (x.usage?.input ?? 0) + (x.usage?.output ?? 0), 0);
-    const card = { border: 1, borderColor: 'divider', borderRadius: '12px', bgcolor: 'background.paper' } as const;
+    const card = { border: 1, borderColor: 'divider', borderRadius: '14px', bgcolor: 'background.paper' } as const;
+    const me = others.find(o => o.current);
+    const colour = me?.colour ?? '#1A8DFF';
+    const tools = state.exchanges.flatMap(x => x.toolCalls ?? []);
+    const byTool = [...tools.reduce((m, t) => m.set(t.name, (m.get(t.name) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+    const lastQuestion = state.exchanges[state.exchanges.length - 1]?.question;
+    const handOver = (o: AssistantLink) => {
+      const q = new URLSearchParams();
+      if (state.system) q.set('system', state.system);
+      if (lastQuestion) q.set('ask', `From the ${profile.title.toLowerCase()}: ${lastQuestion}`);
+      return `${o.to}?${q.toString()}`;
+    };
     let status: JSX.Element | undefined;
     if (infoError) status = <WarningPanel title="The assistant is not reachable" message={infoError} />;
     else if (!info) status = <Progress />;
     else if (!info.allowed) status = <WarningPanel title="No access" message={`You are not in a group allowed to use the ${profile.title.toLowerCase()}.`} />;
     else if (!info.enabled) status = <WarningPanel title="Not configured" message={profile.notConfigured} />;
+    const all = [
+      ...(conversations ?? []).map(c => ({ ...c, assistant: me })),
+      ...otherConversations,
+    ].filter(c => filter === 'all' || c.assistant?.to === filter).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const Avatar = ({ o, size = 30 }: { o?: AssistantLink; size?: number }) => (
+      <Box component="span" aria-hidden sx={{ width: size, height: size, borderRadius: size > 32 ? '12px' : '8px', display: 'grid', placeItems: 'center', color: '#fff', bgcolor: o?.colour ?? colour, flexShrink: 0, fontWeight: 700, fontSize: size * 0.45 }}>
+        {o?.icon ?? (o?.title ?? profile.title).charAt(0)}
+      </Box>
+    );
     return (
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '240px minmax(0, 1fr) 260px' }, alignItems: 'start' }}>
-        <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1 }}>
-          <Typography variant="overline" color="text.secondary">
-            Assistants
-          </Typography>
-          {others.map(o => (
-            <Button key={o.to} href={o.to} variant={o.current ? 'contained' : 'text'} disableElevation sx={{ justifyContent: 'flex-start', textTransform: 'none' }}>
-              {o.title}
-            </Button>
-          ))}
-          <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
-            Conversations
-          </Typography>
-          <Button variant="outlined" disabled={busy || !state.exchanges.length} onClick={reset} sx={{ textTransform: 'none' }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '270px minmax(0, 1fr) 290px' }, alignItems: 'start' }}>
+        <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1.25 }}>
+          <Button variant="contained" disabled={busy || !state.exchanges.length} onClick={reset} sx={{ textTransform: 'none' }}>
             New conversation
           </Button>
-          <List dense sx={{ maxHeight: '50vh', overflowY: 'auto', p: 0 }}>
-            {conversations?.map(c => (
-              <ListItem
-                key={c.id}
-                disablePadding
-                secondaryAction={
-                  <IconButton edge="end" size="small" aria-label={`Delete ${c.title}`} title="Delete" disabled={busy} onClick={() => remove(c.id)}>
-                    <DeleteOutlineIcon fontSize="small" />
-                  </IconButton>
-                }
-              >
-                <ListItemButton selected={c.id === state.id} disabled={busy} onClick={() => c.id !== state.id && open(c.id).catch(e => setKeepError((e as Error).message))} sx={{ borderRadius: '8px' }}>
-                  <ListItemText primary={c.title} secondary={new Date(c.updatedAt).toLocaleString()} primaryTypographyProps={{ noWrap: true, title: c.title, fontSize: 14 }} />
-                </ListItemButton>
-              </ListItem>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            {[{ title: 'All', to: 'all' } as AssistantLink, ...others].map(o => (
+              <Chip key={o.to} size="small" label={o.title} onClick={() => setFilter(o.to)} color={filter === o.to ? 'primary' : 'default'} variant={filter === o.to ? 'filled' : 'outlined'} />
             ))}
-          </List>
+          </Box>
           <Typography variant="caption" color={keepError ? 'warning.main' : 'text.secondary'}>
-            {keepError ? `Conversations are not being kept: ${keepError}` : `Kept ${info?.keepDays ?? 90} days after their last change, only for you.`}
+            {keepError ? `Conversations are not being kept: ${keepError}` : `Kept ${info?.keepDays ?? 90} days, only for you.`}
           </Typography>
+          <List dense sx={{ maxHeight: '58vh', overflowY: 'auto', p: 0 }}>
+            {all.map(c => {
+              const mine = !c.assistant || c.assistant === me;
+              return (
+                <ListItem
+                  key={`${c.assistant?.to ?? ''}${c.id}`}
+                  disablePadding
+                  secondaryAction={
+                    mine ? (
+                      <IconButton edge="end" size="small" aria-label={`Delete ${c.title}`} title="Delete" disabled={busy} onClick={() => remove(c.id)}>
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    ) : undefined
+                  }
+                >
+                  <ListItemButton
+                    selected={mine && c.id === state.id}
+                    disabled={busy}
+                    sx={{ borderRadius: '10px', gap: 1 }}
+                    {...(mine ? { onClick: () => c.id !== state.id && open(c.id).catch(e => setKeepError((e as Error).message)) } : { component: 'a', href: `${c.assistant!.to}?conversation=${c.id}` })}
+                  >
+                    <Avatar o={c.assistant} size={28} />
+                    <ListItemText primary={c.title} secondary={`${c.assistant?.title ?? profile.title} · ${new Date(c.updatedAt).toLocaleDateString()}`} primaryTypographyProps={{ noWrap: true, title: c.title, fontSize: 14 }} />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
+          </List>
         </Box>
-        <Box sx={{ ...card, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minHeight: 560, minWidth: 0 }}>
-          <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Typography sx={{ fontWeight: 600 }}>{profile.title}</Typography>
+        <Box sx={{ ...card, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minHeight: 620, minWidth: 0 }}>
+          <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 1.25, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Avatar o={me} size={38} />
+            <Box>
+              <Typography sx={{ fontWeight: 600 }}>{profile.title}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                read-only tools · it proposes, a person acts
+              </Typography>
+            </Box>
+            <Box sx={{ flex: 1 }} />
             {state.system && <Chip size="small" color="primary" variant="outlined" label={`about ${state.system}`} />}
             {info?.model && <Chip size="small" label={info.model} />}
-            <Box sx={{ flex: 1 }} />
-            {usage > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                {(usage / 1000).toFixed(1)} k tokens
-              </Typography>
-            )}
           </Box>
-          <Box sx={{ p: 2, display: 'grid', gap: 1.5, alignContent: 'start', minWidth: 0 }}>
+          <Box sx={{ p: 2, display: 'grid', gap: 2, alignContent: 'start', minWidth: 0 }}>
             {status}
             {!status && state.exchanges.length === 0 && (
               <>
                 <Typography color="text.secondary">{profile.intro}</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   {(about?.examples ?? profile.examples).map(e => (
-                    <Chip key={e} label={e} onClick={() => ask(e)} variant="outlined" />
+                    <Chip key={e} label={e} onClick={() => ask(e)} variant="outlined" sx={{ borderStyle: 'dashed' }} />
                   ))}
                 </Box>
               </>
             )}
-            {state.exchanges.map((x, i) => (
-              <Box key={i} sx={{ display: 'grid', gap: 1 }}>
-                <Box sx={{ justifySelf: 'end', maxWidth: '80%', bgcolor: 'rgba(26,141,255,0.10)', px: 1.5, py: 1, borderRadius: '12px 12px 2px 12px' }}>
-                  <Typography sx={{ whiteSpace: 'pre-wrap' }}>{x.question}</Typography>
+            {state.exchanges.map((x, i) => {
+              const calls = x.toolCalls ?? (pending(x) ? progress?.toolCalls : undefined) ?? [];
+              return (
+                <Box key={i} sx={{ display: 'grid', gap: 1.25 }}>
+                  <Box sx={{ justifySelf: 'end', maxWidth: '75%', bgcolor: colour, color: '#fff', px: 1.75, py: 1.1, borderRadius: '14px 14px 4px 14px' }}>
+                    <Typography sx={{ whiteSpace: 'pre-wrap' }}>{x.question}</Typography>
+                  </Box>
+                  {calls.length > 0 && (
+                    <Box aria-label="What it looked at" sx={{ display: 'grid', gap: 0.4, borderLeft: 2, borderColor: 'divider', pl: 1.5, fontSize: 13, color: 'text.secondary', fontFamily: 'monospace' }}>
+                      {calls.map((t, j) => (
+                        <Box key={j} sx={{ color: t.isError ? 'warning.main' : undefined, overflowWrap: 'anywhere' }}>
+                          {t.isError ? '✕ ' : '› '}
+                          {describe(t)}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                  {pending(x) && (
+                    <Box>
+                      <Progress />
+                      <Typography variant="caption" color="text.secondary">
+                        {progress ? `${profile.working} ${(progress.elapsedMs / 1000).toFixed(0)} s` : 'Thinking…'}
+                      </Typography>
+                    </Box>
+                  )}
+                  {x.error && <WarningPanel severity="error" title="No answer" message={x.error} />}
+                  {x.answer && (
+                    <Box sx={{ display: 'grid', gap: 1, maxWidth: '86ch' }}>
+                      <Box sx={{ borderLeft: 4, borderColor: colour, pl: 1.75 }}>
+                        <MarkdownContent content={x.answer} dialect="gfm" />
+                      </Box>
+                      {i === state.exchanges.length - 1 && (
+                        <Box sx={{ bgcolor: 'action.hover', borderRadius: '12px', p: 1.25, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, mr: 0.5 }}>
+                            Next
+                          </Typography>
+                          {others
+                            .filter(o => !o.current)
+                            .map(o => (
+                              <Button key={o.to} size="small" variant="outlined" href={handOver(o)} sx={{ textTransform: 'none' }}>
+                                Hand over to {o.title}
+                              </Button>
+                            ))}
+                          <Button size="small" href="/console/app/support" sx={{ textTransform: 'none' }}>
+                            Open an incident
+                          </Button>
+                        </Box>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        {x.model}
+                        {x.ms !== undefined && ` · ${(x.ms / 1000).toFixed(0)} s`}
+                        {x.usage && ` · ${(((x.usage.input ?? 0) + (x.usage.output ?? 0)) / 1000).toFixed(1)} k tokens`}
+                        {state.system && ` · charged to ${state.system}`}
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
-                {(x.toolCalls ?? (pending(x) ? progress?.toolCalls : undefined) ?? []).length > 0 && (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {(x.toolCalls ?? progress?.toolCalls ?? []).map((t, j) => (
-                      <Chip key={j} size="small" variant="outlined" sx={{ borderStyle: 'dashed' }} label={describe(t)} color={t.isError ? 'warning' : 'default'} />
-                    ))}
-                  </Box>
-                )}
-                {pending(x) && (
-                  <Box>
-                    <Progress />
-                    <Typography variant="caption" color="text.secondary">
-                      {progress ? `${profile.working} ${(progress.elapsedMs / 1000).toFixed(0)} s` : 'Thinking…'}
-                    </Typography>
-                  </Box>
-                )}
-                {x.error && <WarningPanel severity="error" title="No answer" message={x.error} />}
-                {x.answer && (
-                  <Box sx={{ maxWidth: '80ch' }}>
-                    <MarkdownContent content={x.answer} dialect="gfm" />
-                    <Typography variant="caption" color="text.secondary">
-                      {x.model}
-                      {x.ms !== undefined && ` · ${(x.ms / 1000).toFixed(0)} s`}
-                      {x.usage && ` · ${(((x.usage.input ?? 0) + (x.usage.output ?? 0)) / 1000).toFixed(1)} k tokens`}
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            ))}
+              );
+            })}
             <div ref={bottom} />
           </Box>
-          <Box sx={{ borderTop: 1, borderColor: 'divider', p: 1.25, display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={6}
-              size="small"
-              placeholder={about?.prefix ? `${profile.placeholder}` : profile.placeholder}
-              value={question}
-              disabled={busy || !!status}
-              onChange={e => setQuestion(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  ask(question);
-                }
-              }}
-              inputProps={{ 'aria-label': 'Question' }}
-            />
-            {busy ? (
-              <Button color="warning" variant="outlined" onClick={cancel} sx={{ textTransform: 'none' }}>
-                Cancel
-              </Button>
-            ) : (
-              <Button variant="contained" disabled={!question.trim() || !!status} onClick={() => ask(question)} sx={{ textTransform: 'none' }}>
-                Send
-              </Button>
+          <Box sx={{ borderTop: 1, borderColor: 'divider', p: 1.25, display: 'grid', gap: 1 }}>
+            {state.exchanges.length > 0 && !status && (
+              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                {(about?.examples ?? profile.examples).slice(0, 3).map(e => (
+                  <Chip key={e} size="small" label={e} onClick={() => ask(e)} variant="outlined" sx={{ borderStyle: 'dashed' }} />
+                ))}
+              </Box>
             )}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', border: 1, borderColor: 'divider', borderRadius: '12px', p: 1, bgcolor: 'background.default' }}>
+              <TextField
+                fullWidth
+                multiline
+                maxRows={6}
+                variant="standard"
+                InputProps={{ disableUnderline: true }}
+                placeholder={state.system ? `Ask the ${profile.title.toLowerCase()} about ${state.system}…` : profile.placeholder}
+                value={question}
+                disabled={busy || !!status}
+                onChange={e => setQuestion(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    ask(question);
+                  }
+                }}
+                inputProps={{ 'aria-label': 'Question' }}
+              />
+              {busy ? (
+                <Button color="warning" variant="outlined" onClick={cancel} sx={{ textTransform: 'none' }}>
+                  Cancel
+                </Button>
+              ) : (
+                <Button variant="contained" disabled={!question.trim() || !!status} onClick={() => ask(question)} sx={{ textTransform: 'none' }}>
+                  Send
+                </Button>
+              )}
+            </Box>
           </Box>
         </Box>
         <Box sx={{ display: 'grid', gap: 2 }}>
           <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1 }}>
-            <Typography sx={{ fontWeight: 600 }}>What it sees</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {profile.intro}
+            <Typography variant="overline" color="text.secondary">
+              What it sees
             </Typography>
-            {project && <Chip size="small" color="primary" variant="outlined" label={`project ${project}`} />}
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+              {state.system && <Chip size="small" label={state.system} />}
+              {project && <Chip size="small" label={`project ${project}`} />}
+              <Chip size="small" label="read-only" />
+            </Box>
+            {profile.role && (
+              <Typography variant="body2" color="text.secondary">
+                Reads {profile.role.reads}. Never {profile.role.never}.
+              </Typography>
+            )}
             <TextField
               select
               size="small"
@@ -657,7 +773,6 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                 const system = e.target.value || undefined;
                 setState(({ system: _, ...rest }) => (system ? { ...rest, system } : rest));
               }}
-              helperText="Its tokens go to this system in Costs; without one, to what it looks at."
             >
               <MenuItem value={FROM_TOOLS}>What it looks at</MenuItem>
               {[...new Set([...systems, ...(state.system ? [state.system] : [])])].sort().map(x => (
@@ -667,8 +782,35 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
               ))}
             </TextField>
           </Box>
-          <Box sx={{ ...card, p: 1.5 }}>
-            <Typography variant="body2" color="text.secondary">
+          <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 0.75 }}>
+            <Typography variant="overline" color="text.secondary">
+              Artefacts of this conversation
+            </Typography>
+            {byTool.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                Nothing looked at yet.
+              </Typography>
+            ) : (
+              byTool.map(([name, n]) => (
+                <Box key={name} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, fontSize: 13.5 }}>
+                  <Box component="code" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {name}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    ×{n}
+                  </Typography>
+                </Box>
+              ))
+            )}
+          </Box>
+          <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 0.75 }}>
+            <Typography variant="overline" color="text.secondary">
+              This conversation
+            </Typography>
+            <Typography variant="body2">
+              {state.exchanges.length} questions · {(usage / 1000).toFixed(1)} k tokens
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
               It proposes; you act. Check what it says before acting on it.
             </Typography>
           </Box>

@@ -7,6 +7,7 @@ import { AssistantPage, type AssistantProfile } from './AssistantPage';
  * apart from the operations assistant. Opened from an entity with ?project=<name>.
  */
 export const SEC: AssistantProfile = {
+  role: { does: 'Vulnerabilities, exposure and the risk of a system as it runs', reads: 'SBOMs, Wazuh, policies, specs', writes: 'risk assessments, exceptions to approve', never: 'accepts a risk itself' },
   path: '/sec',
   store: 'sec-assistant-conversation',
   title: 'Security assistant',

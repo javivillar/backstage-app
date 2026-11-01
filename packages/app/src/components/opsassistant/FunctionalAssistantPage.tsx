@@ -7,6 +7,7 @@ import { AssistantPage, type AssistantProfile } from './AssistantPage';
  * are the MCP server functionalassistant-oneke: it reads everything, and writes only specifications.
  */
 export const FUNCTIONAL: AssistantProfile = {
+  role: { does: 'Writes the specification of a system from the business need', reads: 'the need, the platform blocks', writes: 'OpenSpec: requirements and scenarios', never: 'designs or writes code' },
   path: '/functional',
   store: 'functional-assistant-conversation',
   title: 'Functional assistant',
