@@ -35,7 +35,15 @@ function useEntities(filter: Record<string, string | symbol | (string | symbol)[
   return state;
 }
 
-const shortRef = (ref?: string) => (ref ? parseEntityRef(ref).name : '');
+/** the name of a reference; an owner may be written without its kind (platform-team), which parseEntityRef refuses */
+const shortRef = (ref?: string) => {
+  if (!ref) return '';
+  try {
+    return parseEntityRef(ref, { defaultKind: 'group', defaultNamespace: 'default' }).name;
+  } catch {
+    return ref;
+  }
+};
 const titleOf = (e: Entity) => e.metadata.title ?? e.metadata.name;
 
 /** Page frame of the portal lists: title, one line of what it is, a search box and filter buttons. */

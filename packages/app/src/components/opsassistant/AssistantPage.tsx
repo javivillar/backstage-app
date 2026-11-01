@@ -116,6 +116,44 @@ const describe = (t: ToolCall) => {
 export type AssistantLink = { title: string; to: string; current: boolean; colour?: string; icon?: ReactNode; path?: string };
 type OtherSummary = Summary & { assistant: AssistantLink };
 
+/** console look: plain elements, since the global CSS of the classic portal restyles every MUI Button and Chip */
+const BLUE = '#0060C0';
+const btnSx = (kind: 'primary' | 'outline' | 'ghost' | 'pill' | 'dashed', on = false) =>
+  ({
+    all: 'unset',
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0.75,
+    fontSize: kind === 'pill' || kind === 'dashed' ? 12.5 : 14,
+    fontWeight: 500,
+    lineHeight: 1.3,
+    borderRadius: kind === 'pill' || kind === 'dashed' ? 999 : '8px',
+    px: kind === 'pill' || kind === 'dashed' ? 1.25 : 1.75,
+    py: kind === 'pill' || kind === 'dashed' ? 0.35 : 0.9,
+    border: '1px solid',
+    borderStyle: kind === 'dashed' ? 'dashed' : 'solid',
+    borderColor: (() => {
+      if (kind === 'pill' && on) return 'text.primary';
+      return kind === 'primary' || on ? BLUE : 'divider';
+    })(),
+    bgcolor: (() => {
+      if (kind === 'primary') return BLUE;
+      if (kind === 'pill' && on) return 'text.primary';
+      return 'transparent';
+    })(),
+    color: (() => {
+      if (kind === 'primary') return '#fff';
+      if (kind === 'pill' && on) return 'background.paper';
+      return 'text.primary';
+    })(),
+    '&:hover': { bgcolor: kind === 'primary' ? '#004F9E' : 'action.hover', ...(kind === 'pill' && on ? { bgcolor: 'text.primary' } : {}) },
+    '&:focus-visible': { outline: `2px solid ${BLUE}`, outlineOffset: 2 },
+    '&:disabled, &[aria-disabled="true"]': { opacity: 0.45, cursor: 'default' },
+  }) as const;
+
 export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { profile: AssistantProfile; variant?: 'classic' | 'console'; others?: AssistantLink[] }) => {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
@@ -583,12 +621,14 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
     return (
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '270px minmax(0, 1fr) 290px' }, alignItems: 'start' }}>
         <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1.25 }}>
-          <Button variant="contained" disabled={busy || !state.exchanges.length} onClick={reset} sx={{ textTransform: 'none' }}>
-            New conversation
-          </Button>
+          <Box component="button" type="button" disabled={busy || !state.exchanges.length} onClick={reset} sx={{ ...btnSx('primary'), width: '100%' }}>
+            + New conversation
+          </Box>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
             {[{ title: 'All', to: 'all' } as AssistantLink, ...others].map(o => (
-              <Chip key={o.to} size="small" label={o.title} onClick={() => setFilter(o.to)} color={filter === o.to ? 'primary' : 'default'} variant={filter === o.to ? 'filled' : 'outlined'} />
+              <Box key={o.to} component="button" type="button" aria-pressed={filter === o.to} onClick={() => setFilter(o.to)} sx={btnSx('pill', filter === o.to)}>
+                {o.title}
+              </Box>
             ))}
           </Box>
           <Typography variant="caption" color={keepError ? 'warning.main' : 'text.secondary'}>
@@ -612,7 +652,7 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                   <ListItemButton
                     selected={mine && c.id === state.id}
                     disabled={busy}
-                    sx={{ borderRadius: '10px', gap: 1 }}
+                    sx={{ borderRadius: '10px', gap: 1, border: '1px solid transparent', '&.Mui-selected': { bgcolor: 'rgba(0,96,192,0.08)', borderColor: BLUE }, '&.Mui-selected:hover': { bgcolor: 'rgba(0,96,192,0.12)' } }}
                     {...(mine ? { onClick: () => c.id !== state.id && open(c.id).catch(e => setKeepError((e as Error).message)) } : { component: 'a', href: `${c.assistant!.to}?conversation=${c.id}` })}
                   >
                     <Avatar o={c.assistant} size={28} />
@@ -633,8 +673,16 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
               </Typography>
             </Box>
             <Box sx={{ flex: 1 }} />
-            {state.system && <Chip size="small" color="primary" variant="outlined" label={`about ${state.system}`} />}
-            {info?.model && <Chip size="small" label={info.model} />}
+            {state.system && (
+              <Box component="span" sx={{ fontSize: 12.5, fontWeight: 500, borderRadius: 999, px: 1.25, py: 0.25, bgcolor: 'rgba(0,96,192,0.10)', color: BLUE }}>
+                about {state.system}
+              </Box>
+            )}
+            {info?.model && (
+              <Typography variant="caption" color="text.secondary" title={info.model} sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {info.model.replace(/\s*\(.*\)$/, '')}
+              </Typography>
+            )}
           </Box>
           <Box sx={{ p: 2, display: 'grid', gap: 2, alignContent: 'start', minWidth: 0 }}>
             {status}
@@ -643,7 +691,9 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                 <Typography color="text.secondary">{profile.intro}</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   {(about?.examples ?? profile.examples).map(e => (
-                    <Chip key={e} label={e} onClick={() => ask(e)} variant="outlined" sx={{ borderStyle: 'dashed' }} />
+                    <Box key={e} component="button" type="button" onClick={() => ask(e)} sx={{ ...btnSx('dashed'), fontSize: 13.5, py: 0.6, textAlign: 'left' }}>
+                      {e}
+                    </Box>
                   ))}
                 </Box>
               </>
@@ -652,7 +702,7 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
               const calls = x.toolCalls ?? (pending(x) ? progress?.toolCalls : undefined) ?? [];
               return (
                 <Box key={i} sx={{ display: 'grid', gap: 1.25 }}>
-                  <Box sx={{ justifySelf: 'end', maxWidth: '75%', bgcolor: colour, color: '#fff', px: 1.75, py: 1.1, borderRadius: '14px 14px 4px 14px' }}>
+                  <Box sx={{ justifySelf: 'end', maxWidth: '72%', bgcolor: BLUE, color: '#fff', px: 1.75, py: 1.1, borderRadius: '14px 14px 4px 14px' }}>
                     <Typography sx={{ whiteSpace: 'pre-wrap' }}>{x.question}</Typography>
                   </Box>
                   {calls.length > 0 && (
@@ -673,7 +723,11 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                       </Typography>
                     </Box>
                   )}
-                  {x.error && <WarningPanel severity="error" title="No answer" message={x.error} />}
+                  {x.error && (
+                    <Box role="alert" sx={{ borderLeft: '4px solid #B3261E', bgcolor: 'rgba(179,38,30,0.07)', borderRadius: '0 10px 10px 0', px: 1.5, py: 1, fontSize: 14, maxWidth: '86ch' }}>
+                      <b>No answer.</b> {x.error}
+                    </Box>
+                  )}
                   {x.answer && (
                     <Box sx={{ display: 'grid', gap: 1, maxWidth: '86ch' }}>
                       <Box sx={{ borderLeft: 4, borderColor: colour, pl: 1.75 }}>
@@ -687,13 +741,16 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                           {others
                             .filter(o => !o.current)
                             .map(o => (
-                              <Button key={o.to} size="small" variant="outlined" href={handOver(o)} sx={{ textTransform: 'none' }}>
+                              <Box key={o.to} component="a" href={handOver(o)} sx={{ ...btnSx('outline'), fontSize: 13, py: 0.5, px: 1.25, bgcolor: 'background.paper' }}>
+                                <Box component="span" sx={{ width: 16, height: 16, borderRadius: '5px', bgcolor: o.colour ?? BLUE, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11 }}>
+                                  {o.icon}
+                                </Box>
                                 Hand over to {o.title}
-                              </Button>
+                              </Box>
                             ))}
-                          <Button size="small" href="/console/app/support" sx={{ textTransform: 'none' }}>
+                          <Box component="a" href="/console/app/support" sx={{ ...btnSx('ghost'), fontSize: 13, py: 0.5, px: 1.25, border: 0, color: BLUE }}>
                             Open an incident
-                          </Button>
+                          </Box>
                         </Box>
                       )}
                       <Typography variant="caption" color="text.secondary">
@@ -713,7 +770,9 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
             {state.exchanges.length > 0 && !status && (
               <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
                 {(about?.examples ?? profile.examples).slice(0, 3).map(e => (
-                  <Chip key={e} size="small" label={e} onClick={() => ask(e)} variant="outlined" sx={{ borderStyle: 'dashed' }} />
+                  <Box key={e} component="button" type="button" onClick={() => ask(e)} sx={btnSx('dashed')}>
+                    {e}
+                  </Box>
                 ))}
               </Box>
             )}
@@ -737,13 +796,13 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
                 inputProps={{ 'aria-label': 'Question' }}
               />
               {busy ? (
-                <Button color="warning" variant="outlined" onClick={cancel} sx={{ textTransform: 'none' }}>
+                <Box component="button" type="button" onClick={cancel} sx={btnSx('outline')}>
                   Cancel
-                </Button>
+                </Box>
               ) : (
-                <Button variant="contained" disabled={!question.trim() || !!status} onClick={() => ask(question)} sx={{ textTransform: 'none' }}>
+                <Box component="button" type="button" disabled={!question.trim() || !!status} onClick={() => ask(question)} sx={btnSx('primary')}>
                   Send
-                </Button>
+                </Box>
               )}
             </Box>
           </Box>
@@ -754,9 +813,11 @@ export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { p
               What it sees
             </Typography>
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-              {state.system && <Chip size="small" label={state.system} />}
-              {project && <Chip size="small" label={`project ${project}`} />}
-              <Chip size="small" label="read-only" />
+              {[state.system, project && `project ${project}`, 'read-only'].filter(Boolean).map(t => (
+                <Box key={String(t)} component="span" sx={{ fontSize: 12, fontWeight: 500, borderRadius: 999, px: 1.1, py: 0.2, bgcolor: 'action.hover', color: 'text.secondary' }}>
+                  {t}
+                </Box>
+              ))}
             </Box>
             {profile.role && (
               <Typography variant="body2" color="text.secondary">
