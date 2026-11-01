@@ -25,9 +25,10 @@ import { ManageHubPage, ManageServicePage } from './ManagePages';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { PortalHome } from './PortalHome';
+import { PortalApisPage, PortalDocsPage, PortalQualityPage } from './PortalIndexes';
 
 /** Pages of the classic list (App) that the console has its own version of. */
-const NATIVE = new Set(['cis-nodes', 'images']);
+const NATIVE = new Set(['cis-nodes', 'images', 'docs', 'apis', 'quality']);
 
 const Message = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <Box sx={{ maxWidth: 560, mx: 'auto', mt: 12, px: 2, display: 'grid', gap: 1.5 }}>
@@ -73,6 +74,9 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} />} />
         {/* pages the console draws itself; their classic version stays at its classic path */}
         <Route path="/cis-nodes" element={<CisNodesPage />} />
+        <Route path="/docs" element={<PortalDocsPage />} />
+        <Route path="/apis" element={<PortalApisPage />} />
+        <Route path="/quality" element={<PortalQualityPage />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         {pages.filter(p => !NATIVE.has(p.id)).map(p => (
           <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage page={p} />} />

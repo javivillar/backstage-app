@@ -160,18 +160,23 @@ export function describePrices(p: Pricing) {
   return parts.join(' · ');
 }
 
-/** the cost of every namespace in the last 7 days and in the last 24 hours */
+/**
+ * The cost of every namespace in the last 24 hours and in the last 7 days. OpenCost takes seconds for a day and tens of
+ * seconds for a week, so loading ends with the day and the week comes after (weekLoading).
+ */
 export function useAllocations() {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [state, setState] = useState<{
     loading: boolean;
+    weekLoading: boolean;
     week?: Map<string, Allocation>;
     day?: Map<string, Allocation>;
     error?: Error;
-  }>({ loading: true });
+  }>({ loading: true, weekLoading: true });
   useEffect(() => {
     let cancelled = false;
+    const update = (v: Partial<typeof state>) => !cancelled && setState(s => ({ ...s, ...v }));
     (async () => {
       const base = `${await discovery.getBaseUrl('proxy')}/opencost/allocation/compute`;
       const get = async (window: string) => {
@@ -179,12 +184,17 @@ export function useAllocations() {
         if (!res.ok) throw new Error(`OpenCost answered ${res.status} ${res.statusText}`);
         return parseAllocations(await res.json());
       };
-      const [week, day] = await Promise.all([get('7d'), get('24h')]);
-      return { week, day };
-    })().then(
-      v => !cancelled && setState({ loading: false, ...v }),
-      error => !cancelled && setState({ loading: false, error }),
-    );
+      const week = get('7d').then(
+        w => update({ week: w, weekLoading: false }),
+        () => update({ weekLoading: false }),
+      );
+      try {
+        update({ day: await get('24h'), loading: false });
+      } catch (error) {
+        update({ loading: false, error: error as Error });
+      }
+      await week;
+    })();
     return () => {
       cancelled = true;
     };
