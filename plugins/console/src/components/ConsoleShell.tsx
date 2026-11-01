@@ -15,6 +15,8 @@ import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from 
 import { type Layer, LAYER_HOME, LAYER_LOOK, layerOf } from '../layers';
 import { rq } from './tokens';
 import { NAV_ICONS } from '../navIcons';
+import { usePortalLinks } from '../portalApps';
+import LaunchIcon from '@mui/icons-material/Launch';
 import { Badge } from './Badge';
 import { QuickFind } from './QuickFind';
 
@@ -40,7 +42,7 @@ export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] 
   return '/home';
 }
 
-type NavItem = { label: string; to: string; hint?: string };
+type NavItem = { label: string; to: string; hint?: string; external?: boolean };
 
 const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => (
   <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: 0.25, mb: 2 }}>
@@ -52,11 +54,12 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
         current === i.to ||
         (!['/console', '/console/infrastructure', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
-      const Icon = NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')];
+      const Icon = i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')];
       const link = (
         <Link
           key={i.to}
           to={i.to}
+          {...(i.external ? { target: '_blank', rel: 'noreferrer' } : {})}
           underline="none"
           aria-current={on ? 'page' : undefined}
           style={{
@@ -129,6 +132,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   const current = pathname.replace(/\/+$/, '') || '/console';
   const own = cfg.cluster;
   const pages = useConsolePages();
+  const portalLinks = usePortalLinks();
   const layer = layerOf(current, pages);
   const look = LAYER_LOOK[layer];
   const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: p.title, to: `/console/${p.id}`, hint: p.product }));
@@ -169,6 +173,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({ title: 'Its portal', items: [{ label: 'Open the portal', to: '/console' }] });
   } else {
     groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
+    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: l.url, hint: l.hint, external: true })) });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
     if (navOf('managers').length)
       groups.push({

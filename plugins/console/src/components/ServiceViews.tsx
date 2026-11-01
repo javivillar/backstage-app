@@ -587,38 +587,85 @@ const weekMessage = (s?: { loading: boolean; error?: string }) => {
   return 'OpenCost has no cost for its namespace yet.';
 };
 
-export const ServiceCosts = ({ extra }: { extra?: ReactNode }) => {
+/** What the app adds to the costs of a service: deployments and AI assistants of the month, with our prices. */
+export type CostsExtra = {
+  currency?: string;
+  deployments?: { count: number; cost?: number };
+  ai?: { tokens: number; cost?: number; rows: Array<{ assistant: string; user?: string; questions: number; tokens: number; cost?: number }> };
+};
+
+const COST_COLOURS = { CPU: '#1A8DFF', Memory: '#7B61FF', Disk: '#00A3A3' } as const;
+
+/** The costs of a service: the week of OpenCost day by day, deployments and AI assistants of the month, savings. */
+export const ServiceCosts = ({ extra, costs }: { extra?: ReactNode; costs?: CostsExtra }) => {
   const d = useService();
   if (!d) return null;
   const w = d.week;
-  const parts: Array<[string, number, string]> = w ? [['CPU', w.cpu, rq.primary], ['Memory', w.ram, '#1A8DFF'], ['Disk', w.disk, '#7FB2E5']] : [];
-  const max = Math.max(...parts.map(p => p[1]), 0.0001);
   // reserved and not used is paid all the same: the pods whose memory request is far above what they use
   const idle = (d.live?.pods ?? []).filter(p => p.memory !== undefined && p.memoryRequest && p.memory < p.memoryRequest * 0.4 && p.memoryRequest - p.memory > 64 * 2 ** 20);
+  const parts: Array<[keyof typeof COST_COLOURS, number]> = w ? [['CPU', w.cpu], ['Memory', w.ram], ['Disk', w.disk]] : [];
+  const sum = parts.reduce((t, [, v]) => t + v, 0) || 1;
+  const dayMax = Math.max(...(w?.days ?? [0]), 0.0001);
+  const forecast = w ? (w.total / 7) * 30 + (costs?.deployments?.cost ?? 0) + (costs?.ai?.cost ?? 0) : undefined;
+  const kpi = (label: string, value: string, sub?: string) => (
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.5, bgcolor: 'background.paper' }}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+      {sub && (
+        <Typography variant="caption" color="text.secondary">
+          {sub}
+        </Typography>
+      )}
+    </Box>
+  );
+  const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100_000 ? 0 : 1)} k` : String(Math.round(n)));
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
-      <Section title={w ? `Where the ${d.money(w.total)} of the week go` : 'Cost of the week'} sub="OpenCost, our prices: an estimate, not a bill">
-        {w ? (
-          <>
-            {parts.map(([label, v, color]) => (
-              <Box key={label} sx={{ display: 'grid', gridTemplateColumns: '90px 1fr 80px', gap: 1.25, alignItems: 'center' }}>
-                <span>{label}</span>
-                <Box sx={{ height: 10, borderRadius: 5, bgcolor: 'action.hover', overflow: 'hidden' }}>
-                  <Box sx={{ height: '100%', width: `${(v / max) * 100}%`, bgcolor: color }} />
-                </Box>
-                <Typography sx={{ textAlign: 'right', fontWeight: 600 }}>{d.money(v)}</Typography>
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))' }}>
+        {kpi('Running, last 7 days', w ? d.money(w.total) : '—', 'CPU, memory and storage (OpenCost)')}
+        {kpi('Deployments this month', costs?.deployments?.cost !== undefined ? d.money(costs.deployments.cost) : '—', costs?.deployments ? `${costs.deployments.count} new versions` : 'not counted')}
+        {kpi('AI assistants this month', costs?.ai?.cost !== undefined ? d.money(costs.ai.cost) : '—', costs?.ai ? `${k(costs.ai.tokens)} tokens` : 'no question about it')}
+        {kpi('This month (forecast)', forecast !== undefined ? d.money(forecast) : '—', 'at this pace, our prices')}
+      </Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(380px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
+        <Section title="Day by day" sub="Last 7 days of OpenCost, split as the week: an estimate, not a bill">
+          {w && w.days.length > 1 ? (
+            <>
+              <Box aria-label="Cost per day" sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-end', height: 130 }}>
+                {w.days.map((v, i) => (
+                  <Box key={i} title={d.money(v)} sx={{ flex: 1, minWidth: 14, height: `${(v / dayMax) * 100}%`, display: 'flex', flexDirection: 'column-reverse', borderRadius: '4px 4px 0 0', overflow: 'hidden' }}>
+                    {parts.map(([label, part]) => (
+                      <Box key={label} sx={{ height: `${(part / sum) * 100}%`, bgcolor: COST_COLOURS[label] }} />
+                    ))}
+                  </Box>
+                ))}
               </Box>
-            ))}
-            {w.days.length > 1 && <DayBars days={w.days} />}
-            <Typography variant="body2" color="text.secondary">
-              Deployments, incidents and assistants are added in <Link to="/console/costs">Costs</Link>.
-            </Typography>
-          </>
-        ) : (
-          <Typography color="text.secondary">{weekMessage(d.weekState)}</Typography>
-        )}
-      </Section>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                {parts.map(([label, v]) => (
+                  <Typography key={label} variant="caption" color="text.secondary" sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'center' }}>
+                    <Box component="span" sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: COST_COLOURS[label] }} />
+                    {label} {d.money(v)}
+                  </Typography>
+                ))}
+              </Box>
+            </>
+          ) : (
+            <Typography color="text.secondary">{w ? 'One day of data so far.' : weekMessage(d.weekState)}</Typography>
+          )}
+        </Section>
+        <Section title="AI assistants" sub="Tokens of the questions asked about it this month, charged to it">
+          {costs?.ai?.rows.length ? (
+            <Table
+              head={['Assistant', 'Who asked', 'Questions', 'Tokens', 'Cost']}
+              rows={costs.ai.rows.map(r => [r.assistant, r.user?.split('/').pop() ?? 'others', String(Math.round(r.questions)), k(r.tokens), r.cost !== undefined ? d.money(r.cost) : '—'])}
+            />
+          ) : (
+            <Typography color="text.secondary">No assistant was asked about it this month.</Typography>
+          )}
+        </Section>
+      </Box>
       <Section title="Could cost less">
         {idle.length ? (
           idle.map(p => (
@@ -630,9 +677,7 @@ export const ServiceCosts = ({ extra }: { extra?: ReactNode }) => {
           <Typography color="text.secondary">Its pods use most of what they reserve: nothing to change.</Typography>
         )}
       </Section>
-    </Box>
-    {/* what the AI assistants cost when asked about it (tokens charged to it), from the app */}
-    {extra && <Box sx={{ minWidth: 0 }}>{extra}</Box>}
+      {extra && <Box sx={{ minWidth: 0 }}>{extra}</Box>}
     </Box>
   );
 };

@@ -5,6 +5,7 @@ export type { ConsoleClassicPage } from './pages';
 export { EntityNetworkContent, EntityUserJourneyContent } from './components/EntityNetwork';
 export { EntityLiveContent } from './components/EntityLive';
 export { ServiceChanges, ServiceCosts, ServiceOverview, ServiceSecurity } from './components/ServiceViews';
+export type { CostsExtra } from './components/ServiceViews';
 export { ConsoleEntityLayout } from './components/ConsoleEntityLayout';
 export { EntityDependenciesContent } from './components/EntityDependencies';
 export { EntityApiContent, EntityCicdContent } from './components/EntityBuild';
