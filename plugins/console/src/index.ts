@@ -1,3 +1,3 @@
 export { consolePlugin, ConsolePage } from './plugin';
 export { ConsoleSidebarItem } from './components/ConsoleSidebarItem';
-export { isConsolePath } from './paths';
+export { catalogPathForConsole, consolePathForCatalog, isConsolePath } from './paths';

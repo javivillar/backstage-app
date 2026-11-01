@@ -1,9 +1,9 @@
 import { Link } from '@backstage/core-components';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useConsoleConfig } from '../config';
+import { Badge } from './Badge';
 
 /** Every cluster this portal knows: this one and the ones of console.clusters (their console opens in a frame). */
 export const ClustersPage = () => {
@@ -27,8 +27,8 @@ export const ClustersPage = () => {
             <Link to={r.own ? '/console' : `/console/clusters/${encodeURIComponent(r.id)}`} style={{ fontWeight: 600 }}>
               {r.id}
             </Link>
-            <Chip size="small" variant="outlined" label={r.kind === 'zone' ? 'zone cluster' : 'programme cluster'} />
-            {r.own && <Chip size="small" label="this cluster" />}
+            <Badge outlined label={r.kind === 'zone' ? 'zone cluster' : 'programme cluster'} />
+            {r.own && <Badge label="this cluster" />}
             <Box sx={{ flex: 1 }} />
             {!r.own && (
               <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>

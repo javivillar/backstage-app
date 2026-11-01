@@ -1,7 +1,6 @@
 import { Link } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import ListSubheader from '@mui/material/ListSubheader';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -11,7 +10,9 @@ import OpenInNew from '@mui/icons-material/OpenInNew';
 import { type PropsWithChildren, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
+import { catalogPathForConsole } from '../paths';
 import { rq } from './tokens';
+import { Badge } from './Badge';
 
 const EMBED_KEY = 'rq-console-embedded';
 
@@ -28,6 +29,8 @@ export function useEmbedded(search: string): boolean {
 
 /** The classic page that shows the same thing as a page of the console. */
 export function classicPathFor(consolePath: string): string {
+  const entity = catalogPathForConsole(consolePath);
+  if (entity) return entity;
   if (consolePath.startsWith('/console/cluster') && !consolePath.startsWith('/console/clusters')) return '/topology';
   if (consolePath.startsWith('/console/infrastructure')) return '/topology';
   return '/home';
@@ -41,7 +44,7 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
       {title}
     </Typography>
     {items.map(i => {
-      const on = current === i.to;
+      const on = current === i.to || (i.to === '/console' && current.startsWith('/console/entity/'));
       return (
         <Link
           key={i.to}
@@ -95,8 +98,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
             onClick={e => setMenu(e.currentTarget)}
             endIcon={<ExpandMore />}
             aria-haspopup="menu"
-            sx={{ color: '#fff', borderColor: 'rgba(255,255,255,0.4)', textTransform: 'none' }}
-            variant="outlined"
+            sx={{ color: '#fff', border: '1px solid rgba(255,255,255,0.4)', textTransform: 'none', px: 1.5 }}
+            variant="text"
             size="small"
           >
             {own.id} · {own.kind}
@@ -113,7 +116,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
               </MenuItem>
             ))}
           </Menu>
-          <Chip size="small" label="beta" sx={{ bgcolor: rq.accent, color: '#14202E', fontWeight: 600 }} />
+          <Badge label="beta" bg={rq.accent} fg="#14202E" />
           <Box sx={{ flex: 1 }} />
           <Button
             href={classicUrl(cfg, classicPathFor(current))}
