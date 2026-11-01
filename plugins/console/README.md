@@ -33,6 +33,16 @@ the Prometheus of the cluster (`costs.prometheusUrl`, the same one the costs use
 permissions: nodes (kube-state-metrics + node-exporter), Argo CD applications (`argocd_app_info`) and volumes per
 namespace (kube-state-metrics + kubelet). Backups are not published as metrics yet.
 
+## Network
+
+`/console/network` (Cluster menu) and the **User journey** and **Network** tabs of a component that says its namespace
+(`refresquito.io/namespace`) read `GET /api/cluster/network`: namespaces and their segment, Ingress hosts,
+NetworkPolicies, Calico GlobalNetworkPolicies (the segments) and running pods. The backend reads them with the service
+account of Backstage (read-only ClusterRole of cnoe-oneke 0.2.74); what it cannot read is listed as a warning.
+They are drawn as flows (`components/Flow.tsx`): nodes coloured by state, dashed when blocked or outside the cluster
+(the host, zone router and VNF are seen from the zone console). The two tabs exist only in the console:
+App passes `consoleEntityPage` (entityPage plus those tabs); the classic portal keeps `entityPage`.
+
 ## Classic pages in the console
 
 The app also passes the classic pages the console shows in its menus (create, APIs, dependencies, docs, quality,

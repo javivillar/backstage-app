@@ -1,6 +1,9 @@
 import { Entity } from '@backstage/catalog-model';
-import { cloneElement, type CSSProperties, type ReactElement } from 'react';
+import { cloneElement, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import Dashboard from '@mui/icons-material/Dashboard';
+import Lan from '@mui/icons-material/Lan';
+import RouteIcon from '@mui/icons-material/Route';
+import { EntityNetworkContent, EntityUserJourneyContent } from '@internal/plugin-console';
 import RocketLaunch from '@mui/icons-material/RocketLaunch';
 import Cloud from '@mui/icons-material/Cloud';
 import AccountTree from '@mui/icons-material/AccountTree';
@@ -401,7 +404,7 @@ const qualityContent = (
   </div>
 );
 
-const serviceEntityPage = (
+const serviceEntityPageWith = (extra?: ReactNode) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overviewContent}
@@ -479,10 +482,11 @@ const serviceEntityPage = (
     <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
       <EntitySupportContent />
     </EntityLayout.Route>
+    {extra}
   </EntityLayout>
 );
 
-const websiteEntityPage = (
+const websiteEntityPageWith = (extra?: ReactNode) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overviewContent}
@@ -536,6 +540,7 @@ const websiteEntityPage = (
     >
       <EntityDatahubContent />
     </EntityLayout.Route>
+    {extra}
   </EntityLayout>
 );
 
@@ -579,7 +584,7 @@ const resourceGroupPage = (
   </EntityLayout>
 );
 
-const defaultEntityPage = (
+const defaultEntityPageWith = (extra?: ReactNode) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overviewContent}
@@ -609,18 +614,20 @@ const defaultEntityPage = (
     <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
       <EntitySupportContent />
     </EntityLayout.Route>
+    {extra}
   </EntityLayout>
 );
+const defaultEntityPage = defaultEntityPageWith();
 
-const componentPage = (
+const componentPageWith = (extra?: ReactNode) => (
   <EntitySwitch>
     <EntitySwitch.Case if={isComponentType('service')}>
-      {serviceEntityPage}
+      {serviceEntityPageWith(extra)}
     </EntitySwitch.Case>
     <EntitySwitch.Case if={isComponentType('website')}>
-      {websiteEntityPage}
+      {websiteEntityPageWith(extra)}
     </EntitySwitch.Case>
-    <EntitySwitch.Case>{defaultEntityPage}</EntitySwitch.Case>
+    <EntitySwitch.Case>{defaultEntityPageWith(extra)}</EntitySwitch.Case>
   </EntitySwitch>
 );
 
@@ -762,9 +769,9 @@ const domainPage = (
   </EntityLayout>
 );
 
-export const entityPage = (
+const entityPageWith = (componentExtra?: ReactNode) => (
   <EntitySwitch>
-    <EntitySwitch.Case if={isKind('component')} children={componentPage} />
+    <EntitySwitch.Case if={isKind('component')} children={componentPageWith(componentExtra)} />
     <EntitySwitch.Case if={isKind('api')} children={apiPage} />
     <EntitySwitch.Case if={isKind('group')} children={groupPage} />
     <EntitySwitch.Case if={isKind('user')} children={userPage} />
@@ -776,4 +783,21 @@ export const entityPage = (
     />
     <EntitySwitch.Case>{defaultEntityPage}</EntitySwitch.Case>
   </EntitySwitch>
+);
+
+export const entityPage = entityPageWith();
+
+/**
+ * The entity page inside the console (/console/entity/...): the same tabs, plus the live User journey and Network of a
+ * component that says its namespace. The classic portal keeps entityPage as it is.
+ */
+export const consoleEntityPage = entityPageWith(
+  <>
+    <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
+      <EntityUserJourneyContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/network" title={tabLabel(<Lan />, 'Network')} if={hasNamespace}>
+      <EntityNetworkContent />
+    </EntityLayout.Route>
+  </>,
 );

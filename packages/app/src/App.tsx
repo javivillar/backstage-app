@@ -24,7 +24,7 @@ import { TechDocsAddons } from '@backstage/plugin-techdocs-react';
 import { ReportIssue } from '@backstage/plugin-techdocs-module-addons-contrib';
 import { UserSettingsPage } from '@backstage/plugin-user-settings';
 import { apis } from './apis';
-import { entityPage } from './components/catalog/EntityPage';
+import { consoleEntityPage, entityPage } from './components/catalog/EntityPage';
 import { searchPage } from './components/search/SearchPage';
 import { Root } from './components/Root';
 import {
@@ -202,7 +202,7 @@ const routes = (
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={catalogGraphPage} />
     {/* the cloud-style console: off unless console.enabled (plugins/console); the classic pages above do not change */}
-    <Route path="/console/*" element={<ConsolePage entityContent={entityPage} pages={consolePages} />} />
+    <Route path="/console/*" element={<ConsolePage entityContent={consoleEntityPage} pages={consolePages} />} />
   </FlatRoutes>
 );
 
