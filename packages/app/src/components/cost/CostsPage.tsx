@@ -8,6 +8,7 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { NAMESPACE_ANNOTATION } from '../catalog/usePrometheus';
 import {
@@ -94,7 +95,7 @@ const Figure = ({ label, value, note }: { label: string; value: string; note?: s
  * Page /costs: what each namespace of the cluster costs (OpenCost, through the proxy /opencost), with its entity of the
  * catalog and its system, and the capacity of the nodes nobody reserved. Our prices, not a bill.
  */
-export const CostsPage = () => {
+export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'console' }) => {
   const pricing = usePricing();
   const { loading, weekLoading, error, week, day } = useAllocations();
   const deployments = useDeployments();
@@ -220,6 +221,167 @@ export const CostsPage = () => {
     if (assistantTotal) assistantValue = assistantCost !== undefined ? money(assistantCost, c) : `${tokens(assistantTotal.tokens)} tokens`;
     const since = deployments.value?.trackedSince;
     const sinceThisMonth = since && since.slice(0, 7) === deployments.value?.month;
+    const perMonthTotal = monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost);
+    if (variant === 'console') {
+      const maxSys = Math.max(1, ...systems.map(([, x]) => x.week || x.day * 7));
+      const maxNs = Math.max(1, ...rows.map(r => r.week?.total ?? (r.day?.total ?? 0) * 7));
+      const tiles: Array<[string, string, string]> = [
+        ['Last 7 days', wk(totalWeek), `${rows.length} namespaces`],
+        ['Per month', money(perMonthTotal, c), 'at the pace of the last 24 hours, plus this month'],
+        ['Deployments', deployments.value ? String(deployCount) : '—', sinceThisMonth ? `${deployNote}; since ${new Date(since!).toLocaleDateString('es-ES')}` : deployNote],
+        ['Incidents', incidents.value ? String(incidentCount(allIncidents)) : '—', incidentNote],
+        ['Assistants', assistantValue, assistantNote],
+        ['Capacity nobody reserved', wk(idleWeek), 'last 7 days: nodes paid, not requested'],
+      ];
+      const meter = (v?: number) => {
+        if (v === undefined) return <Box component="span" sx={{ color: 'text.secondary' }}>—</Box>;
+        let col = '#1E6B34';
+        if (v < 30) col = '#B95000';
+        else if (v > 95) col = '#B3261E';
+        return (
+          <Box sx={{ display: 'grid', gap: 0.4, minWidth: 80 }} title={v < 30 ? 'reserves much more than it uses' : undefined}>
+            <Box sx={{ height: 5, borderRadius: 999, bgcolor: 'action.hover', overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${Math.min(100, v)}%`, bgcolor: col }} />
+            </Box>
+            <Box component="small" sx={{ fontSize: 11.5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+              {pct(v)} of reserved
+            </Box>
+          </Box>
+        );
+      };
+      const cardSx = { border: 1, borderColor: 'divider', borderRadius: '14px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.5, minWidth: 0 } as const;
+      const th = { textAlign: 'left', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'text.secondary', p: 1, borderBottom: 1, borderColor: 'divider', whiteSpace: 'nowrap' } as const;
+      const td = { p: 1, borderBottom: 1, borderColor: 'divider', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' } as const;
+      const entityPath = (e: Entity) => `/console/entity/${e.metadata.namespace ?? 'default'}/${e.kind.toLowerCase()}/${e.metadata.name}`;
+      body = (
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))' }}>
+            {tiles.map(([label, value, note], i) => (
+              <Box key={label} sx={{ ...cardSx, gap: 0.5, alignContent: 'start', ...(i === 1 ? { borderColor: '#0060C0', boxShadow: 'inset 0 0 0 1px #0060C0' } : {}) }}>
+                <Typography variant="caption" color="text.secondary">
+                  {label}
+                </Typography>
+                <Box sx={{ fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</Box>
+                <Typography variant="caption" color="text.secondary">
+                  {note}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.4fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
+            <Box component="section" aria-label="By system" sx={cardSx}>
+              <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 16 }}>
+                By system
+              </Typography>
+              {systems.map(([name, x]) => (
+                <Box key={name} sx={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 30%) minmax(0, 1fr) auto', gap: 1.25, alignItems: 'center', fontSize: 13.5 }}>
+                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {name === '(no system)' ? (
+                      <Box component="span" sx={{ color: 'text.secondary' }}>
+                        no system
+                      </Box>
+                    ) : (
+                      <Box component="a" href={`/console/entity/default/system/${name}`} sx={{ color: '#0060C0', textDecoration: 'none', fontWeight: 500 }}>
+                        {name}
+                      </Box>
+                    )}
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {x.count} namespaces{x.questions ? ` · ${Math.round(x.questions)} questions` : ''}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ height: 10, borderRadius: 999, bgcolor: 'action.hover', overflow: 'hidden', display: 'flex' }}>
+                    <Box title={`resources ${wk(x.week)}`} sx={{ width: `${((x.week || x.day * 7) / maxSys) * 100}%`, bgcolor: '#1A8DFF' }} />
+                  </Box>
+                  <Box sx={{ textAlign: 'right', minWidth: 120 }}>
+                    <b>{wk(x.week)}</b>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {money(monthly(x.day * 30.4, deployTotal === undefined ? undefined : x.deploy, incidentTotal === undefined ? undefined : x.incident, assistantCost === undefined ? undefined : x.assistants), c)} / month · {pct(totalWeek ? (x.week / totalWeek) * 100 : undefined)}
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+            <Box component="section" aria-label="Assistants this month" sx={cardSx}>
+              <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 16 }}>
+                Assistants this month
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {usage.value?.all ? 'Every question, by assistant and who asked it.' : 'By assistant; who asked is shown only for your own questions.'}
+              </Typography>
+              {usage.error && <Typography variant="body2">Not available: {usage.error.message}</Typography>}
+              {byAssistant.map(a => (
+                <Box key={`${a.assistant}/${a.user ?? ''}`} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 1, borderTop: 1, borderColor: 'divider', pt: 1, fontSize: 13.5 }}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <b>{a.assistant}</b> <Box component="span" sx={{ color: 'text.secondary' }}>· {userName(a.user)}</Box>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {Math.round(a.questions)} questions · {tokens(a.tokens)} tokens · {[...a.models].join(', ')}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(a.cost, c)}</Box>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box component="section" aria-label="By namespace" sx={cardSx}>
+            <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 16 }}>
+              By namespace
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              A namespace pays what its pods reserve or use, whichever is more: a low &quot;used&quot; means it reserves more than it needs.
+            </Typography>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+                <thead>
+                  <tr>
+                    <Box component="th" sx={th}>Namespace</Box>
+                    <Box component="th" sx={th}>Last 7 days</Box>
+                    <Box component="th" sx={th}>Per month</Box>
+                    <Box component="th" sx={th}>Deployments</Box>
+                    <Box component="th" sx={th}>Incidents</Box>
+                    <Box component="th" sx={th}>CPU used</Box>
+                    <Box component="th" sx={th}>Memory used</Box>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(r => {
+                    const a = r.week ?? r.day;
+                    return (
+                      <tr key={r.ns}>
+                        <Box component="td" sx={td}>
+                          <Box component="a" href={r.entity ? entityPath(r.entity) : `/console/namespaces/${r.ns}`} sx={{ color: '#0060C0', textDecoration: 'none', fontWeight: 500 }}>
+                            {r.entity?.metadata.title ?? r.entity?.metadata.name ?? r.ns}
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontFamily: 'monospace' }}>
+                            {r.ns}
+                          </Typography>
+                        </Box>
+                        <Box component="td" sx={td}>
+                          <Box sx={{ display: 'grid', gap: 0.4, minWidth: 110 }}>
+                            <span>{wk(r.week?.total)}</span>
+                            <Box sx={{ height: 5, borderRadius: 999, bgcolor: 'action.hover', overflow: 'hidden' }}>
+                              <Box sx={{ height: '100%', width: `${((r.week?.total ?? (r.day?.total ?? 0) * 7) / maxNs) * 100}%`, bgcolor: '#1A8DFF' }} />
+                            </Box>
+                          </Box>
+                        </Box>
+                        <Box component="td" sx={td}>{money(monthly(perMonth(r.day), r.deployCost, r.incidentCost), c)}</Box>
+                        <Box component="td" sx={td} title={r.deploys?.versions.map(v => v.image).join('\n')}>
+                          {deployments.value ? `${r.deploys?.count ?? 0}${r.deployCost ? ` · ${money(r.deployCost, c)}` : ''}` : '—'}
+                        </Box>
+                        <Box component="td" sx={td} title={describeCounts(r.incidents)}>
+                          {incidents.value ? `${incidentCount(r.incidents)}${r.incidentCost ? ` · ${money(r.incidentCost, c)}` : ''}` : '—'}
+                        </Box>
+                        <Box component="td" sx={td}>{meter(a ? efficiency(a.cpuUsed, a.cpuRequested) : undefined)}</Box>
+                        <Box component="td" sx={td}>{meter(a ? efficiency(a.ramUsed, a.ramRequested) : undefined)}</Box>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      );
+    } else
     body = (
       <>
         <InfoCard title="The cluster">
@@ -377,6 +539,21 @@ export const CostsPage = () => {
     );
   }
 
+  const explain = `Estimated with our prices, not a bill${pricing.description ? `: ${pricing.description}` : ''}. ${describePrices(pricing)}.`;
+  if (variant === 'console')
+    return (
+      <Box sx={{ display: 'grid', gap: 2 }}>
+        <Box>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, fontSize: 28 }}>
+            Costs
+          </Typography>
+          <Typography color="text.secondary" sx={{ maxWidth: '100ch' }}>
+            What each system and namespace of the cluster costs (OpenCost), with its deployments, incidents and questions to the assistants. {explain}
+          </Typography>
+        </Box>
+        {body}
+      </Box>
+    );
   return (
     <Page themeId="tool">
       <Header title="Costs" subtitle="What each namespace of the cluster costs (OpenCost)" />

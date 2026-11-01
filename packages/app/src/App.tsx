@@ -156,7 +156,7 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'dependencies', title: 'Dependencies', layer: 'portal', classicPath: '/catalog-graph', element: catalogGraphPage },
   { id: 'docs', title: 'Docs', layer: 'portal', classicPath: '/docs', element: docsIndexPage },
   { id: 'quality', title: 'Quality', layer: 'portal', classicPath: '/tech-insights', element: techInsightsPage },
-  { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: costsPage },
+  { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: <CostsPage variant="console" /> },
   { id: 'cis-nodes', title: 'CIS Kubernetes nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
   { id: 'assistants', title: 'The team', product: 'The assistants: who does what, and how they hand over', layer: 'assistants', classicPath: '/ops-assistant', consoleOnly: true, element: <ConsoleAssistantsTeam /> },

@@ -27,7 +27,7 @@ import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { DependencyExplorer } from './DependencyExplorer';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
-import { PortalApisPage, PortalDocsPage, PortalQualityPage } from './PortalIndexes';
+import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
 
 /** Pages of the classic list (App) that the console has its own version of. */
 const NATIVE = new Set(['cis-nodes', 'images', 'docs', 'apis', 'quality', 'dependencies']);
@@ -80,6 +80,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/apis" element={<PortalApisPage />} />
         <Route path="/quality" element={<PortalQualityPage />} />
         <Route path="/dependencies" element={<DependencyExplorer />} />
+        <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         {pages.filter(p => !NATIVE.has(p.id)).map(p => (
