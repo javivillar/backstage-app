@@ -23,7 +23,7 @@ const catalogDoc = {
         {
           tag: '17-alpine3.24', category: 'database', summary: 'PostgreSQL 17.', audience: 'apps', state: 'approved',
           replacedBy: '', owner: 'platform-team', eol: '', license: '', note: 'n', synced: true, digest: 'sha256:x',
-          sourceSignatureVerified: true, signatures: ['signature'],
+          sourceSignatureVerified: true, signatures: ['signature', 'refresquito'], refresquitoSigned: true,
           platforms: [
             { platform: 'linux/amd64', digest: 'sha256:a', attestations: ['vex', 'sbom-spdx'] },
             { platform: 'linux/arm64', digest: 'sha256:b', attestations: ['sbom-spdx', 'provenance'] },
@@ -33,11 +33,13 @@ const catalogDoc = {
           tag: '16-alpine3.24', category: 'database', summary: 'PostgreSQL 16.', audience: 'apps', state: 'deprecated',
           replacedBy: 'common/postgres:17-alpine3.24', owner: 'platform-team', eol: '2026-12-31', license: 'X-1.0',
           note: '', synced: false,
+          quarantine: { digest: 'sha256:new16', reasons: ['postgres:16-alpine3.24 (linux/amd64) CVE-1 zlib Critical (no VEX statement)'] },
         },
       ],
     },
     { project: 'app-secret', name: 'x', repository: 'app-secret/x', source: '', tags: [] },
   ],
+  supplyChain: { airgapped: false, vulnerabilityDb: { updatedAt: '2026-11-01T01:13:06Z', source: 'online' }, lastBundle: null },
 };
 
 function harborApi(extra: Record<string, unknown> = {}) {
@@ -86,6 +88,10 @@ describe('image catalog', () => {
     // the catalog overrides license and end of life when it gives them
     expect(t16).toMatchObject({ state: 'deprecated', replacedBy: 'common/postgres:17-alpine3.24', license: 'X-1.0', eol: '2026-12-31' });
     expect(view.errors).toEqual([]);
+    // what the quarantine and the signature of Refresquito say, and the facts of the supply chain
+    expect(t17.refresquitoSigned).toBe(true);
+    expect(t16).toMatchObject({ refresquitoSigned: false, quarantine: { digest: 'sha256:new16' } });
+    expect(view.supplyChain?.vulnerabilityDb?.updatedAt).toBe('2026-11-01T01:13:06Z');
   });
 
   it('without a published catalog, lists the repositories of Harbor (not the catalog artifact itself)', async () => {
