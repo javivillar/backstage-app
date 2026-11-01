@@ -37,11 +37,18 @@ namespace (kube-state-metrics + kubelet). Backups are not published as metrics y
 
 `/console/network` (Cluster menu) and the **User journey** and **Network** tabs of a component that says its namespace
 (`refresquito.io/namespace`) read `GET /api/cluster/network`: namespaces and their segment, Ingress hosts,
-NetworkPolicies, Calico GlobalNetworkPolicies (the segments) and running pods. The backend reads them with the service
+NetworkPolicies, Calico GlobalNetworkPolicies (the segments), the default certificate of Traefik (TLSStore +
+cert-manager Certificate: which hosts it covers and when it expires) and running pods. The backend reads them with the service
 account of Backstage (read-only ClusterRole of cnoe-oneke 0.2.74); what it cannot read is listed as a warning.
 They are drawn as flows (`components/Flow.tsx`): nodes coloured by state, dashed when blocked or outside the cluster
 (the host, zone router and VNF are seen from the zone console). The two tabs exist only in the console:
 App passes `consoleEntityPage` (entityPage plus those tabs); the classic portal keeps `entityPage`.
+
+## Trying a branch before merging
+
+`build-and-push.yaml` also runs by hand on any branch (`gh workflow run build-and-push.yaml --ref <branch>`) and tags
+that image `preview-<sha>`. Put it on the preview instance only (`backstage.consolePreview.image.tag`), with the chart
+that is already deployed; the Backstage in use only takes main images (`<sha>`), so a preview image never reaches it.
 
 ## Classic pages in the console
 

@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
-import { type ClusterNetwork, identityHost, ISOLATION_TEXT, isolationTone, type NamespaceNetwork, useClusterNetwork, whiskerHost } from '../network';
+import { certificateDays, type ClusterNetwork, identityHost, ISOLATION_TEXT, isolationTone, type NamespaceNetwork, tlsText, useClusterNetwork, whiskerHost } from '../network';
 import { Badge } from './Badge';
 import { Flow, type FlowLane, type FlowNode } from './Flow';
 import { Table, tone } from './NetworkPage';
@@ -47,6 +47,8 @@ function podsNode(name: string, ns: NamespaceNetwork): FlowNode {
 export function journeyLanes(name: string, ns: NamespaceNetwork, n: ClusterNetwork): FlowLane[] {
   const hosts = n.hosts.filter(h => h.namespace === ns.name);
   const id = identityHost(n);
+  const days = certificateDays(n);
+  const certOk = (h: { tls: boolean; tlsSource?: string }) => h.tls && (h.tlsSource !== 'cluster' || (days ?? 99) >= 21);
   return [
     { label: 'User', nodes: [{ title: 'Browser', sub: 'access network of the zone', tone: 'off' }] },
     { label: 'Zone', nodes: [{ title: 'Host and zone router', sub: 'seen from the zone console', tone: 'off', dashed: true }] },
@@ -55,7 +57,13 @@ export function journeyLanes(name: string, ns: NamespaceNetwork, n: ClusterNetwo
       label: 'Ingress',
       grow: 1.3,
       nodes: hosts.length
-        ? hosts.map(h => ({ title: h.host, sub: `Traefik → ${h.service ?? h.ingress}`, state: h.tls ? 'TLS' : 'No TLS', tone: h.tls ? ('ok' as const) : ('warn' as const), href: `https://${h.host}` }))
+        ? hosts.map(h => ({
+            title: h.host,
+            sub: `Traefik → ${h.service ?? h.ingress}${h.tlsSource === 'cluster' && days !== undefined ? ` · certificate ${days} days left` : ''}`,
+            state: h.tls ? 'TLS' : 'No TLS',
+            tone: certOk(h) ? ('ok' as const) : ('warn' as const),
+            href: `https://${h.host}`,
+          }))
         : [{ title: 'Not published', sub: 'no Ingress in its namespace', state: 'Internal', tone: 'info' }],
     },
     { label: 'Login', nodes: [id ? { title: 'Keycloak', sub: id, state: 'SSO', tone: 'ok' } : { title: 'Keycloak', sub: 'not found in this cluster', tone: 'warn' }] },
@@ -115,7 +123,7 @@ export const EntityUserJourneyContent = () => (
             head={['Host', 'Ingress', 'Service', 'TLS']}
             rows={n.hosts
               .filter(h => h.namespace === ns.name)
-              .map(h => [h.host, h.ingress, h.service ?? '—', h.tls ? <Badge label="TLS" {...tone('ok')} /> : <Badge label="No TLS" {...tone('warn')} />])}
+              .map(h => [h.host, h.ingress, h.service ?? '—', <Badge label={tlsText(h)} {...tone(h.tls ? 'ok' : 'warn')} />])}
           />
         </Card>
       </>

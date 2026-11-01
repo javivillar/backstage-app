@@ -4,12 +4,14 @@ import { Router } from 'express';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import {
   type CalicoGlobalPolicy,
+  type CertManagerCertificate,
   type ClusterNetwork,
   type K8sIngress,
   type K8sNamespace,
   type K8sNetworkPolicy,
   type K8sService,
   summariseNetwork,
+  type TraefikTlsStore,
 } from './clusterNetwork';
 
 /** Running and ready pods per namespace, from kube-state-metrics (empty without Prometheus). */
@@ -43,18 +45,20 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
   // @kubernetes/client-node 0.20 (the version of this package) answers { body }; read items from either shape
   const items = <T>(r: unknown): T[] => (r as { body?: { items?: T[] } }).body?.items ?? (r as { items?: T[] }).items ?? [];
   const listCustom = custom.listClusterCustomObject as unknown as (group: string, version: string, plural: string) => Promise<unknown>;
-  const [namespaces, ingresses, policies, services, calico, pods] = await Promise.all([
+  const [namespaces, ingresses, policies, services, calico, tlsStores, certificates, pods] = await Promise.all([
     soft('Namespaces', async () => items<K8sNamespace>(await core.listNamespace())),
     soft('Ingresses', async () => items<K8sIngress>(await net.listIngressForAllNamespaces())),
     soft('NetworkPolicies', async () => items<K8sNetworkPolicy>(await net.listNetworkPolicyForAllNamespaces())),
     soft('Services', async () => items<K8sService>(await core.listServiceForAllNamespaces())),
     soft('Calico global policies', async () => items<CalicoGlobalPolicy>(await listCustom.call(custom, 'crd.projectcalico.org', 'v1', 'globalnetworkpolicies'))),
+    soft('Traefik TLS stores', async () => items<TraefikTlsStore>(await listCustom.call(custom, 'traefik.io', 'v1alpha1', 'tlsstores'))),
+    soft('cert-manager certificates', async () => items<CertManagerCertificate>(await listCustom.call(custom, 'cert-manager.io', 'v1', 'certificates'))),
     podsByNamespace(query).catch(() => {
       warnings.push('Pods per namespace could not be read (Prometheus)');
       return {};
     }),
   ]);
-  return summariseNetwork({ namespaces, ingresses, policies, services, calico, pods, warnings });
+  return summariseNetwork({ namespaces, ingresses, policies, services, calico, tlsStores, certificates, pods, warnings });
 }
 
 /**

@@ -7,7 +7,7 @@ import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
 import { useConsoleConfig } from '../config';
-import { type ClusterNetwork, identityHost, ISOLATION_TEXT, isolationTone, useClusterNetwork, whiskerHost } from '../network';
+import { certificateDays, type ClusterNetwork, identityHost, ISOLATION_TEXT, isolationTone, tlsText, useClusterNetwork, whiskerHost } from '../network';
 import { Badge } from './Badge';
 import { Flow, type FlowLane, TONES } from './Flow';
 import { rq } from './tokens';
@@ -64,6 +64,8 @@ export function mapLanes(n: ClusterNetwork): FlowLane[] {
   const count = (i: string) => apps.filter(x => x.isolation === i).length;
   const tls = n.hosts.filter(h => h.tls).length;
   const id = identityHost(n);
+  const days = certificateDays(n);
+  const certSub = days === undefined ? 'cluster certificate: expiry unknown' : `cluster certificate: ${days} days left`;
   return [
     {
       label: 'Entry',
@@ -77,7 +79,7 @@ export function mapLanes(n: ClusterNetwork): FlowLane[] {
     {
       label: 'Published hosts',
       nodes: [
-        { title: `${n.hosts.length} hosts`, sub: `${tls} with TLS`, state: tls === n.hosts.length ? 'OK' : 'Some without TLS', tone: tls === n.hosts.length ? 'ok' : 'warn' },
+        { title: `${n.hosts.length} hosts`, sub: `${tls} with TLS · ${certSub}`, state: tls === n.hosts.length && (days ?? 99) >= 21 ? 'OK' : 'Review', tone: tls === n.hosts.length && (days ?? 99) >= 21 ? 'ok' : 'warn' },
         ...(id ? [{ title: 'Keycloak', sub: id, state: 'Login', tone: 'info' as const }] : []),
       ],
     },
@@ -165,7 +167,7 @@ export const NetworkPage = () => {
               </a>,
               h.namespace,
               h.service ?? '—',
-              h.tls ? <Badge label="TLS" {...tone('ok')} /> : <Badge label="No TLS" {...tone('warn')} />,
+              <Badge label={tlsText(h)} {...tone(h.tls ? 'ok' : 'warn')} />,
             ])}
           />
         </Section>
