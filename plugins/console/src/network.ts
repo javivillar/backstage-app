@@ -14,12 +14,14 @@ export type NamespaceNetwork = {
   policies: PolicySummary[];
   pods?: { ready: number; total: number };
 };
-export type HostNetwork = { host: string; namespace: string; ingress: string; service?: string; tls: boolean };
+export type HostNetwork = { host: string; namespace: string; ingress: string; service?: string; tls: boolean; tlsSource?: 'ingress' | 'cluster' };
+export type ClusterCertificate = { name: string; namespace: string; dnsNames: string[]; notAfter?: string; ready: boolean };
 export type SegmentNetwork = { name: string; policy?: string; order?: number; enforced: boolean; actions: string[]; namespaces: number };
 export type ClusterNetwork = {
   generatedAt: string;
   warnings: string[];
   entry?: { service: string; namespace: string; ports: string[] };
+  certificate?: ClusterCertificate;
   hosts: HostNetwork[];
   segments: SegmentNetwork[];
   namespaces: NamespaceNetwork[];
@@ -53,6 +55,19 @@ export function useClusterNetwork() {
 export function identityHost(n: ClusterNetwork): string | undefined {
   const ns = n.namespaces.find(x => x.segment === 'iam' && x.hosts.length);
   return ns?.hosts.find(h => h.startsWith('iam.')) ?? ns?.hosts[0];
+}
+
+/** Days left of the cluster certificate, or undefined when it is not known. */
+export function certificateDays(n: ClusterNetwork, now = new Date()): number | undefined {
+  const t = n.certificate?.notAfter ? Date.parse(n.certificate.notAfter) : NaN;
+  return Number.isNaN(t) ? undefined : Math.floor((t - now.getTime()) / 86_400_000);
+}
+
+/** Words for the TLS of a host: where its certificate comes from. */
+export function tlsText(h: HostNetwork): string {
+  if (h.tlsSource === 'cluster') return 'TLS · cluster certificate';
+  if (h.tlsSource === 'ingress') return 'TLS · own certificate';
+  return 'No TLS';
 }
 
 /** Calico Whisker, when the cluster publishes it. */

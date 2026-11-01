@@ -9,8 +9,9 @@ const net: ClusterNetwork = {
   generatedAt: '2026-11-01T08:00:00.000Z',
   warnings: [],
   entry: { service: 'one-traefik', namespace: 'traefik-system', ports: ['80→32080', '443→32443'] },
+  certificate: { name: 'cluster-wildcard', namespace: 'traefik-system', dnsNames: ['*.x'], notAfter: '2099-01-01T00:00:00Z', ready: true },
   hosts: [
-    { host: 'petstore.x', namespace: 'petstore', ingress: 'petstore', service: 'petstore-ui', tls: true },
+    { host: 'petstore.x', namespace: 'petstore', ingress: 'petstore', service: 'petstore-ui', tls: true, tlsSource: 'cluster' },
     { host: 'iam.x', namespace: 'iam', ingress: 'keycloak', service: 'keycloak', tls: true },
     { host: 'whisker.x', namespace: 'calico-system', ingress: 'whisker', tls: true },
   ],

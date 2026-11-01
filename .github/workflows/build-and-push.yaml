@@ -1,11 +1,14 @@
 #
 name: Create and publish a Docker image
 
-# Configures this workflow to run on pushes to main and version tags.
+# Configures this workflow to run on pushes to main and version tags, and by hand on any branch: a preview image
+# (tag preview-<sha>) to try a branch on the console preview instance before merging it. The Backstage in use only
+# takes main images (tag <sha>), so a preview image can never reach it by mistake.
 on:
   push:
     branches: [main]
     tags: ['v*']
+  workflow_dispatch:
 
 # Defines two custom environment variables for the workflow. These are used for the Container registry domain, and a name for the Docker image that this workflow builds.
 env:
@@ -39,7 +42,7 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: ${{ github.sha }}
+          tags: ${{ github.event_name == 'workflow_dispatch' && format('preview-{0}', github.sha) || github.sha }}
       # This step uses the `docker/build-push-action` action to build the image, based on your repository's `Dockerfile`. If the build succeeds, it pushes the image to GitHub Packages.
       # It uses the `context` parameter to define the build's context as the set of files located in the specified path. For more information, see "[Usage](https://github.com/docker/build-push-action#usage)" in the README of the `docker/build-push-action` repository.
       # It uses the `tags` and `labels` parameters to tag and label the image with the output from the "meta" step.

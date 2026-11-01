@@ -23,6 +23,12 @@ export type CalicoGlobalPolicy = {
   metadata: { name: string };
   spec?: { order?: number; namespaceSelector?: string; ingress?: Array<{ action?: string }>; egress?: Array<{ action?: string }> };
 };
+export type TraefikTlsStore = { metadata: { name: string; namespace: string }; spec?: { defaultCertificate?: { secretName?: string } } };
+export type CertManagerCertificate = {
+  metadata: { name: string; namespace: string };
+  spec?: { secretName?: string; dnsNames?: string[] };
+  status?: { notAfter?: string; conditions?: Array<{ type: string; status: string }> };
+};
 export type K8sService = { metadata: { name: string; namespace: string; labels?: Labels }; spec?: { type?: string; ports?: Array<{ port?: number; nodePort?: number; name?: string }> } };
 
 export type Isolation = 'open' | 'partial' | 'isolated';
@@ -39,13 +45,17 @@ export type NamespaceNetwork = {
   policies: PolicySummary[];
   pods?: { ready: number; total: number };
 };
-export type HostNetwork = { host: string; namespace: string; ingress: string; service?: string; tls: boolean };
+/** tls: 'ingress' (the Ingress declares it), 'cluster' (the default certificate of Traefik covers the name), or none */
+export type HostNetwork = { host: string; namespace: string; ingress: string; service?: string; tls: boolean; tlsSource?: 'ingress' | 'cluster' };
+export type ClusterCertificate = { name: string; namespace: string; dnsNames: string[]; notAfter?: string; ready: boolean };
 export type SegmentNetwork = { name: string; policy?: string; order?: number; enforced: boolean; actions: string[]; namespaces: number };
 export type ClusterNetwork = {
   generatedAt: string;
   /** what could not be read (e.g. a permission the chart has not granted yet) */
   warnings: string[];
   entry?: { service: string; namespace: string; ports: string[] };
+  /** the default certificate of Traefik (TLSStore default), as cert-manager issues it: never the secret */
+  certificate?: ClusterCertificate;
   hosts: HostNetwork[];
   segments: SegmentNetwork[];
   namespaces: NamespaceNetwork[];
@@ -105,27 +115,58 @@ export function isolationOf(policies: PolicySummary[]): Isolation {
   return ingress.length ? 'partial' : 'open';
 }
 
+/** Whether a certificate name (maybe *.domain) covers a host. */
+export function covers(name: string, host: string): boolean {
+  if (name === host) return true;
+  if (!name.startsWith('*.')) return false;
+  const base = name.slice(1);
+  return host.endsWith(base) && !host.slice(0, -base.length).includes('.');
+}
+
+function clusterCertificate(stores: TraefikTlsStore[], certs: CertManagerCertificate[]): ClusterCertificate | undefined {
+  const store = stores.find(t => t.metadata.name === 'default' && t.spec?.defaultCertificate?.secretName);
+  if (!store) return undefined;
+  const secret = store.spec?.defaultCertificate?.secretName;
+  const cert = certs.find(c => c.metadata.namespace === store.metadata.namespace && c.spec?.secretName === secret);
+  if (!cert) return { name: secret ?? 'default', namespace: store.metadata.namespace, dnsNames: [], ready: true };
+  return {
+    name: cert.metadata.name,
+    namespace: cert.metadata.namespace,
+    dnsNames: cert.spec?.dnsNames ?? [],
+    notAfter: cert.status?.notAfter,
+    ready: (cert.status?.conditions ?? []).some(c => c.type === 'Ready' && c.status === 'True'),
+  };
+}
+
 export function summariseNetwork(input: {
   namespaces: K8sNamespace[];
   ingresses: K8sIngress[];
   policies: K8sNetworkPolicy[];
   calico: CalicoGlobalPolicy[];
   services: K8sService[];
+  tlsStores?: TraefikTlsStore[];
+  certificates?: CertManagerCertificate[];
   pods?: Record<string, { ready: number; total: number }>;
   warnings?: string[];
   now?: Date;
 }): ClusterNetwork {
+  const certificate = clusterCertificate(input.tlsStores ?? [], input.certificates ?? []);
   const hosts: HostNetwork[] = [];
   for (const ing of input.ingresses) {
     const tlsHosts = new Set((ing.spec?.tls ?? []).flatMap(t => t.hosts ?? []));
     for (const rule of ing.spec?.rules ?? []) {
       if (!rule.host) continue;
+      const host = rule.host;
+      let tlsSource: HostNetwork['tlsSource'];
+      if (tlsHosts.has(host)) tlsSource = 'ingress';
+      else if (certificate?.dnsNames.some(n => covers(n, host))) tlsSource = 'cluster';
       hosts.push({
-        host: rule.host,
+        host,
         namespace: ing.metadata.namespace,
         ingress: ing.metadata.name,
         service: rule.http?.paths?.[0]?.backend?.service?.name,
-        tls: tlsHosts.has(rule.host) || tlsHosts.size > 0,
+        tls: !!tlsSource,
+        tlsSource,
       });
     }
   }
@@ -173,6 +214,7 @@ export function summariseNetwork(input: {
   return {
     generatedAt: (input.now ?? new Date()).toISOString(),
     warnings: input.warnings ?? [],
+    certificate,
     entry: traefik
       ? {
           service: traefik.metadata.name,

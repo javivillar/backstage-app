@@ -1,4 +1,4 @@
-import { isolationOf, type K8sNamespace, selectorText, summariseNetwork, summarisePolicy } from './clusterNetwork';
+import { covers, isolationOf, type K8sNamespace, selectorText, summariseNetwork, summarisePolicy } from './clusterNetwork';
 
 const ns = (name: string, segment?: string): K8sNamespace => ({ metadata: { name, labels: segment ? { 'refresquito.io/segment': segment } : {} } });
 
@@ -48,7 +48,7 @@ describe('clusterNetwork', () => {
       now: new Date('2026-11-01T00:00:00Z'),
     });
     expect(n.entry).toEqual({ service: 'one-traefik', namespace: 'traefik-system', ports: ['443→32443'] });
-    expect(n.hosts).toEqual([{ host: 'petstore.x', namespace: 'petstore', ingress: 'petstore', service: 'petstore-ui', tls: true }]);
+    expect(n.hosts).toEqual([{ host: 'petstore.x', namespace: 'petstore', ingress: 'petstore', service: 'petstore-ui', tls: true, tlsSource: 'ingress' }]);
     const pet = n.namespaces.find(x => x.name === 'petstore');
     expect(pet).toMatchObject({ segment: 'business-support', system: false, hosts: ['petstore.x'], isolation: 'isolated', egressRestricted: false, pods: { ready: 2, total: 2 } });
     expect(n.namespaces.find(x => x.name === 'kube-system')?.system).toBe(true);
@@ -57,5 +57,34 @@ describe('clusterNetwork', () => {
       { name: 'iam', policy: 'refresquito.iam', order: 100, enforced: true, actions: ['Allow', 'Deny'], namespaces: 1 },
     ]);
     expect(n.warnings).toEqual([]);
+  });
+
+  it('takes the TLS of the hosts from the default certificate of Traefik', () => {
+    expect(covers('*.platform.x', 'petstore.platform.x')).toBe(true);
+    expect(covers('*.platform.x', 'a.b.platform.x')).toBe(false);
+    expect(covers('platform.x', 'platform.x')).toBe(true);
+    const n = summariseNetwork({
+      namespaces: [ns('petstore', 'business-support')],
+      ingresses: [
+        { metadata: { name: 'petstore', namespace: 'petstore' }, spec: { rules: [{ host: 'petstore.platform.x' }] } },
+        { metadata: { name: 'other', namespace: 'petstore' }, spec: { rules: [{ host: 'other.example' }] } },
+      ],
+      policies: [],
+      calico: [],
+      services: [],
+      tlsStores: [{ metadata: { name: 'default', namespace: 'traefik-system' }, spec: { defaultCertificate: { secretName: 'cluster-wildcard-tls' } } }],
+      certificates: [
+        {
+          metadata: { name: 'cluster-wildcard', namespace: 'traefik-system' },
+          spec: { secretName: 'cluster-wildcard-tls', dnsNames: ['*.platform.x', 'platform.x'] },
+          status: { notAfter: '2027-01-04T20:41:31Z', conditions: [{ type: 'Ready', status: 'True' }] },
+        },
+      ],
+    });
+    expect(n.certificate).toEqual({ name: 'cluster-wildcard', namespace: 'traefik-system', dnsNames: ['*.platform.x', 'platform.x'], notAfter: '2027-01-04T20:41:31Z', ready: true });
+    expect(n.hosts.map(h => [h.host, h.tls, h.tlsSource])).toEqual([
+      ['other.example', false, undefined],
+      ['petstore.platform.x', true, 'cluster'],
+    ]);
   });
 });
