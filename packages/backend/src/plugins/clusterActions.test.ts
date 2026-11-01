@@ -1,4 +1,5 @@
 import { ArgoClient, mayAct, ownerRef, ownsEntity } from './clusterActions';
+import { argoAppView } from './clusterActions';
 
 describe('clusterActions', () => {
   it('lets act only the allowed groups', () => {
@@ -39,3 +40,23 @@ describe('clusterActions', () => {
     expect(ownsEntity(['group:default/team-pets'], undefined)).toBe(false);
   });
 });
+
+describe('Argo CD application view', () => {
+  it('keeps the newest deployments first and what the console shows', () => {
+    const v = argoAppView({
+      metadata: { name: 'petstore' },
+      status: {
+        sync: { status: 'Synced', revision: 'abc' },
+        health: { status: 'Healthy' },
+        history: [
+          { id: 1, revision: 'old', deployStartedAt: '2026-11-01T10:00:00Z', deployedAt: '2026-11-01T10:00:30Z', initiatedBy: { automated: true } },
+          { id: 2, revision: 'new', deployedAt: '2026-11-01T12:00:00Z', initiatedBy: { username: 'javi' } },
+        ],
+        resources: [{ kind: 'Deployment', name: 'api', status: 'Synced', health: { status: 'Healthy' } }],
+      },
+    });
+    expect(v.history.map(h => [h.revision, h.by, h.took])).toEqual([['new', 'javi', undefined], ['old', 'auto-sync', 30]]);
+    expect(v.resources).toEqual([{ kind: 'Deployment', name: 'api', namespace: undefined, sync: 'Synced', health: 'Healthy' }]);
+  });
+});
+

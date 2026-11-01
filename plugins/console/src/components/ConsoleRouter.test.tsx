@@ -72,8 +72,8 @@ describe('ConsoleRouter', () => {
       { enabled: true, allowedGroups: ['console-beta'], cluster: { id: 'nato-sirtap', kind: 'program', zone: 'nato', program: 'sirtap' } },
       ['user:default/ana', 'group:default/console-beta'],
     );
-    expect(await screen.findByText('Portal of nato-sirtap')).toBeInTheDocument();
-    expect(screen.getByText('petstore')).toHaveAttribute('href', '/console/entity/default/component/petstore');
+    expect(await screen.findByRole('heading', { name: 'Catalogue' })).toBeInTheDocument();
+    expect(screen.getByText('petstore').closest('a')).toHaveAttribute('href', '/console/entity/default/component/petstore');
     expect(screen.getByText('iam-oneke')).toBeInTheDocument();
     // a programme cluster has no infrastructure layer
     expect(screen.queryByText('Infrastructure')).not.toBeInTheDocument();

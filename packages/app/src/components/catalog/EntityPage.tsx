@@ -14,6 +14,8 @@ import {
   ServiceSecurity,
   ConsoleEntityLayout,
   EntityDependenciesContent,
+  EntityApiContent,
+  EntityCicdContent,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
@@ -836,6 +838,12 @@ export const consoleEntityPage = entityPageWith(
     </EntityLayout.Route>
     <EntityLayout.Route path="/dependencies" title={tabLabel(<Hub />, 'Dependencies')}>
       <EntityDependenciesContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/ci-cd" title={tabLabel(<RocketLaunch />, 'CI/CD')}>
+      <EntityCicdContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/api" title={tabLabel(<Api />, 'API')}>
+      <EntityApiContent />
     </EntityLayout.Route>
     <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
       <EntityUserJourneyContent />
