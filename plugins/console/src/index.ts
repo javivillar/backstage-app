@@ -8,3 +8,5 @@ export { ServiceChanges, ServiceCosts, ServiceOverview, ServiceSecurity } from '
 export { ConsoleEntityLayout } from './components/ConsoleEntityLayout';
 export { EntityDependenciesContent } from './components/EntityDependencies';
 export { EntityApiContent, EntityCicdContent } from './components/EntityBuild';
+export { EntityDocsContent } from './components/EntityDocs';
+export { ClassicTabNote } from './components/ClassicTabNote';

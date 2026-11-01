@@ -16,6 +16,8 @@ import {
   EntityDependenciesContent,
   EntityApiContent,
   EntityCicdContent,
+  EntityDocsContent,
+  ClassicTabNote,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
@@ -845,6 +847,16 @@ export const consoleEntityPage = entityPageWith(
     <EntityLayout.Route path="/api" title={tabLabel(<Api />, 'API')}>
       <EntityApiContent />
     </EntityLayout.Route>
+    {/* TechDocs, Kubernetes and Topology only route under the classic entity page: the console reads the docs itself */}
+    <EntityLayout.Route path="/docs" title={tabLabel(<Description />, 'Docs')}>
+      <EntityDocsContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/kubernetes" title={tabLabel(<Cloud />, 'Kubernetes')} if={isKubernetesAvailable}>
+      <ClassicTabNote title="Kubernetes" tab="/kubernetes" instead={[['Live', '/live'], ['Network', '/network'], ['Changes', '/changes']]} />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/topology" title={tabLabel(<BubbleChart />, 'Topology')} if={isKubernetesAvailable}>
+      <ClassicTabNote title="Topology" tab="/topology" instead={[['Dependencies', '/dependencies'], ['Network', '/network']]} />
+    </EntityLayout.Route>
     <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
       <EntityUserJourneyContent />
     </EntityLayout.Route>
@@ -855,7 +867,7 @@ export const consoleEntityPage = entityPageWith(
       <ServiceSecurity />
     </EntityLayout.Route>
     <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
-      <ServiceCosts />
+      <ServiceCosts extra={<EntityAssistantUsageCard />} />
     </EntityLayout.Route>
   </>,
   <ConsoleOverview />,
