@@ -12,6 +12,8 @@ type Page = { html: string; title: string; toc: Array<{ id: string; title: strin
 /** Removes what must not run inside the console: scripts, frames, forms, inline handlers and javascript: links. */
 export function cleanDoc(root: Element): void {
   root.querySelectorAll('script, iframe, object, embed, form, style, link, meta').forEach(n => n.remove());
+  // the buttons of MkDocs (edit, view source) and its header anchors: the console has its own
+  root.querySelectorAll('.md-content__button, .md-source, .headerlink').forEach(n => n.remove());
   root.querySelectorAll('*').forEach(el => {
     for (const a of [...el.attributes]) {
       const v = a.value.trim().toLowerCase();
@@ -136,6 +138,7 @@ export const EntityDocsContent = () => {
                 '& table': { borderCollapse: 'collapse', display: 'block', overflowX: 'auto' },
                 '& th, & td': { border: 1, borderColor: 'divider', px: 1, py: 0.5, textAlign: 'left' },
                 '& img': { maxWidth: '100%' },
+                '& svg': { maxWidth: 24, maxHeight: 24 },
                 '& a': { color: 'primary.main' },
                 '& .admonition': { borderLeft: 3, borderColor: 'primary.main', bgcolor: 'action.hover', px: 1.5, py: 1, borderRadius: '0 8px 8px 0', my: 1.5 },
               }}
