@@ -127,7 +127,13 @@ describe('image catalog', () => {
 
   it('makes one System and one Resource per repository', async () => {
     const view = await new ImageCatalogService({ harborUrl: HARBOR, projects: ['common'] }, registry(catalogDoc), harborApi()).view();
-    const [system, res] = entitiesOf(view, 'https://backstage.example.io/');
+    const [system, harbor, res] = entitiesOf(view, 'https://backstage.example.io/');
+    // the element of the alerts of the images in support (a Component with refresquito.io/namespace)
+    expect(harbor).toMatchObject({
+      kind: 'Component',
+      metadata: { name: 'harbor', annotations: { 'refresquito.io/namespace': 'harbor' } },
+      spec: { type: 'service', owner: 'platform-team', system: 'image-catalog' },
+    });
     expect(system).toMatchObject({ kind: 'System', metadata: { name: 'image-catalog' } });
     expect(res).toMatchObject({
       kind: 'Resource',
@@ -144,7 +150,7 @@ describe('image catalog', () => {
     expect(res.metadata.annotations?.['backstage.io/managed-by-location']).toBe(`url:${HARBOR}/common/image-catalog`);
     // the policies the catalog applies before accepting an entity
     const policy = EntityPolicies.allOf([new SchemaValidEntityPolicy(), new FieldFormatEntityPolicy(), new NoForeignRootFieldsEntityPolicy()]);
-    for (const e of [system, res]) await expect(policy.enforce(e)).resolves.toBeDefined();
+    for (const e of [system, harbor, res]) await expect(policy.enforce(e)).resolves.toBeDefined();
     expect(entityNameOf('framework-spring/eclipse-temurin')).toBe('image-framework-spring-eclipse-temurin');
     expect(entityNameOf(`common/${'x'.repeat(80)}`)).toHaveLength(63);
   });
