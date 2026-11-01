@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Content, ContentHeader, Header, Link, Page, Progress, WarningPanel } from '@backstage/core-components';
+import { Content, ContentHeader, Header, Link, LinkButton, Page, Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -167,6 +167,9 @@ function CopyPull({ row }: { row: Row }) {
 const entityPath = (repository: string) =>
   `/catalog/default/resource/${`image-${repository.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 63).replace(/-+$/, '')}`;
 
+/** The Backstage template "Request a curated image" (backstage-templates harbor-request-image). */
+export const REQUEST_IMAGE_TEMPLATE = '/create/templates/default/harbor-request-image';
+
 export function ImagesPage() {
   const { loading, data, error } = useImageCatalog();
   const [params] = useSearchParams();
@@ -197,7 +200,12 @@ export function ImagesPage() {
     <Page themeId="tool">
       <Header title="Images" subtitle="Container images of Harbor that a system may use: curated, scanned, with their supply chain" />
       <Content>
-        <ContentHeader title="Image catalog" />
+        <ContentHeader title="Image catalog">
+          {/* the template opens a pull request in opennebula (harbor/catalog.d); the image arrives through the quarantine */}
+          <LinkButton to={REQUEST_IMAGE_TEMPLATE} variant="outlined" color="primary">
+            Request an image
+          </LinkButton>
+        </ContentHeader>
         {loading && <Progress />}
         {error && <WarningPanel severity="error" title="The image catalog could not be read" message={error} />}
         {data && !data.configured && (
