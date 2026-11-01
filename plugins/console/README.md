@@ -10,7 +10,7 @@ Tech Insights, OpenCost…); the console stores nothing of its own.
 
 | Layer | Shown in | Content |
 |---|---|---|
-| Infrastructure | zone clusters (e.g. `nato`) | OpenNebula of the zone, marketplace of programme clusters (phase 4) |
+| Infrastructure | every cluster (acts only from an admin programme) | Platform (zone catalog, segregations, capacity), Marketplace (OneKE profiles, new clusters), the zone: VMs, networks, security groups |
 | Cluster | every cluster | overview: nodes, Argo CD applications, storage (backend plugin `cluster`); topology, CIS nodes, images |
 | Portal | every cluster | software catalog: business applications and Refresquito services, and the page of each entity |
 
@@ -105,6 +105,23 @@ const consolePages: ConsoleClassicPage[] = [
 
 Labels in the console use its own `Badge`, not the MUI Chip: the classic portal's global CSS restyles every Chip.
 
+## 1.2: changing the infrastructure through git
+
+Only `console.actions.groups` (backstage-admin). Every change goes to git with the GitHub token of the `integrations.github`
+config (it needs **Contents** and **Pull requests** write); the backend checks it first (`clusterVms.ts`, `clusterInfra.ts`).
+
+| Page | Route | Backend | Git |
+|---|---|---|---|
+| Zone › Virtual machines | `/console/infrastructure/vms` | `POST /api/cluster/zone/vms[/delete]` | PR in `console.vms.repo` (refresquito-services), `charts/console-vms-oneke/vms/*.json` → Argo CD + Crossplane |
+| Infrastructure › Platform | `/console/infrastructure/platform` | `POST /api/cluster/infra/segregations` | PR in `console.infra.repo` (opennebula), `[[program]]` appended to `configuration/network.toml` |
+| Infrastructure › Marketplace | `/console/infrastructure/marketplace` | `POST /api/cluster/infra/clusters` | PR adding `configuration/clusters/<zone>-<program>.json` |
+| Cluster › Scale | `/console/cluster/scale` | `POST /api/cluster/infra/clusters/scale` | commit to `main` of the same file |
+
+The PRs live on branches `console/<kind>-…` (`GitHubFiles.pullRequest`); `GET /zone/vms` and `GET /infra` list the open
+ones. The OpenNebula host applies opennebula `main` with `configuration.py reconcile` and publishes its status, the
+catalog, the profiles and the free memory in `topology.json` (`summariseZone`: `catalog`, `kubernetes`, `capacity`,
+`reconcile`). Host side and a step-by-step test: opennebula `installation-standalone.md` 11.28.
+
 ## Configuration
 
 ```yaml
@@ -115,6 +132,9 @@ console:
   cluster: { id: nato-sirtap, kind: program, zone: nato, program: sirtap }
   clusters:
     - { id: nato, kind: zone, url: "https://backstage.platform.nato.iaas.refresquito.io" }
+  actions: { groups: [backstage-admin] }   # who may act and change the infrastructure
+  vms: { repo: javivillar/refresquito-services, branch: main, chart: charts/console-vms-oneke }    # defaults
+  infra: { repo: javivillar/opennebula, branch: main, dir: configuration }                         # defaults
 ```
 
 Business applications are the components with the annotation `refresquito.io/application` (the files `apps/*.yaml`
