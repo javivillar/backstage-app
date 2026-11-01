@@ -39,15 +39,34 @@ export const useZone = () => useClusterGet<ZoneView>('/zone', 120_000);
 
 /** All the VMs of a zone, with the programme they belong to (the zone routers as programme "zone"). */
 export function zoneVms(z: Zone): Array<ZoneVm & { program: string }> {
-  return [...(z.router?.vms ?? []).map(v => ({ ...v, program: 'zone' })), ...z.programs.flatMap(p => p.vms.map(v => ({ ...v, program: p.name })))];
+  // a VM with leases on several networks (the zone router) is listed by every programme: once, the first time
+  const seen = new Set<string>();
+  return [...(z.router?.vms ?? []).map(v => ({ ...v, program: 'zone' })), ...z.programs.flatMap(p => p.vms.map(v => ({ ...v, program: p.name })))].filter(v => {
+    const key = v.id || v.name;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-/** GET /api/cluster/zone/vms: the VMs requested from the console (vms.json of the opennebula repository). */
-export type VmRequest = { zone: string; program: string; name: string; size: string; image: string; state: 'running' | 'stopped' | 'deleted'; requested_by?: string; requested_at?: string };
-export type VmSpec = {
-  limits: { vms?: number; cpu?: number; memory_mb?: number; host_reserve_mb?: number };
-  sizes: Record<string, { cpu: number; memory_mb: number; disk_gb: number }>;
+/** GET /api/cluster/zone/vms: the VMs requested from the console (files of console-vms-oneke) and their Workspace. */
+export type VmPolicy = {
   images: Record<string, string>;
-  vms: VmRequest[];
+  sizes: Record<string, { cpu: number; memory_mb: number; disk_gb: number }>;
+  limits: { vms?: number; cpu?: number; memory_mb?: number };
 };
-export const useVmRequests = () => useClusterGet<{ spec: VmSpec; allowed: boolean }>('/zone/vms', 60_000);
+export type VmState = { synced?: boolean; ready?: boolean; message?: string; outputs?: Record<string, unknown> };
+export type VmRequest = { zone: string; program: string; name: string; size: string; image: string; requested_by?: string; requested_at?: string; state?: VmState };
+export const useVmRequests = () => useClusterGet<{ policy: VmPolicy; vms: VmRequest[]; allowed: boolean }>('/zone/vms', 30_000);
+
+/** Where a VM is, in words: from its Workspace (Argo CD → Crossplane → Terraform → OpenNebula). */
+export function vmStatus(v: VmRequest): { label: string; tone: 'ok' | 'warn' | 'bad' | 'info' | 'off'; detail: string } {
+  const s = v.state;
+  if (!s) return { label: 'In git', tone: 'info', detail: 'waiting for Argo CD to sync it' };
+  if (s.synced === false) return { label: 'Failed', tone: 'bad', detail: s.message ?? 'Crossplane could not apply it' };
+  if (s.ready) {
+    const ip = s.outputs?.ip ? String(s.outputs.ip) : '';
+    return { label: 'Running', tone: 'ok', detail: ip ? `address ${ip}` : '' };
+  }
+  return { label: 'Creating', tone: 'info', detail: s.message ?? 'Terraform is creating it in OpenNebula' };
+}

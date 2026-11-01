@@ -5,7 +5,7 @@ import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
-import { refuse, VmFile, type VmRequest, type VmSpec } from './clusterVms';
+import { GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
@@ -108,10 +108,11 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *                               entity, as its owner when console.actions.owners), and the last actions
  *   POST /api/cluster/actions/sync     { app }                        sync an Argo CD application with git
  *   POST /api/cluster/actions/restart  { app, namespace, kind, name } restart a workload (Argo CD action)
- *   GET  /api/cluster/zone/vms         { spec, allowed }: the VMs requested from the console (vms.json, opennebula)
+ *   GET  /api/cluster/zone/vms         { policy, vms, allowed }: the VMs requested from the console and their state
  *   POST /api/cluster/zone/vms         { zone, program, name, size, image }  request a VM (backstage-admin)
- *   POST /api/cluster/zone/vms/state   { zone, program, name, state }        stop, start or delete it
- *        The console writes vms.json on main of console.vms.repo; the OpenNebula host applies it every 2 min.
+ *   POST /api/cluster/zone/vms/delete  { zone, program, name }               delete it
+ *        One file per VM in console.vms.dir of console.vms.repo (main): Argo CD syncs console-vms-oneke and
+ *        Crossplane (provider-terraform) creates the VM in OpenNebula; its Workspace says how it goes.
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
  *
  * Config: costs.prometheusUrl (the same Prometheus as the costs). Without it /overview answers 503. /network reads the
@@ -190,14 +191,30 @@ export default createBackendPlugin({
           return { user: info.userEntityRef, allowed: admin || !!owned, admin, owned };
         };
 
-        // the VMs requested from the console: vms.json in the opennebula repository, applied by the host
+        // the VMs requested from the console, as code: files of console-vms-oneke in refresquito-services (main)
         const ghToken = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
-        const vmFile = new VmFile(
-          config.getOptionalString('console.vms.repo') ?? 'javivillar/opennebula',
-          config.getOptionalString('console.vms.path') ?? 'configuration/vms.json',
-          config.getOptionalString('console.vms.branch') ?? 'main',
-          ghToken,
-        );
+        const vmRepo = new GitHubFiles(config.getOptionalString('console.vms.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.vms.branch') ?? 'main', ghToken);
+        const vmChart = config.getOptionalString('console.vms.chart') ?? 'charts/console-vms-oneke';
+        const readRequests = async (): Promise<{ policy: VmPolicy; vms: Array<VmRequest & { file: string; sha: string }> }> => {
+          const [policy, files] = await Promise.all([vmRepo.get(`${vmChart}/policy.json`), vmRepo.list(`${vmChart}/vms`)]);
+          const vms = await Promise.all(
+            files.filter(f => f.name.endsWith('.json')).map(async f => ({ ...(JSON.parse((await vmRepo.get(f.path)).text) as VmRequest), file: f.path, sha: f.sha })),
+          );
+          return { policy: JSON.parse(policy.text) as VmPolicy, vms };
+        };
+        const readWorkspaces = async () => {
+          if (!kc || !ownNamespace) return new Map<string, ReturnType<typeof workspaceState>>();
+          const custom = kc.makeApiClient(CustomObjectsApi);
+          const list = custom.listNamespacedCustomObject as unknown as (g: string, v: string, ns: string, plural: string) => Promise<unknown>;
+          try {
+            const r = await list.call(custom, 'tf.m.crossplane.io', 'v1beta1', ownNamespace, 'workspaces');
+            const workspaces = items<Parameters<typeof workspaceState>[0]>(r);
+            return new Map(workspaces.filter(w => w.metadata.labels?.['refresquito.io/console-vm'] === 'true').map(w => [w.metadata.name, workspaceState(w)]));
+          } catch {
+            return new Map<string, ReturnType<typeof workspaceState>>();
+          }
+        };
+
         /** The zone as the host publishes it (cached 1 min); undefined while it has not published topology.json. */
         const readZone = async (): Promise<ZoneView | undefined> => {
           if (!kc || !ownNamespace) return undefined;
@@ -407,13 +424,17 @@ export default createBackendPlugin({
         router.get('/zone/vms', async (req, res) => {
           try {
             const { admin } = await actor(req);
-            const { spec } = await vmFile.read();
-            res.json({ spec: { limits: spec.limits, sizes: spec.sizes, images: spec.images, vms: spec.vms }, allowed: admin });
+            const [{ policy, vms }, states] = await Promise.all([readRequests(), readWorkspaces()]);
+            res.json({
+              policy,
+              allowed: admin,
+              vms: vms.map(({ sha: _sha, file: _file, ...v }) => ({ ...v, state: states.get(`vm-${v.zone}-${v.program}-${v.name}`) })),
+            });
           } catch (e) {
             res.status(502).json({ error: (e as Error).message });
           }
         });
-        const vmChange = (path: string, change: (body: Record<string, string>, user: string, now: string, programs: string[]) => (spec: VmSpec) => string) =>
+        const vmAction = (path: string, run: (b: Record<string, string>, user: string) => Promise<string>) =>
           router.post(path, async (req, res) => {
             let who: Awaited<ReturnType<typeof actor>>;
             try {
@@ -423,41 +444,38 @@ export default createBackendPlugin({
               return;
             }
             if (!who.admin) {
-              res.status(403).json({ error: `Only ${groups.join(', ')} can create or change VMs.` });
+              res.status(403).json({ error: `Only ${groups.join(', ')} can create or delete VMs.` });
               return;
             }
             try {
-              const { spec, sha } = await vmFile.read();
               const body = Object.fromEntries(Object.entries(req.body ?? {}).map(([k, v]) => [k, String(v)]));
-              const message = change(body, who.user, new Date().toISOString(), await zonePrograms())(spec);
+              const message = await run(body, who.user);
               if (message.startsWith('!')) {
                 res.status(400).json({ error: message.slice(1) });
                 return;
               }
-              await vmFile.write(spec, sha, `${message} (by ${who.user}, from the console)`);
               record({ at: new Date().toISOString(), user: who.user, action: 'vm', target: message, result: 'done' });
               res.json({ ok: true });
             } catch (e) {
               res.status(502).json({ error: (e as Error).message });
             }
           });
-        vmChange('/zone/vms', (b, user, now, programs) => spec => {
-          const v = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image };
-          const no = refuse(spec, v, programs);
+        vmAction('/zone/vms', async (b, user) => {
+          const v: VmRequest = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image, requested_by: user, requested_at: new Date().toISOString() };
+          const { policy, vms } = await readRequests();
+          const no = refuse(policy, vms, v, await zonePrograms());
           if (no) return `!${no}`;
-          // a request deleted before can be asked again: the old entry goes
-          spec.vms = spec.vms.filter(x => !(x.zone === v.zone && x.program === v.program && x.name === v.name));
-          spec.vms.push({ ...v, state: 'running', requested_by: user, requested_at: now });
-          return `console: create VM ${v.name} in ${v.zone}/${v.program} (${v.size}, ${v.image})`;
+          const message = `console: create VM ${v.name} in ${v.zone}/${v.program} (${v.size}, ${v.image})`;
+          await vmRepo.put(`${vmChart}/vms/${vmFileName(v)}`, `${JSON.stringify(v, null, 2)}\n`, `${message} (by ${user})`);
+          return message;
         });
-        vmChange('/zone/vms/state', b => spec => {
-          const state = b.state as VmRequest['state'];
-          if (!['running', 'stopped', 'deleted'].includes(state)) return '!state is running, stopped or deleted';
-          const v = spec.vms.find(x => x.zone === b.zone && x.program === b.program && x.name === b.name);
+        vmAction('/zone/vms/delete', async (b, user) => {
+          const { vms } = await readRequests();
+          const v = vms.find(x => x.zone === b.zone && x.program === b.program && x.name === b.name);
           if (!v) return `!There is no VM ${b.name} in ${b.zone}/${b.program}.`;
-          v.state = state;
-          const verb = { running: 'start', stopped: 'stop', deleted: 'delete' }[state];
-          return `console: ${verb} VM ${v.name} in ${v.zone}/${v.program}`;
+          const message = `console: delete VM ${v.name} in ${v.zone}/${v.program}`;
+          await vmRepo.remove(v.file, v.sha, `${message} (by ${user})`);
+          return message;
         });
 
         httpRouter.use(router);

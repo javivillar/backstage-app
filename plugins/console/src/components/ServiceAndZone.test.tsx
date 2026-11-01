@@ -27,7 +27,6 @@ const answers: Record<string, unknown> = {
     warnings: [],
     host: { name: 'refresquito', cpus: 16, memoryGiB: 62.5, availableGiB: 21.9, interfaces: [] },
     drift: [{ zone: 'nato', program: 'sirtap', kind: 'security group', name: 'sg-pub', detail: 'rule not in the design: inbound TCP 8443 anywhere' }],
-    consoleVms: { applied: '2026-11-01T12:00:00Z', vms: [{ zone: 'nato', program: 'sirtap', name: 'tools', state: 'waiting', detail: 'the host has 9000 MiB available' }] },
     zones: [
       {
         name: 'nato',
@@ -51,19 +50,19 @@ const answers: Record<string, unknown> = {
   },
 };
 const posts: Array<{ url: string; body: unknown }> = [];
-const vmSpec = {
-  limits: { vms: 2, cpu: 4, memory_mb: 8192, host_reserve_mb: 8192 },
+const vmPolicy = {
+  limits: { vms: 2, cpu: 4, memory_mb: 8192 },
   sizes: { small: { cpu: 1, memory_mb: 2048, disk_gb: 20 } },
   images: { 'ubuntu-22.04-cis': 'oneke-cis-1.33-ubuntu2204-0.1.2' },
-  vms: [{ zone: 'nato', program: 'sirtap', name: 'tools', size: 'small', image: 'ubuntu-22.04-cis', state: 'running', requested_by: 'user:default/javi' }],
 };
+const vmList = [{ zone: 'nato', program: 'sirtap', name: 'tools', size: 'small', image: 'ubuntu-22.04-cis', requested_by: 'user:default/javi', state: { synced: false, message: 'quota exceeded' } }];
 const fetchFake = async (url: RequestInfo | URL, init?: RequestInit) => {
   const u = String(url);
   if (init?.method === 'POST') {
     posts.push({ url: u, body: JSON.parse(String(init.body)) });
     return new Response('{"ok":true}');
   }
-  if (u.endsWith('/zone/vms')) return new Response(JSON.stringify({ spec: vmSpec, allowed: true }));
+  if (u.endsWith('/zone/vms')) return new Response(JSON.stringify({ policy: vmPolicy, vms: vmList, allowed: true }));
   const key = Object.keys(answers).find(k => u.includes(k));
   if (u.includes('/opencost/')) {
     const daily = u.includes('accumulate=false');
@@ -137,14 +136,14 @@ describe('zone pages', () => {
     await wrap(<ZoneVmsPage />);
     expect(await screen.findByText('oneke-ip-10-102-101-17')).toBeInTheDocument();
     expect(screen.getByText('vr-nato-0')).toBeInTheDocument();
-    // what the host did with the request
-    expect(await screen.findByText('waiting')).toBeInTheDocument();
-    expect(screen.getByText('the host has 9000 MiB available')).toBeInTheDocument();
+    // what Crossplane says of the request
+    expect(await screen.findByText('Failed')).toBeInTheDocument();
+    expect(screen.getByText('quota exceeded')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create VM' }));
     expect(screen.getByText(/private network of sirtap \(nato-sirtap-pub|private network of sirtap/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'builder' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request the VM' }));
     await waitFor(() => expect(posts.find(p => p.url.endsWith('/zone/vms'))?.body).toEqual({ zone: 'nato', program: 'sirtap', name: 'builder', image: 'ubuntu-22.04-cis', size: 'small' }));
-    expect(await screen.findByText(/Requested: the host creates builder/)).toBeInTheDocument();
+    expect(await screen.findByText(/Requested: builder is in git/)).toBeInTheDocument();
   });
 });
