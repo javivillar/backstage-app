@@ -162,7 +162,7 @@ export const PlatformPage = () => {
             <Kpis>
               <Kpi label="Zones enabled" value={`${catalog.filter(c => c.enabled).length} / ${catalog.length}`} sub="the rest are reserved in the catalog" />
               <Kpi label="Programmes" value={String(programmes)} sub={`${catalog.reduce((t, c) => t + c.programs.filter(p => p.cluster).length, 0)} with a Kubernetes cluster`} />
-              <Kpi label="Memory free for VMs" value={gb(view.capacity?.freeMemoryMb)} sub={`OpenNebula keeps ${gb(view.capacity?.reservedMemoryMb)} of every host`} />
+              <Kpi label="Memory a new VM can get" value={gb(view.capacity?.freeMemoryMb)} sub={`after the ${gb(view.capacity?.reservedMemoryMb)} OpenNebula keeps free on every host`} />
               <Kpi label="Hosts" value={view.host ? `${view.host.cpus ?? '?'} CPU · ${view.host.memoryGiB ?? '?'} GiB` : '—'} sub={view.host?.name} />
             </Kpis>
             <Card title="Zones and segregations" sub="One lane per classification zone; each programme has its own public and private networks, security groups, group and VDC. Open a programme to see them, or to remove it.">

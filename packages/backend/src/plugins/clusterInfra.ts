@@ -154,3 +154,26 @@ export function scaleCluster(view: ZoneView, file: ClusterFile | undefined, req:
   }
   return { ...(file ?? { zone: req.zone, program: req.program }), workers: req.workers, storage: req.storage, ...(masters !== now.master || file?.masters !== undefined ? { masters } : {}), requested_by: user, requested_at: new Date().toISOString() };
 }
+
+export const ACTION_KINDS = ['vm-poweroff', 'vm-resume', 'vm-reboot', 'cluster-stop', 'cluster-start', 'cluster-restart'] as const;
+export type ActionKind = (typeof ACTION_KINDS)[number];
+export type ActionFile = { kind: ActionKind; zone: string; program: string; vm?: string; requested_by: string; requested_at: string };
+
+/** A one-off operation (file of configuration/actions, run once by the host), or why not. vms: names of console VMs. */
+export function actionRequest(view: ZoneView, admins: string[], vms: Array<{ zone: string; program: string; name: string }>, b: { kind: string; zone: string; program: string; vm?: string }, user: string): { file: string; body: ActionFile } | string {
+  if (!(ACTION_KINDS as readonly string[]).includes(b.kind)) return `The action is one of ${ACTION_KINDS.join(', ')}.`;
+  const kind = b.kind as ActionKind;
+  const id = `${b.zone}/${b.program}`;
+  const live = view.zones.find(z => z.name === b.zone)?.programs.find(p => p.name === b.program);
+  if (!live) return `There is no programme ${id}.`;
+  if (kind.startsWith('vm-')) {
+    if (!b.vm || !vms.some(v => v.zone === b.zone && v.program === b.program && v.name === b.vm)) return `There is no VM ${b.vm ?? ''} of the console in ${id}.`;
+  } else {
+    if (!live.cluster) return `There is no cluster in ${id}.`;
+    if (kind === 'cluster-stop' && admins.includes(id)) return `${id} is the cluster of this console: it can be restarted, not stopped, from here.`;
+  }
+  const at = new Date().toISOString();
+  const stamp = at.replace(/[-:]/g, '').replace(/\..*$/, '');
+  const file = `${stamp}-${kind}-${b.zone}-${b.program}${b.vm ? `-${b.vm}` : ''}.json`;
+  return { file, body: { kind, zone: b.zone, program: b.program, ...(b.vm ? { vm: b.vm } : {}), requested_by: user, requested_at: at } };
+}

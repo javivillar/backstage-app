@@ -12,6 +12,8 @@ import {
   ServiceCosts,
   ServiceOverview,
   ServiceSecurity,
+  ConsoleEntityLayout,
+  EntityDependenciesContent,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
@@ -142,6 +144,9 @@ import { DEPLOYMENT_FILE_ANNOTATION, REPOSITORY_ANNOTATION, SLUG_ANNOTATION } fr
 const hasGithubSlug = (e: Entity) => Boolean(e.metadata.annotations?.[SLUG_ANNOTATION]);
 const hasRepository = (e: Entity) => Boolean(e.metadata.annotations?.[REPOSITORY_ANNOTATION]);
 const hasDeploymentFile = (e: Entity) => Boolean(e.metadata.annotations?.[DEPLOYMENT_FILE_ANNOTATION]);
+
+/** The layout of an entity page: the classic EntityLayout, or the console's grouped tab bar (same Route children). */
+type PageLayout = typeof EntityLayout;
 
 // CSS grid layout helpers (replaces MUI Grid)
 const grid12: CSSProperties = {
@@ -416,8 +421,8 @@ const qualityContent = (
   </div>
 );
 
-const serviceEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
-  <EntityLayout>
+const serviceEntityPageWith = (extra?: ReactNode, overview?: ReactElement, Layout: PageLayout = EntityLayout) => (
+  <Layout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overview ?? overviewContent}
     </EntityLayout.Route>
@@ -495,11 +500,11 @@ const serviceEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
       <EntitySupportContent />
     </EntityLayout.Route>
     {extra}
-  </EntityLayout>
+  </Layout>
 );
 
-const websiteEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
-  <EntityLayout>
+const websiteEntityPageWith = (extra?: ReactNode, overview?: ReactElement, Layout: PageLayout = EntityLayout) => (
+  <Layout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overview ?? overviewContent}
     </EntityLayout.Route>
@@ -553,7 +558,7 @@ const websiteEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
       <EntityDatahubContent />
     </EntityLayout.Route>
     {extra}
-  </EntityLayout>
+  </Layout>
 );
 
 const resourceGroupPage = (
@@ -596,8 +601,8 @@ const resourceGroupPage = (
   </EntityLayout>
 );
 
-const defaultEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
-  <EntityLayout>
+const defaultEntityPageWith = (extra?: ReactNode, overview?: ReactElement, Layout: PageLayout = EntityLayout) => (
+  <Layout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
       {overview ?? overviewContent}
     </EntityLayout.Route>
@@ -627,19 +632,19 @@ const defaultEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
       <EntitySupportContent />
     </EntityLayout.Route>
     {extra}
-  </EntityLayout>
+  </Layout>
 );
 const defaultEntityPage = defaultEntityPageWith();
 
-const componentPageWith = (extra?: ReactNode, overview?: ReactElement) => (
+const componentPageWith = (extra?: ReactNode, overview?: ReactElement, Layout: PageLayout = EntityLayout) => (
   <EntitySwitch>
     <EntitySwitch.Case if={isComponentType('service')}>
-      {serviceEntityPageWith(extra, overview)}
+      {serviceEntityPageWith(extra, overview, Layout)}
     </EntitySwitch.Case>
     <EntitySwitch.Case if={isComponentType('website')}>
-      {websiteEntityPageWith(extra, overview)}
+      {websiteEntityPageWith(extra, overview, Layout)}
     </EntitySwitch.Case>
-    <EntitySwitch.Case>{defaultEntityPageWith(extra, overview)}</EntitySwitch.Case>
+    <EntitySwitch.Case>{defaultEntityPageWith(extra, overview, Layout)}</EntitySwitch.Case>
   </EntitySwitch>
 );
 
@@ -781,9 +786,9 @@ const domainPage = (
   </EntityLayout>
 );
 
-const entityPageWith = (componentExtra?: ReactNode, componentOverview?: ReactElement) => (
+const entityPageWith = (componentExtra?: ReactNode, componentOverview?: ReactElement, Layout: PageLayout = EntityLayout) => (
   <EntitySwitch>
-    <EntitySwitch.Case if={isKind('component')} children={componentPageWith(componentExtra, componentOverview)} />
+    <EntitySwitch.Case if={isKind('component')} children={componentPageWith(componentExtra, componentOverview, Layout)} />
     <EntitySwitch.Case if={isKind('api')} children={apiPage} />
     <EntitySwitch.Case if={isKind('group')} children={groupPage} />
     <EntitySwitch.Case if={isKind('user')} children={userPage} />
@@ -802,7 +807,18 @@ export const entityPage = entityPageWith();
 /** In the console, a component that says its namespace gets the console's own Overview; any other, the classic one. */
 const ConsoleOverview = () => {
   const { entity } = useEntity();
-  return hasNamespace(entity) ? <ServiceOverview /> : overviewContent;
+  if (!hasNamespace(entity)) return overviewContent;
+  // the cards that read their own data stay as they are, inside the console's Overview
+  return (
+    <ServiceOverview
+      slots={{
+        availability: <EntityAvailabilityCard />,
+        argo: isArgocdAvailable(entity) ? <EntityArgoCDOverviewCard /> : undefined,
+        serviceMetadata: hasServiceMetadata(entity) ? <EntityServiceMetadataCard /> : undefined,
+        datahub: isDatahubAvailable(entity) ? <EntityDatahubCard /> : undefined,
+      }}
+    />
+  );
 };
 
 /**
@@ -818,6 +834,9 @@ export const consoleEntityPage = entityPageWith(
     <EntityLayout.Route path="/network" title={tabLabel(<Lan />, 'Network')} if={hasNamespace}>
       <EntityNetworkContent />
     </EntityLayout.Route>
+    <EntityLayout.Route path="/dependencies" title={tabLabel(<Hub />, 'Dependencies')}>
+      <EntityDependenciesContent />
+    </EntityLayout.Route>
     <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
       <EntityUserJourneyContent />
     </EntityLayout.Route>
@@ -832,4 +851,5 @@ export const consoleEntityPage = entityPageWith(
     </EntityLayout.Route>
   </>,
   <ConsoleOverview />,
+  ConsoleEntityLayout as PageLayout,
 );

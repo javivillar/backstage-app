@@ -6,7 +6,7 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
 import { type ConsolePull, GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
-import { addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
+import { actionRequest, addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
@@ -120,6 +120,8 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *   POST /api/cluster/infra/clusters/scale  { zone, program, workers, storage, masters? }  committed directly to main
  *   POST /api/cluster/infra/segregations/delete  { zone, program }                  PR removing the programme (host: destroy)
  *   POST /api/cluster/infra/clusters/delete      { zone, program }                  PR with delete: true (host: cluster-destroy)
+ *   POST /api/cluster/infra/actions  { kind, zone, program, vm? }  one-off: vm-poweroff|resume|reboot, cluster-stop|start|restart
+ *                                     (file of configuration/actions committed to main; the host runs it once)
  *        In console.infra.repo (javivillar/opennebula), console.infra.dir (configuration): the host follows main
  *        (configuration.py reconcile) and applies them. Only console.actions.groups (backstage-admin).
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
@@ -562,6 +564,17 @@ export default createBackendPlugin({
           const pull = await infraRepo.pullRequest(slug, message, `${body(clean, user)}\nOnce merged, the host destroys the cluster within 5 minutes (configuration.py reconcile → cluster-destroy): its VMs and their disks. The segregation stays.\n`,
             [{ path: `${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, text: `${JSON.stringify(clean, null, 2)}\n` }]);
           return { message, pull };
+        });
+
+        adminAction('/infra/actions', 'stop, start or restart VMs and clusters', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const { vms } = await readRequests();
+          const out = actionRequest(view, admins, vms, { kind: b.kind, zone: b.zone, program: b.program, vm: b.vm || undefined }, user);
+          if (typeof out === 'string') return out;
+          const message = `console: ${out.body.kind} ${b.zone}/${b.program}${b.vm ? ` ${b.vm}` : ''}`;
+          await infraRepo.put(`${infraDir}/actions/${out.file}`, `${JSON.stringify(out.body, null, 2)}\n`, `${message} (by ${user})`);
+          return { message };
         });
 
         adminAction('/infra/clusters', 'create Kubernetes clusters', async (b, user) => {

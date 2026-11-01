@@ -11,6 +11,7 @@ import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
 import { ConfirmBar, RequestsTable, ResultNote, useChange } from './Requests';
+import { OpsActions } from './OpsActions';
 import { vmRuns } from './ZonePages';
 
 
@@ -133,6 +134,7 @@ export const ProgrammePage = () => {
                 <Button component={Link} to={`/console/infrastructure/clusters/${zoneName}/${program}`} sx={{ textTransform: 'none' }}>
                   Scale
                 </Button>
+                <OpsActions target={{ zone: zoneName, program }} allowed={!!infra.data?.allowed} own={own} results={view?.reconcile?.actions} onDone={reload} />
               </Box>
             ) : (
               <Typography color="text.secondary">
@@ -197,15 +199,43 @@ function findVm(view: InfraView | undefined, key: string): { vm: ZoneVm; zone: s
 
 const since = (iso?: string) => {
   if (!iso) return '';
-  const h = Math.round((Date.now() - Date.parse(iso)) / 3_600_000);
-  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (m < 120) return `${m} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} days`;
 };
 
-/** Infrastructure › a VM: what OpenNebula says of it and, for a VM of the console, its request and Crossplane. */
+/** A usage tile: what it is, the figure now and, when known, how full it is. */
+const Meter = ({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) => (
+  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 0.5, minWidth: 0 }}>
+    <Typography variant="caption" color="text.secondary">
+      {label}
+    </Typography>
+    <Typography sx={{ fontSize: 20, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+      {value}{' '}
+      {sub && (
+        <Typography component="span" variant="body2" color="text.secondary">
+          {sub}
+        </Typography>
+      )}
+    </Typography>
+    {pct !== undefined && (
+      <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'action.hover', overflow: 'hidden' }}>
+        <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, bgcolor: pct > 85 ? TONES.warn.fg : 'primary.main' }} />
+      </Box>
+    )}
+  </Box>
+);
+
+/** How OpenNebula names the reason a VM left a host (HISTORY ACTION). */
+const HISTORY_ACTIONS: Record<string, string> = { '0': 'ran', '1': 'migrated', '2': 'live migrated', '6': 'stopped', '9': 'powered off', '11': 'rebooted', '20': 'powered off', '21': 'resumed', '23': 'rebooted' };
+
+/** Infrastructure › a VM: usage, how to reach it, network and rules, disks, lifecycle, security, code, quota, actions. */
 export const VmDetailPage = () => {
   const { name = '' } = useParams();
   const { loading, data, error, reload } = useZone();
   const req = useVmRequests();
+  const infra = useInfra();
   const post = useClusterPost();
   const { note, busy, run } = useChange(() => { reload(); req.reload(); });
   const [confirm, setConfirm] = useState(false);
@@ -214,94 +244,200 @@ export const VmDetailPage = () => {
   const request = (req.data?.vms ?? []).find(v => consoleVmName(v) === name);
   const vm = found?.vm;
   const st = request ? vmStatus(request) : undefined;
-  const programPath = found?.program ? `/console/infrastructure/platform/${found.zone}/${found.program}` : undefined;
+  const zoneName = found?.zone ?? request?.zone ?? '';
+  const progName = found?.program ?? request?.program;
+  const prog = view?.zones.find(z => z.name === zoneName)?.programs.find(p => p.name === progName);
+  const programPath = progName ? `/console/infrastructure/platform/${zoneName}/${progName}` : undefined;
+  const policy = req.data?.policy;
+  const size = request ? policy?.sizes[request.size] : undefined;
+  const ip = vm?.ips[0] ?? (request?.state?.outputs?.ip ? String(request.state.outputs.ip) : '');
+  const bastion = prog?.cluster?.vip;
+  const fqdn = view?.domain && progName ? `${name}.${zoneName}.${progName}.${view.domain}` : '';
+  const sg = prog?.securityGroups.find(g => g.role === 'private') ?? prog?.securityGroups.find(g => (vm?.nics ?? []).some(n => n.securityGroups?.split(',').length));
+  const disk = vm?.disks?.[0];
+  const mine = (req.data?.vms ?? []).filter(v => v.zone === zoneName && v.program === progName);
+  const used = { vms: mine.length, cpu: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.cpu ?? 0), 0), mem: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.memory_mb ?? 0), 0) };
+  let ssh = '';
+  if (ip) ssh = bastion ? `ssh -J refresquito@${bastion} refresquito@${ip}` : `ssh refresquito@${ip}`;
+  const pending = vm?.state === 'PENDING';
+  const events: Array<{ at?: string; text: string }> = [];
+  if (request?.requested_at) events.push({ at: request.requested_at, text: `Asked from the console by ${(request.requested_by ?? '').replace(/^user:default\//, '')}: ${request.size}, ${request.image}` });
+  for (const h of vm?.history ?? []) {
+    events.push({ at: h.start, text: `Deployed on ${h.host}` });
+    if (h.end) events.push({ at: h.end, text: `Left ${h.host}: ${HISTORY_ACTIONS[h.action ?? ''] ?? `action ${h.action}`}` });
+  }
+  if (pending) events.push({ text: 'Waiting for room in the hosts (OpenNebula keeps memory free on every host): it starts by itself when there is room' });
+  if (st && st.tone === 'bad') events.push({ text: `Crossplane: ${st.detail}` });
+  events.sort((a, b) => (a.at ?? '9').localeCompare(b.at ?? '9'));
+  const copy = (t: string) => navigator.clipboard?.writeText(t).catch(() => undefined);
   return (
     <Frame
       title={name}
-      back={programPath ? { to: programPath, label: `${found!.zone}/${found!.program}` } : { to: '/console/infrastructure/vms', label: 'Virtual machines' }}
-      sub={vm ? <Badge label={vm.state} {...vmTone(vm.state)} /> : st && <Badge label={st.label} {...TONES[st.tone]} />}
+      back={programPath ? { to: programPath, label: `${zoneName}/${progName}` } : { to: '/console/infrastructure/vms', label: 'Virtual machines' }}
+      sub={
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          {vm && <Badge label={pending ? 'Waiting for room' : vm.state} {...vmTone(pending ? 'PENDING' : vm.state)} />}
+          {!vm && st && <Badge label={st.label} {...TONES[st.tone]} />}
+          {(vm?.console || request) && <Badge label="console VM" {...TONES.info} />}
+          <span>
+            {[request ? `${request.image} · ${request.size}` : '', progName ? `programme ${zoneName}/${progName}` : '', vm ? `OpenNebula ID ${vm.id}` : ''].filter(Boolean).join(' · ')}
+          </span>
+        </Box>
+      }
     >
       {(loading || req.loading) && !view && <Progress />}
       {error && <WarningPanel title="The zone could not be read" message={error} />}
       {view && !vm && !request && <WarningPanel severity="info" title="Not found" message={`There is no VM ${name} in the topology the host publishes (every 5 minutes).`} />}
-      {vm && (
+      {(vm || request) && (
         <>
-          <Card title="Summary">
-            <Facts
-              items={[
-                ['OpenNebula ID', vm.id],
-                ['State', vm.state],
-                ['Role', vm.role],
-                ['Host', vm.host],
-                ['vCPU', `${vm.vcpu ?? '?'}${vm.cpuReserved ? ` (${vm.cpuReserved} reserved)` : ''}`],
-                ['Memory', vm.memoryGb !== undefined ? `${vm.memoryGb} GB` : ''],
-                ['Started', vm.started ? `${new Date(vm.started).toLocaleString()} (${since(vm.started)})` : ''],
-                ['CPU now', vm.cpuPct !== undefined ? `${vm.cpuPct} %` : ''],
-                ['Memory used', vm.memoryUsedGb !== undefined ? `${vm.memoryUsedGb} GB` : ''],
-              ]}
-            />
-          </Card>
-          <Card title="Network interfaces">
-            <Table
-              head={['Network', 'Address', 'MAC', 'Security groups']}
-              rows={(vm.nics ?? vm.ips.map(ip => ({ network: '', ip }))).map(n => [n.network, n.ip, (n as { mac?: string }).mac ?? '', (n as { securityGroups?: string }).securityGroups ?? ''])}
-            />
-          </Card>
-          <Card title="Disks">
-            {(vm.disks ?? []).length === 0 ? (
-              <Typography color="text.secondary">Not published by the host (older topology).</Typography>
-            ) : (
-              <Table head={['Device', 'Image', 'Size', 'Datastore']} rows={(vm.disks ?? []).map(d => [d.target ?? '', d.image, d.sizeMb ? `${Math.round(d.sizeMb / 1024)} GB` : '', d.datastore ?? ''])} />
-            )}
-          </Card>
-          <Card title="Ownership">
-            <Facts
-              items={[
-                ['Owner', vm.owner],
-                ['Group', vm.group],
-                ['Created by the console', vm.console ? 'yes' : 'no'],
-                ['Asked by', (vm.requestedBy ?? request?.requested_by ?? '').replace(/^user:default\//, '')],
-                ['Labels', vm.labels],
-              ]}
-            />
-          </Card>
-        </>
-      )}
-      {request && (
-        <Card title="Request of the console" sub="As code in git (console-vms-oneke); Crossplane creates it with Terraform, and its Workspace says how it goes.">
-          <Facts
-            items={[
-              ['Programme', `${request.zone}/${request.program}`],
-              ['Size', request.size],
-              ['Image', request.image],
-              ['Asked', request.requested_at ? new Date(request.requested_at).toLocaleString() : ''],
-              ['Crossplane', st ? <Badge label={st.label} {...TONES[st.tone]} /> : ''],
-            ]}
-          />
-          {st?.detail && (
-            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
-              {st.detail}
-            </Typography>
-          )}
-          {req.data?.allowed && (
-            <Box>
-              <Button variant="outlined" color="error" disabled={busy} onClick={() => setConfirm(true)} sx={{ textTransform: 'none' }}>
-                Delete this VM
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+            {ssh && (
+              <Button size="small" variant="outlined" onClick={() => copy(ssh)} sx={{ textTransform: 'none' }}>
+                Copy SSH command
               </Button>
-            </Box>
-          )}
-          {confirm && (
-            <ConfirmBar
-              text={`Delete ${request.name}? A pull request removes its file; once merged, Crossplane destroys the VM and its disk.`}
-              onYes={() => {
-                setConfirm(false);
-                run(() => post('/zone/vms/delete', { zone: request.zone, program: request.program, name: request.name }), a => `Pull request #${a.pull?.number} opened: once merged, Crossplane destroys ${request.name}.`);
-              }}
-              onNo={() => setConfirm(false)}
+            )}
+            {request && (
+              <OpsActions target={{ zone: request.zone, program: request.program, vm: request.name }} allowed={!!req.data?.allowed} results={view?.reconcile?.actions} onDone={reload} />
+            )}
+          </Box>
+          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))' }}>
+            <Meter label={`CPU · ${vm?.vcpu ?? size?.cpu ?? '?'} vCPU${vm?.cpuReserved ? ` (${vm.cpuReserved} reserved)` : ''}`} value={vm?.cpuPct !== undefined ? `${vm.cpuPct} %` : '—'} sub="now" pct={vm?.cpuPct} />
+            <Meter
+              label={`Memory · ${vm?.memoryGb ?? (size ? size.memory_mb / 1024 : '?')} GB`}
+              value={vm?.memoryUsedGb !== undefined ? `${vm.memoryUsedGb} GB` : '—'}
+              sub="used"
+              pct={vm?.memoryUsedGb !== undefined && vm.memoryGb ? (vm.memoryUsedGb / vm.memoryGb) * 100 : undefined}
             />
-          )}
-          <ResultNote note={note} />
-        </Card>
+            <Meter label={`Disk · ${disk ? Math.round(disk.sizeMb / 1024) : size?.disk_gb ?? '?'} GB`} value={disk?.image ?? request?.image ?? '—'} />
+            <Meter label="Network since it started" value={vm?.netRxMb !== undefined ? `${vm.netRxMb} MB in` : '—'} sub={vm?.netTxMb !== undefined ? `${vm.netTxMb} MB out` : undefined} />
+          </Box>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(460px, 100%), 1fr))', alignItems: 'start' }}>
+            <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
+              <Card title="Summary">
+                <Facts
+                  items={[
+                    ['Name in DNS', fqdn],
+                    ['Private address', ip],
+                    ['Host', vm?.host],
+                    ['Started', vm?.started ? `${new Date(vm.started).toLocaleString()} · up ${since(vm.started)}` : ''],
+                    ['Owner · group', vm ? `${vm.owner ?? '?'} · ${vm.group ?? '?'}` : ''],
+                    ['Labels', vm?.labels],
+                  ]}
+                />
+              </Card>
+              <Card title="How to reach it" sub={bastion ? 'No public address: through the VNF of the programme (its bastion), with your SSH key in OpenNebula.' : 'No public address and no cluster VNF in this programme: from the host, through the zone router.'}>
+                {ssh ? (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1, p: 1, fontFamily: 'monospace', fontSize: 13, overflowX: 'auto' }}>
+                    <Box component="span" sx={{ flex: 1, whiteSpace: 'nowrap' }}>
+                      {ssh}
+                    </Box>
+                    <Button size="small" onClick={() => copy(ssh)} sx={{ textTransform: 'none', flexShrink: 0 }}>
+                      Copy
+                    </Button>
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary">It has no address yet.</Typography>
+                )}
+              </Card>
+              <Card title="Network">
+                <Table
+                  head={['Network', 'Address', 'MAC', 'Security groups']}
+                  rows={(vm?.nics ?? []).map(n => [n.network, n.ip, n.mac ?? '', n.securityGroups ?? ''])}
+                />
+                {sg && (
+                  <>
+                    <Typography variant="body2" color="text.secondary">
+                      What {sg.name} lets through:
+                    </Typography>
+                    <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-line', fontFamily: 'monospace', fontSize: 12.5 }}>
+                      {sg.rules.join('\n') || '—'}
+                    </Typography>
+                  </>
+                )}
+              </Card>
+              <Card title="Disks">
+                {(vm?.disks ?? []).length === 0 ? (
+                  <Typography color="text.secondary">Not published yet (the VM has not been deployed, or an older topology).</Typography>
+                ) : (
+                  <Table head={['Device', 'Image', 'Size', 'Datastore']} rows={(vm?.disks ?? []).map(d => [d.target ?? '', d.image, d.sizeMb ? `${Math.round(d.sizeMb / 1024)} GB` : '', d.datastore ?? ''])} />
+                )}
+              </Card>
+            </Box>
+            <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
+              <Card title="Lifecycle">
+                {events.length === 0 ? (
+                  <Typography color="text.secondary">Nothing yet.</Typography>
+                ) : (
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    {events.map((ev, i) => (
+                      <Box key={i} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 1.5, fontSize: 14 }}>
+                        <span>{ev.text}</span>
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {ev.at ? new Date(ev.at).toLocaleString() : 'now'}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Card>
+              <Card title="Security">
+                <Facts
+                  items={[
+                    ['Image', /cis/i.test(request?.image ?? disk?.image ?? '') ? 'CIS-hardened (level 1): the same OS hardening as the cluster nodes' : request?.image ?? disk?.image],
+                    ['Network exposure', 'private network only, behind its security group'],
+                    ['Access', bastion ? 'SSH through the VNF only' : 'from the host'],
+                  ]}
+                />
+              </Card>
+              {request && (
+                <Card title="As code" sub="A file in git (console-vms-oneke) that Crossplane turns into the VM with Terraform.">
+                  <Facts
+                    items={[
+                      ['File', `charts/console-vms-oneke/vms/${request.zone}-${request.program}-${request.name}.json`],
+                      ['Crossplane', st ? <Badge label={st.label} {...TONES[st.tone]} /> : ''],
+                      ['Outputs', request.state?.outputs ? Object.entries(request.state.outputs).map(([k, v]) => `${k} ${String(v)}`).join(' · ') : ''],
+                    ]}
+                  />
+                  {st?.tone === 'bad' && st.detail && (
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
+                      {st.detail}
+                    </Typography>
+                  )}
+                  {req.data?.allowed && (
+                    <Box>
+                      <Button variant="outlined" color="error" disabled={busy} onClick={() => setConfirm(true)} sx={{ textTransform: 'none' }}>
+                        Delete this VM
+                      </Button>
+                    </Box>
+                  )}
+                  {confirm && (
+                    <ConfirmBar
+                      text={`Delete ${request.name}? A pull request removes its file; once merged, Crossplane destroys the VM and its disk.`}
+                      onYes={() => {
+                        setConfirm(false);
+                        run(() => post('/zone/vms/delete', { zone: request.zone, program: request.program, name: request.name }), a => `Pull request #${a.pull?.number} opened: once merged, Crossplane destroys ${request.name}.`);
+                      }}
+                      onNo={() => setConfirm(false)}
+                    />
+                  )}
+                  <ResultNote note={note} />
+                </Card>
+              )}
+              {request && policy && (
+                <Card title="Quota of the programme" sub={`What ${request.zone}/${request.program} uses of the limits of console VMs.`}>
+                  <Facts
+                    items={[
+                      ['VMs', `${used.vms} of ${policy.limits.vms ?? '—'}`],
+                      ['CPU', `${used.cpu} of ${policy.limits.cpu ?? '—'}`],
+                      ['Memory', `${used.mem / 1024} of ${policy.limits.memory_mb ? policy.limits.memory_mb / 1024 : '—'} GB`],
+                    ]}
+                  />
+                </Card>
+              )}
+              {infra.data && !request && <Typography color="text.secondary">Not a VM of the console: it is managed by OneFlow or by hand.</Typography>}
+            </Box>
+          </Box>
+        </>
       )}
     </Frame>
   );

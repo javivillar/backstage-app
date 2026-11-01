@@ -1,4 +1,4 @@
-import { addSegregation, deleteCluster, enableZone, refuseCluster, removeSegregation, scaleCluster, tomlPrograms, withoutProgram } from './clusterInfra';
+import { actionRequest, addSegregation, deleteCluster, enableZone, refuseCluster, removeSegregation, scaleCluster, tomlPrograms, withoutProgram } from './clusterInfra';
 import type { ZoneView } from './clusterZone';
 
 const TOML = `[general]
@@ -113,5 +113,17 @@ describe('infrastructure as code from the console', () => {
     expect(scaleCluster(view(), undefined, { ...ask, masters: 1 }, 'u')).toMatch(/etcd/);
     expect(scaleCluster(view(), undefined, { ...ask, masters: 9 }, 'u')).toMatch(/Masters/);
     expect(scaleCluster(view(1000), undefined, { ...ask, masters: 3 }, 'u')).toMatch(/memory/);
+  });
+
+  it('asks one-off operations, never stopping the cluster of the console', () => {
+    const vms = [{ zone: 'nato', program: 'a400m', name: 'tools' }];
+    const ok = actionRequest(view(), ['nato/sirtap'], vms, { kind: 'vm-reboot', zone: 'nato', program: 'a400m', vm: 'tools' }, 'u');
+    expect(ok).toMatchObject({ body: { kind: 'vm-reboot', zone: 'nato', program: 'a400m', vm: 'tools', requested_by: 'u' } });
+    expect((ok as { file: string }).file).toMatch(/-vm-reboot-nato-a400m-tools\.json$/);
+    expect(actionRequest(view(), ['nato/sirtap'], vms, { kind: 'cluster-stop', zone: 'nato', program: 'sirtap' }, 'u')).toMatch(/restarted, not stopped/);
+    expect(actionRequest(view(), ['nato/sirtap'], vms, { kind: 'cluster-restart', zone: 'nato', program: 'sirtap' }, 'u')).toHaveProperty('file');
+    expect(actionRequest(view(), [], vms, { kind: 'vm-reboot', zone: 'nato', program: 'a400m', vm: 'other' }, 'u')).toMatch(/no VM/);
+    expect(actionRequest(view(), [], vms, { kind: 'cluster-start', zone: 'nato', program: 'a400m' }, 'u')).toMatch(/no cluster/);
+    expect(actionRequest(view(), [], vms, { kind: 'rm', zone: 'nato', program: 'a400m' }, 'u')).toMatch(/one of/);
   });
 });

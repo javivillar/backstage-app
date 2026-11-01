@@ -20,6 +20,7 @@ import { MarketplacePage, PlatformPage } from './InfraPages';
 import { ClusterScalePage } from './ClusterScalePage';
 import { ProgrammePage, VmDetailPage } from './InfraDetail';
 import { CisClusterPage } from './CisClusterPage';
+import { ManageHubPage, ManageServicePage } from './ManagePages';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { PortalHome } from './PortalHome';
@@ -80,6 +81,8 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/cluster" element={<ClusterOverviewPage />} />
         <Route path="/cluster/scale" element={<ClusterScalePage />} />
         <Route path="/cis-cluster" element={<CisClusterPage />} />
+        <Route path="/manage" element={<ManageHubPage />} />
+        <Route path="/manage/:id" element={<ManageServicePage />} />
         <Route path="/network" element={<NetworkPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/storage" element={<StoragePage />} />
