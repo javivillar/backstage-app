@@ -37,6 +37,8 @@ describe('ImagesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
     expect(within(table).getByText('common/grafana')).toBeInTheDocument();
     expect(within(table).getByText('platform')).toBeInTheDocument();
+    // asking for an image: the template that opens the pull request in opennebula
+    expect(screen.getByRole('button', { name: 'Request an image' })).toHaveAttribute('href', '/create/templates/default/harbor-request-image');
   });
 
   it('filters by text', async () => {

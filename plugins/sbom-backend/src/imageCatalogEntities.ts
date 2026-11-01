@@ -52,6 +52,7 @@ export function entitiesOf(view: ImageCatalogView, appBaseUrl: string): Entity[]
       links: [
         { url: view.harbor, title: 'Harbor', icon: 'web' },
         { url: `${app}/images`, title: 'Images', icon: 'catalog' },
+        { url: `${app}/create/templates/default/harbor-request-image`, title: 'Request a new image', icon: 'add' },
       ],
     },
     spec: { type: 'service', lifecycle: 'production', owner: 'platform-team', system: IMAGE_SYSTEM },
