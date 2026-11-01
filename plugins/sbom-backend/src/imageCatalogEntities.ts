@@ -6,6 +6,10 @@ import { ImageCatalogService, ImageCatalogView, ImageView } from './imageCatalog
 import { imageCatalogFromConfig } from './imageCatalogConfig';
 
 export const IMAGE_SYSTEM = 'image-catalog';
+export const HARBOR_COMPONENT = 'harbor';
+/** The namespace the alerts of the images name (observability-oneke, group platform-images): Harbor runs on the
+ * host, not in a namespace, so this is a name of our own, the element support opens their incident on. */
+export const HARBOR_NAMESPACE = 'harbor';
 export const ANNOTATION_HARBOR_REPOSITORY = 'refresquito.io/harbor-repository';
 
 /** A catalog name: lower case letters, digits and '-', at most 63 characters. */
@@ -34,7 +38,25 @@ export function entitiesOf(view: ImageCatalogView, appBaseUrl: string): Entity[]
     },
     spec: { owner: 'platform-team' },
   };
-  return [system, ...view.images.map(i => resourceOf(i, managed, app))];
+  // Harbor itself, as a Component: support makes elements of Components only, and the alerts of the curated images
+  // (end of life, open critical CVEs, quarantine, signature, catalog too old) name it with namespace "harbor".
+  const harbor: Entity = {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'Component',
+    metadata: {
+      name: HARBOR_COMPONENT,
+      title: 'Harbor',
+      description: 'The container registry of the zone: the curated images, their quarantine, gate and signature of Refresquito.',
+      annotations: { ...managed, 'refresquito.io/namespace': HARBOR_NAMESPACE },
+      tags: ['registry', 'supply-chain'],
+      links: [
+        { url: view.harbor, title: 'Harbor', icon: 'web' },
+        { url: `${app}/images`, title: 'Images', icon: 'catalog' },
+      ],
+    },
+    spec: { type: 'service', lifecycle: 'production', owner: 'platform-team', system: IMAGE_SYSTEM },
+  };
+  return [system, harbor, ...view.images.map(i => resourceOf(i, managed, app))];
 }
 
 function resourceOf(image: ImageView, managed: Record<string, string>, app: string): Entity {
@@ -103,7 +125,7 @@ export class ImageCatalogEntityProvider implements EntityProvider {
       type: 'full',
       entities: entities.map(entity => ({ entity, locationKey: this.getProviderName() })),
     });
-    this.logger.info(`image catalog: ${entities.length - 1} images in the catalog (published catalog: ${view.catalog?.published})`);
+    this.logger.info(`image catalog: ${entities.length - 2} images in the catalog (published catalog: ${view.catalog?.published})`);
   }
 }
 
