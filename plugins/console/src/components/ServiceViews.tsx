@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import { type ReactNode, useState } from 'react';
+import { Fragment, type ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActions } from '../actions';
 import { totals, useNamespaceChanges } from '../entityData';
@@ -282,7 +282,53 @@ const DayBars = ({ days }: { days: number[] }) => {
 };
 
 /** The Overview of a service in the console: how it is reached, what needs attention, changes, what it is built on, cost, data. */
-export const ServiceOverview = () => {
+/** Cards of the app the console shows in the Overview as they are (they read their own data): availability, Argo CD… */
+export type OverviewSlots = { availability?: ReactNode; argo?: ReactNode; serviceMetadata?: ReactNode; datahub?: ReactNode };
+
+/** Everything the catalog says of the entity, in one card: who owns it, what it is, where it runs, its links. */
+const AboutSection = ({ e, hosts }: { e: Entity; hosts: string[] }) => {
+  const s = spec(e);
+  const ann = e.metadata.annotations ?? {};
+  const labels = e.metadata.labels ?? {};
+  const source = ann['backstage.io/source-location']?.replace(/^url:/, '');
+  const repo = source?.match(/github\.com\/([^/]+\/[^/]+)/)?.[1];
+  const rows: Array<[string, ReactNode]> = [
+    ['Owner', s.owner?.replace(/^group:(default\/)?/, '') ?? '—'],
+    ['System', s.system ?? '—'],
+    ['Type · lifecycle', `${s.type ?? '—'} · ${s.lifecycle ?? '—'}`],
+    ['Namespace · segment', `${ann['refresquito.io/namespace'] ?? '—'}${labels['refresquito.io/segment'] ? ` · ${labels['refresquito.io/segment']}` : ''}`],
+  ];
+  if (ann['refresquito.io/framework']) rows.push(['Framework', ann['refresquito.io/framework']]);
+  if (repo) rows.push(['Repository', <a href={source} target="_blank" rel="noreferrer" style={{ color: rq.primary }}>{repo}</a>]);
+  if (hosts.length) rows.push(['Address', hosts.join(', ')]);
+  if (ann['refresquito.io/license']) rows.push(['Licence', ann['refresquito.io/license']]);
+  if (ann['refresquito.io/sla-availability']) rows.push(['Availability objective', `${ann['refresquito.io/sla-availability']} %`]);
+  return (
+    <Section title="About" sub={e.metadata.description}>
+      <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '4px 16px', m: 0, fontSize: 14 }}>
+        {rows.map(([k, v]) => (
+          <Fragment key={k}>
+            <Box component="dt" sx={{ color: 'text.secondary' }}>
+              {k}
+            </Box>
+            <Box component="dd" sx={{ m: 0, overflowWrap: 'anywhere', fontFamily: k === 'Address' || k === 'Namespace · segment' ? 'monospace' : undefined, fontSize: k === 'Address' ? 12.5 : undefined }}>
+              {v}
+            </Box>
+          </Fragment>
+        ))}
+      </Box>
+      {(e.metadata.tags ?? []).length > 0 && (
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+          {(e.metadata.tags ?? []).map(t => (
+            <Badge key={t} label={t} outlined />
+          ))}
+        </Box>
+      )}
+    </Section>
+  );
+};
+
+export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
   const d = useService();
   const changes = useNamespaceChanges(d?.namespace);
   const ov = useClusterOverview();
@@ -297,10 +343,17 @@ export const ServiceOverview = () => {
   if (d.live) pods = [`${ready} / ${d.live.pods.length} pods`, ready === d.live.pods.length ? 'ok' : 'bad'];
   const chips: Array<[string, Tone]> = [['Browser', 'off'], ['VNF · VIP', 'off'], ingress, ['Keycloak', 'ok'], pods];
   const deps = (e.relations ?? []).filter(r => r.type === 'dependsOn').map(r => r.targetRef);
+  const appOf = (name: string) => (ov.data?.apps ?? []).find(a => a.name === name || a.name === `${name}-oneke` || name === `${a.name}-oneke`);
   const volumes = (ov.data?.volumes ?? []).filter(v => v.namespace === d.namespace);
   const ann = e.metadata.annotations ?? {};
   const source = ann['backstage.io/source-location']?.replace(/^url:/, '');
   return (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
+      <AboutSection e={e} hosts={hosts.map(h => h.host)} />
+      {slots.availability && <Box sx={{ minWidth: 0 }}>{slots.availability}</Box>}
+    </Box>
+    {slots.argo && <Box sx={{ minWidth: 0 }}>{slots.argo}</Box>}
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
       <Box sx={{ display: 'grid', gap: 2 }}>
         <Section title="How users reach it now" action={<Link to={`${d.base}/user-journey`}>Every step</Link>}>
@@ -339,14 +392,18 @@ export const ServiceOverview = () => {
         </Section>
       </Box>
       <Box sx={{ display: 'grid', gap: 2 }}>
-        <Section title="Built on" sub="what it depends on, from the catalog">
+        <Section title="Built on" sub="what it depends on, from the catalog, with the state of its Argo CD application" action={<Link to={`${d.base}/dependencies`}>Map</Link>}>
           {deps.length ? (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
               {deps.map(ref => {
                 const [k, rest] = ref.split(':');
                 const [n, name] = rest.split('/');
+                const app = appOf(name);
+                let tone: Tone = 'off';
+                if (app) tone = app.health === 'Healthy' && app.sync === 'Synced' ? 'ok' : 'warn';
                 return (
-                  <Link key={ref} to={`/console/entity/${n}/${k}/${name}`} style={{ background: rq.svc.bg, color: rq.svc.fg, borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+                  <Link key={ref} to={`/console/entity/${n}/${k}/${name}`} title={app ? `${app.sync} · ${app.health}` : 'no Argo CD application'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: rq.svc.bg, color: rq.svc.fg, borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+                    <Dot tone={tone} />
                     {name}
                   </Link>
                 );
@@ -392,6 +449,9 @@ export const ServiceOverview = () => {
           <Link to={`${d.base}/ci-cd`}>CI/CD</Link>
         </Section>
       </Box>
+    </Box>
+    {slots.serviceMetadata && <Box sx={{ minWidth: 0 }}>{slots.serviceMetadata}</Box>}
+    {slots.datahub && <Box sx={{ minWidth: 0 }}>{slots.datahub}</Box>}
     </Box>
   );
 };
