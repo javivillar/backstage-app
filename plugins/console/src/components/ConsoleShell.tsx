@@ -186,7 +186,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: 'New Spring application', to: '/console/development/spring-framework-app', hint: 'Microservices: Spring Boot (Spring Framework)' },
       ],
     });
-    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint, icon: l.icon })) });
+    if (portalLinks.length) groups.push({ title: 'Support', items: portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint, icon: l.icon })) });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
     if (navOf('managers').length)
       groups.push({
