@@ -26,6 +26,22 @@ console header. The app passes its entity page in, so a card added to the classi
 
 Links to other entities (`/catalog/...`) inside those cards stay in the console; "Open in the classic portal" leaves it.
 
+## Classic pages in the console
+
+The app also passes the classic pages the console shows in its menus (create, APIs, dependencies, docs, quality,
+costs; topology, CIS nodes and images in the cluster layer). Each one is the same element as the classic route, shown
+at `/console/<id>` under the console header:
+
+```tsx
+const consolePages: ConsoleClassicPage[] = [
+  { id: 'create', title: 'Create', layer: 'portal', classicPath: '/create', nested: true, element: scaffolderPage },
+  { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: costsPage },
+];
+<Route path="/console/*" element={<ConsolePage entityContent={entityPage} pages={consolePages} />} />
+```
+
+`nested: true` for pages with routes of their own (the scaffolder). Links between these pages stay in the console.
+
 Labels in the console use its own `Badge`, not the MUI Chip: the classic portal's global CSS restyles every Chip.
 
 ## Configuration

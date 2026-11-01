@@ -62,7 +62,7 @@ import { ArchitectAssistantPage } from './components/opsassistant/ArchitectAssis
 import { DeveloperAssistantPage } from './components/opsassistant/DeveloperAssistantPage';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
-import { ConsolePage } from '@internal/plugin-console';
+import { ConsolePage, type ConsoleClassicPage } from '@internal/plugin-console';
 
 const app = createApp({
   apis,
@@ -111,6 +111,35 @@ const app = createApp({
   },
 });
 
+// Pages mounted both in the classic routes and in the console (/console/<id>): the same element, nothing duplicated.
+const scaffolderPage = (
+  <ScaffolderPage
+    components={{
+      EXPERIMENTAL_TemplateListPageComponent: CustomScaffolderPage,
+    }}
+  />
+);
+const docsIndexPage = <TechDocsIndexPage initialFilter="all" />;
+const apiExplorerPage = <CustomApiExplorerPage />;
+const catalogGraphPage = <CatalogGraphPage />;
+const techInsightsPage = <TechInsightsScorecardPage />;
+const costsPage = <CostsPage />;
+const topologyPage = <TopologyPage />;
+const cisNodesPage = <NodesCompliancePage />;
+const imagesPage = <ImagesPage />;
+
+const consolePages: ConsoleClassicPage[] = [
+  { id: 'create', title: 'Create', layer: 'portal', classicPath: '/create', nested: true, element: scaffolderPage },
+  { id: 'apis', title: 'APIs', layer: 'portal', classicPath: '/api-docs', element: apiExplorerPage },
+  { id: 'dependencies', title: 'Dependencies', layer: 'portal', classicPath: '/catalog-graph', element: catalogGraphPage },
+  { id: 'docs', title: 'Docs', layer: 'portal', classicPath: '/docs', element: docsIndexPage },
+  { id: 'quality', title: 'Quality', layer: 'portal', classicPath: '/tech-insights', element: techInsightsPage },
+  { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: costsPage },
+  { id: 'topology', title: 'Topology', layer: 'cluster', classicPath: '/topology', element: topologyPage },
+  { id: 'cis-nodes', title: 'CIS nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
+  { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
+];
+
 const routes = (
   <FlatRoutes>
     <Route path="/" element={<Navigate to="home" />} />
@@ -123,7 +152,7 @@ const routes = (
       {entityPage}
     </Route>
     {/* every documentation of the catalog, not only what the user owns (the default of the plugin is "owned") */}
-    <Route path="/docs" element={<TechDocsIndexPage initialFilter="all" />} />
+    <Route path="/docs" element={docsIndexPage} />
     <Route
       path="/docs/:namespace/:kind/:name/*"
       element={<TechDocsReaderPage />}
@@ -134,25 +163,19 @@ const routes = (
     </Route>
     <Route
       path="/create"
-      element={
-        <ScaffolderPage
-          components={{
-            EXPERIMENTAL_TemplateListPageComponent: CustomScaffolderPage,
-          }}
-        />
-      }
+      element={scaffolderPage}
     />
-    <Route path="/api-docs" element={<CustomApiExplorerPage />} />
-    <Route path="/topology" element={<TopologyPage />} />
-    <Route path="/cis-nodes" element={<NodesCompliancePage />} />
-    <Route path="/images" element={<ImagesPage />} />
-    <Route path="/costs" element={<CostsPage />} />
+    <Route path="/api-docs" element={apiExplorerPage} />
+    <Route path="/topology" element={topologyPage} />
+    <Route path="/cis-nodes" element={cisNodesPage} />
+    <Route path="/images" element={imagesPage} />
+    <Route path="/costs" element={costsPage} />
     <Route path="/ops-assistant" element={<OpsAssistantPage />} />
     <Route path="/sec-assistant" element={<SecAssistantPage />} />
     <Route path="/functional-assistant" element={<FunctionalAssistantPage />} />
     <Route path="/architect-assistant" element={<ArchitectAssistantPage />} />
     <Route path="/developer-assistant" element={<DeveloperAssistantPage />} />
-    <Route path="/tech-insights" element={<TechInsightsScorecardPage />} />
+    <Route path="/tech-insights" element={techInsightsPage} />
     <Route path="/keycloak-manager" element={<KeycloakManagerPage />} />
     <Route path="/superset-manager" element={<SupersetManagerPage />} />
     <Route path="/camunda-manager" element={<CamundaManagerPage />} />
@@ -177,9 +200,9 @@ const routes = (
       {searchPage}
     </Route>
     <Route path="/settings" element={<UserSettingsPage />} />
-    <Route path="/catalog-graph" element={<CatalogGraphPage />} />
+    <Route path="/catalog-graph" element={catalogGraphPage} />
     {/* the cloud-style console: off unless console.enabled (plugins/console); the classic pages above do not change */}
-    <Route path="/console/*" element={<ConsolePage entityContent={entityPage} />} />
+    <Route path="/console/*" element={<ConsolePage entityContent={entityPage} pages={consolePages} />} />
   </FlatRoutes>
 );
 

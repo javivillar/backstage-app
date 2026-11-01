@@ -4,11 +4,11 @@ import { useApi } from '@backstage/core-plugin-api';
 import { AsyncEntityProvider, catalogApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { type MouseEvent, type ReactNode, useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
-import { consolePathForCatalog } from '../paths';
 import { Badge } from './Badge';
+import { ClassicFrame } from './ClassicFrame';
 import { classify, entityPath } from './classify';
 import { rq } from './tokens';
 
@@ -66,25 +66,15 @@ const Header = ({ entity }: { entity: Entity }) => {
 
 /**
  * /console/entity/:namespace/:kind/:name/*: the classic entity page (tabs and cards, passed in by the app) under the
- * header of the console. Links to other entities stay inside the console.
+ * header of the console. Links to pages the console also shows stay inside the console.
  */
 export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
   const cfg = useConsoleConfig();
-  const navigate = useNavigate();
   const { loading, entity, error, refresh } = useEntityFromRoute();
 
-  const keepInConsole = (ev: MouseEvent) => {
-    if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
-    const a = (ev.target as HTMLElement).closest('a');
-    if (!a || a.target === '_blank' || a.origin !== window.location.origin) return;
-    const to = consolePathForCatalog(a.pathname);
-    if (!to) return;
-    ev.preventDefault();
-    navigate(to + a.search + a.hash);
-  };
 
   return (
-    <Box onClickCapture={keepInConsole} sx={{ display: 'grid', gap: 1 }}>
+    <Box sx={{ display: 'grid', gap: 1 }}>
       {loading && <Progress />}
       {entity && <Header entity={entity} />}
       {!content && entity && (
@@ -94,18 +84,11 @@ export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
         </Typography>
       )}
       {content && !loading && (
-        <Box
-          sx={{
-            // The console header replaces the Backstage one; the page grows with its content inside the console frame.
-            '& [class*="BackstageHeader-header"]': { display: 'none' },
-            '& [class*="BackstagePage-root"]': { height: 'auto', minHeight: 0, overflowY: 'visible' },
-            '& [class*="BackstageContent-root"]': { px: 0 },
-          }}
-        >
+        <ClassicFrame>
           <AsyncEntityProvider loading={loading} entity={entity} error={error} refresh={refresh}>
             {content}
           </AsyncEntityProvider>
-        </Box>
+        </ClassicFrame>
       )}
       {!content && error && <Typography color="error">{error.message}</Typography>}
     </Box>
