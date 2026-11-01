@@ -9,7 +9,7 @@ Tech Insights, OpenCost…); the console stores nothing of its own.
 | Layer | Shown in | Content |
 |---|---|---|
 | Infrastructure | zone clusters (e.g. `nato`) | OpenNebula of the zone, marketplace of programme clusters (phase 4) |
-| Cluster | every cluster | nodes, Refresquito services, scale, storage, backups (phase 3) |
+| Cluster | every cluster | overview: nodes, Argo CD applications, storage (backend plugin `cluster`); topology, CIS nodes, images |
 | Portal | every cluster | software catalog: business applications and Refresquito services, and the page of each entity |
 
 Switching to another cluster opens **that cluster's console** in a frame (`/console/clusters/<id>`): there is no
@@ -25,6 +25,13 @@ console header. The app passes its entity page in, so a card added to the classi
 ```
 
 Links to other entities (`/catalog/...`) inside those cards stay in the console; "Open in the classic portal" leaves it.
+
+## Cluster overview
+
+`/console/cluster` reads `GET /api/cluster/overview` (backend plugin `cluster`, in `packages/backend`). The backend asks
+the Prometheus of the cluster (`costs.prometheusUrl`, the same one the costs use), so it needs no Kubernetes
+permissions: nodes (kube-state-metrics + node-exporter), Argo CD applications (`argocd_app_info`) and volumes per
+namespace (kube-state-metrics + kubelet). Backups are not published as metrics yet.
 
 ## Classic pages in the console
 

@@ -9,6 +9,7 @@ import { useParams } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
 import { Badge } from './Badge';
 import { ClassicFrame } from './ClassicFrame';
+import { ClassicLink } from './ClassicLink';
 import { classify, entityPath } from './classify';
 import { rq } from './tokens';
 
@@ -37,7 +38,6 @@ function useEntityFromRoute() {
 }
 
 const Header = ({ entity }: { entity: Entity }) => {
-  const cfg = useConsoleConfig();
   const kind = classify(entity);
   const owner = (entity.spec as { owner?: string } | undefined)?.owner;
   const system = (entity.spec as { system?: string } | undefined)?.system;
@@ -58,7 +58,7 @@ const Header = ({ entity }: { entity: Entity }) => {
       <Typography variant="body2" color="text.secondary">
         {[owner && `Owner ${owner}`, system && `System ${system}`].filter(Boolean).join(' · ')}
         {(owner || system) && ' · '}
-        <a href={classicUrl(cfg, entityPath(entity))}>Open in the classic portal</a>
+        <ClassicLink path={entityPath(entity)} />
       </Typography>
     </Box>
   );
