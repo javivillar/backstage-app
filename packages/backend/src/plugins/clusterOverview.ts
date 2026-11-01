@@ -23,6 +23,7 @@ export const QUERIES = {
   pvcRequested: 'kube_persistentvolumeclaim_resource_requests_storage_bytes{job="kube-state-metrics"}',
   pvcUsed: 'kubelet_volume_stats_used_bytes',
   pvcInfo: 'kube_persistentvolumeclaim_info{job="kube-state-metrics"}',
+  pvcCapacity: 'kubelet_volume_stats_capacity_bytes',
 } as const;
 
 export type Resource = { allocatable: number; requested: number; used?: number };
@@ -40,12 +41,15 @@ export type NodeOverview = {
   memory: Resource;
 };
 export type AppOverview = { name: string; namespace?: string; project?: string; sync: string; health: string; autosync: boolean };
+/** One volume: its size as requested, and the real capacity and use when the kubelet reports it (mounted). */
+export type VolumeOverview = { namespace: string; pvc: string; requestedBytes: number; capacityBytes?: number; usedBytes?: number; storageClass?: string };
 export type StorageNamespace = { namespace: string; volumes: number; requestedBytes: number; usedBytes?: number; classes: Record<string, number> };
 export type ClusterOverview = {
   generatedAt: string;
   nodes: NodeOverview[];
   apps: AppOverview[];
   storage: StorageNamespace[];
+  volumes: VolumeOverview[];
 };
 
 const num = (s: Sample) => Number(s.value[1]);
@@ -135,8 +139,25 @@ export async function readOverview(query: Query, now = new Date()): Promise<Clus
     x.classes[cls] = (x.classes[cls] ?? 0) + 1;
   }
 
+  const volumes = new Map<string, VolumeOverview>();
+  const vol = (m: Record<string, string>) => {
+    const key = `${m.namespace}/${m.persistentvolumeclaim}`;
+    let v = volumes.get(key);
+    if (!v) {
+      v = { namespace: m.namespace, pvc: m.persistentvolumeclaim, requestedBytes: 0 };
+      volumes.set(key, v);
+    }
+    return v;
+  };
+  for (const x of r.pvcRequested) if (x.metric.persistentvolumeclaim) vol(x.metric).requestedBytes = num(x);
+  for (const x of r.pvcUsed) if (x.metric.persistentvolumeclaim) vol(x.metric).usedBytes = num(x);
+  for (const x of r.pvcCapacity) if (x.metric.persistentvolumeclaim) vol(x.metric).capacityBytes = num(x);
+  for (const x of r.pvcInfo) if (x.metric.persistentvolumeclaim) vol(x.metric).storageClass = x.metric.storageclass || undefined;
+  const usedShare = (v: VolumeOverview) => (v.usedBytes !== undefined && v.capacityBytes ? v.usedBytes / v.capacityBytes : -1);
+
   return {
     generatedAt: now.toISOString(),
+    volumes: [...volumes.values()].sort((a, b) => usedShare(b) - usedShare(a) || a.pvc.localeCompare(b.pvc)),
     nodes: [...nodes.values()].sort((a, b) => a.name.localeCompare(b.name)),
     apps: [...apps.values()].sort((a, b) => a.name.localeCompare(b.name)),
     storage: [...storage.values()].sort((a, b) => b.requestedBytes - a.requestedBytes),

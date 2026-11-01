@@ -1,6 +1,6 @@
 import { configApiRef, discoveryApiRef, fetchApiRef } from '@backstage/core-plugin-api';
 import { MockConfigApi, renderInTestApp, TestApiProvider } from '@backstage/test-utils';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { appRank, bytes, type ClusterOverview, ClusterOverviewPage } from './ClusterOverviewPage';
 
 const overview: ClusterOverview = {
@@ -22,7 +22,15 @@ const render = (answer: { status: number; body: object }) =>
       apis={[
         [configApiRef, new MockConfigApi({ console: { enabled: true, cluster: { id: 'nato-sirtap', kind: 'program', zone: 'nato', program: 'sirtap' } } })],
         [discoveryApiRef, { getBaseUrl: async (id: string) => `http://b/api/${id}` }],
-        [fetchApiRef, { fetch: async () => new Response(JSON.stringify(answer.body), { status: answer.status }) }],
+        [
+          fetchApiRef,
+          {
+            fetch: async (url: RequestInfo | URL) =>
+              String(url).endsWith('/overview')
+                ? new Response(JSON.stringify(answer.body), { status: answer.status })
+                : new Response(JSON.stringify({ error: 'no network in this test' }), { status: 503 }),
+          },
+        ],
       ]}
     >
       <ClusterOverviewPage />
@@ -39,7 +47,8 @@ describe('ClusterOverviewPage', () => {
     expect(screen.getByText('1 not healthy · 1 out of sync')).toBeInTheDocument();
     expect(screen.getByText('Degraded')).toBeInTheDocument();
     // problems first
-    const names = screen.getAllByText(/-oneke$/).map(e => e.textContent);
+    const apps = screen.getByRole('heading', { name: 'Applications (Argo CD)' }).closest('section') as HTMLElement;
+    const names = within(apps).getAllByText(/-oneke$/).map(e => e.textContent);
     expect(names).toEqual(['bpm-oneke', 'iam-oneke']);
   });
 

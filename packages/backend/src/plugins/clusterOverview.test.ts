@@ -21,7 +21,8 @@ const data: Record<string, ReturnType<typeof s>[]> = {
   ],
   [QUERIES.pvcRequested]: [s({ namespace: 'a', persistentvolumeclaim: 'p1' }, 10e9), s({ namespace: 'a', persistentvolumeclaim: 'p2' }, 5e9), s({ namespace: 'b', persistentvolumeclaim: 'q' }, 20e9)],
   [QUERIES.pvcUsed]: [s({ namespace: 'a', persistentvolumeclaim: 'p1' }, 2e9)],
-  [QUERIES.pvcInfo]: [s({ namespace: 'a', storageclass: 'longhorn' }, 1), s({ namespace: 'a', storageclass: 'longhorn-retain' }, 1), s({ namespace: 'b', storageclass: 'longhorn' }, 1)],
+  [QUERIES.pvcInfo]: [s({ namespace: 'a', persistentvolumeclaim: 'p1', storageclass: 'longhorn' }, 1), s({ namespace: 'a', persistentvolumeclaim: 'p2', storageclass: 'longhorn-retain' }, 1), s({ namespace: 'b', persistentvolumeclaim: 'q', storageclass: 'longhorn' }, 1)],
+  [QUERIES.pvcCapacity]: [s({ namespace: 'a', persistentvolumeclaim: 'p1' }, 10e9)],
 };
 
 const query: Query = async q => data[q] ?? [];
@@ -48,6 +49,15 @@ describe('readOverview', () => {
     expect(o.storage).toEqual([
       { namespace: 'b', volumes: 1, requestedBytes: 20e9, classes: { longhorn: 1 } },
       { namespace: 'a', volumes: 2, requestedBytes: 15e9, usedBytes: 2e9, classes: { longhorn: 1, 'longhorn-retain': 1 } },
+    ]);
+  });
+
+  it('lists every volume, the fullest first', async () => {
+    const o = await readOverview(query);
+    expect(o.volumes).toEqual([
+      { namespace: 'a', pvc: 'p1', requestedBytes: 10e9, usedBytes: 2e9, capacityBytes: 10e9, storageClass: 'longhorn' },
+      { namespace: 'a', pvc: 'p2', requestedBytes: 5e9, storageClass: 'longhorn-retain' },
+      { namespace: 'b', pvc: 'q', requestedBytes: 20e9, storageClass: 'longhorn' },
     ]);
   });
 });

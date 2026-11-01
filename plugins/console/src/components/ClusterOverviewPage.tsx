@@ -1,32 +1,18 @@
 import { Progress, WarningPanel } from '@backstage/core-components';
-import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useConsoleConfig } from '../config';
+import { type AppOverview, type NodeOverview, type Resource, type StorageNamespace, useClusterOverview } from '../overview';
 import { Badge } from './Badge';
 import { ClassicLink } from './ClassicLink';
+import { NeedsAttention } from './NeedsAttention';
+
+export type { ClusterOverview } from '../overview';
 import { rq } from './tokens';
 
-/** The answer of GET /api/cluster/overview (backend plugin cluster). */
-type Resource = { allocatable: number; requested: number; used?: number };
-type NodeOverview = {
-  name: string;
-  ip?: string;
-  roles: string[];
-  kubelet?: string;
-  os?: string;
-  ready: boolean;
-  schedulable: boolean;
-  pods: number;
-  cpu: Resource;
-  memory: Resource;
-};
-type AppOverview = { name: string; namespace?: string; project?: string; sync: string; health: string; autosync: boolean };
-type StorageNamespace = { namespace: string; volumes: number; requestedBytes: number; usedBytes?: number; classes: Record<string, number> };
-export type ClusterOverview = { generatedAt: string; nodes: NodeOverview[]; apps: AppOverview[]; storage: StorageNamespace[] };
 
 const ok = { bg: '#E3F4E8', fg: '#1E6B34' };
 const warn = { bg: '#FFF3E0', fg: '#B45F06' };
@@ -55,26 +41,6 @@ export function bytes(n: number): string {
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-function useOverview() {
-  const discovery = useApi(discoveryApiRef);
-  const { fetch } = useApi(fetchApiRef);
-  const [state, setState] = useState<{ loading: boolean; data?: ClusterOverview; error?: string }>({ loading: true });
-  const load = useCallback(async () => {
-    setState(s => ({ ...s, loading: true }));
-    try {
-      const res = await fetch(`${await discovery.getBaseUrl('cluster')}/overview`);
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? `${res.status} ${res.statusText}`);
-      setState({ loading: false, data: body as ClusterOverview });
-    } catch (e) {
-      setState({ loading: false, error: (e as Error).message });
-    }
-  }, [discovery, fetch]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  return { ...state, reload: load };
-}
 
 const Kpi = ({ label, value, note, colour }: { label: string; value: ReactNode; note?: ReactNode; colour?: string }) => (
   <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
@@ -259,7 +225,7 @@ const Storage = ({ storage }: { storage: StorageNamespace[] }) => (
 /** Cluster layer: the nodes, Argo CD applications and volumes of this cluster (read from Prometheus by the backend). */
 export const ClusterOverviewPage = () => {
   const cfg = useConsoleConfig();
-  const { loading, data, error, reload } = useOverview();
+  const { loading, data, error, reload } = useClusterOverview();
   const where = [cfg.cluster.zone, cfg.cluster.program].filter(Boolean).join(' / ');
 
   const nodes = data?.nodes ?? [];
@@ -294,6 +260,7 @@ export const ClusterOverviewPage = () => {
       {error && <WarningPanel title="The overview of the cluster could not be read" message={error} />}
       {data && (
         <>
+          <NeedsAttention />
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
             <Kpi label="Nodes ready" value={`${ready} / ${nodes.length}`} colour={ready === nodes.length ? ok.fg : bad.fg} />
             <Kpi label="CPU requested" value={pct(cpuReq)} note={`of ${Math.round(sum(n => n.cpu.allocatable))} CPU`} />

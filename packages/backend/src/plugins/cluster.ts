@@ -2,6 +2,7 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import { CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
 import { Router } from 'express';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
+import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import {
   type CalicoGlobalPolicy,
   type CertManagerCertificate,
@@ -66,6 +67,7 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *
  *   GET /api/cluster/overview   ClusterOverview (signed-in users; cached 30 s)
  *   GET /api/cluster/network    ClusterNetwork: hosts, segments, namespaces and their policies (signed-in; 30 s)
+ *   GET /api/cluster/namespaces/:ns/live   NamespaceLive: pods, restarts, CPU and memory of one namespace (signed-in; 15 s)
  *
  * Config: costs.prometheusUrl (the same Prometheus as the costs). Without it /overview answers 503. /network reads the
  * Kubernetes API with the service account of Backstage (read-only ClusterRole of the chart) when it runs in a cluster.
@@ -85,6 +87,7 @@ export default createBackendPlugin({
         const query = prometheus ? prometheusQuery(prometheus) : undefined;
         let cache: { at: number; body: ClusterOverview } | undefined;
         let netCache: { at: number; body: ClusterNetwork } | undefined;
+        const nsCache = new Map<string, { at: number; body: NamespaceLive }>();
         let kc: KubeConfig | undefined;
         if (process.env.KUBERNETES_SERVICE_HOST) {
           kc = new KubeConfig();
@@ -128,6 +131,37 @@ export default createBackendPlugin({
           } catch (e) {
             logger.error(`cluster network: ${(e as Error).message}`);
             res.status(502).json({ error: `The network could not be read: ${(e as Error).message}` });
+          }
+        });
+        router.get('/namespaces/:ns/live', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['user'] });
+          } catch {
+            res.status(401).json({ error: 'Sign in to read the cluster' });
+            return;
+          }
+          const ns = req.params.ns;
+          if (!NAMESPACE_NAME.test(ns)) {
+            res.status(400).json({ error: 'Not a namespace name' });
+            return;
+          }
+          if (!query) {
+            res.status(503).json({ error: 'No Prometheus configured (costs.prometheusUrl).' });
+            return;
+          }
+          try {
+            const hit = nsCache.get(ns);
+            if (hit && Date.now() - hit.at < 15_000) {
+              res.json(hit.body);
+              return;
+            }
+            const body = await readNamespace(query, ns);
+            if (nsCache.size > 200) nsCache.clear();
+            nsCache.set(ns, { at: Date.now(), body });
+            res.json(body);
+          } catch (e) {
+            logger.error(`cluster namespace ${ns}: ${(e as Error).message}`);
+            res.status(502).json({ error: `Prometheus did not answer: ${(e as Error).message}` });
           }
         });
         httpRouter.use(router);

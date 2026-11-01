@@ -10,6 +10,7 @@ import { useConsoleConfig } from '../config';
 import { classify, consoleEntityPath } from './classify';
 import { rq } from './tokens';
 import { Badge } from './Badge';
+import { NeedsAttention } from './NeedsAttention';
 
 const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.lifecycle', 'spec.system'];
 
@@ -105,6 +106,7 @@ export const PortalHome = () => {
         <Kpi label="APIs" value={apis} />
         <Kpi label="Components" value={items.length} />
       </Box>
+      <NeedsAttention limit={5} />
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, alignItems: 'start' }}>
         <EntityList title="Business applications" items={business} palette={rq.biz} />
         <EntityList title="Refresquito services" items={services} palette={rq.svc} />

@@ -86,7 +86,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   if (own.kind === 'zone') {
     layers.push({ title: 'Infrastructure', items: [{ label: 'Overview', to: '/console/infrastructure' }] });
   }
-  layers.push({ title: 'Cluster', items: [{ label: 'Overview', to: '/console/cluster' }, { label: 'Network', to: '/console/network' }, ...navOf('cluster')] });
+  layers.push({ title: 'Cluster', items: [{ label: 'Overview', to: '/console/cluster' }, { label: 'Network', to: '/console/network' }, { label: 'Applications', to: '/console/applications' }, { label: 'Storage', to: '/console/storage' }, ...navOf('cluster')] });
   layers.push({ title: 'Portal', items: [{ label: 'Home', to: '/console' }, ...navOf('portal')] });
   layers.push({ title: 'Clusters', items: [{ label: 'All clusters', to: '/console/clusters' }] });
 

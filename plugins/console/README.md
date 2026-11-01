@@ -33,6 +33,19 @@ the Prometheus of the cluster (`costs.prometheusUrl`, the same one the costs use
 permissions: nodes (kube-state-metrics + node-exporter), Argo CD applications (`argocd_app_info`) and volumes per
 namespace (kube-state-metrics + kubelet). Backups are not published as metrics yet.
 
+## Operate
+
+- **Needs attention** (Portal home and Cluster overview): nodes not ready or cordoned, memory requested over 90%,
+  Argo CD applications not healthy or out of sync, volumes at 80% or more, the cluster certificate under 21 days,
+  namespaces open to the whole cluster. Computed in the browser from `/overview` and `/network`; each item links to
+  the page that shows it.
+- **Cluster › Applications**: every Argo CD application, problems first, search and a "only with problems" filter;
+  linked to its entity page when a component has the same name.
+- **Cluster › Storage**: every volume (requested size, real capacity and use from the kubelet), the fullest first.
+- **Live** tab of a component with `refresquito.io/namespace` (console only): its pods now from
+  `GET /api/cluster/namespaces/:ns/live` (readiness, restarts in 24 h, last termination such as OOMKilled, CPU and
+  memory against requests and limits), read again every 30 s.
+
 ## Network
 
 `/console/network` (Cluster menu) and the **User journey** and **Network** tabs of a component that says its namespace
