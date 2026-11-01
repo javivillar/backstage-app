@@ -173,7 +173,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({ title: 'Its portal', items: [{ label: 'Open the portal', to: '/console' }] });
   } else {
     groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
-    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: l.url, hint: l.hint, external: true })) });
+    if (portalLinks.length) groups.push({ title: 'Applications', items: portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint })) });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
     if (navOf('managers').length)
       groups.push({
