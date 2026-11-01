@@ -11,6 +11,7 @@ import { ClusterOverviewPage } from './ClusterOverviewPage';
 import { NetworkPage } from './NetworkPage';
 import { ApplicationsPage } from './ApplicationsPage';
 import { StoragePage } from './StoragePage';
+import { NamespacePage } from './NamespacePage';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
@@ -68,6 +69,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/network" element={<NetworkPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/storage" element={<StoragePage />} />
+        <Route path="/namespaces/:ns" element={<NamespacePage />} />
         <Route
           path="/infrastructure"
           element={

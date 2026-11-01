@@ -18,7 +18,14 @@ export type NodeOverview = {
 export type AppOverview = { name: string; namespace?: string; project?: string; sync: string; health: string; autosync: boolean };
 export type StorageNamespace = { namespace: string; volumes: number; requestedBytes: number; usedBytes?: number; classes: Record<string, number> };
 export type VolumeOverview = { namespace: string; pvc: string; requestedBytes: number; capacityBytes?: number; usedBytes?: number; storageClass?: string };
-export type ClusterOverview = { generatedAt: string; nodes: NodeOverview[]; apps: AppOverview[]; storage: StorageNamespace[]; volumes?: VolumeOverview[] };
+export type ClusterOverview = {
+  generatedAt: string;
+  nodes: NodeOverview[];
+  apps: AppOverview[];
+  storage: StorageNamespace[];
+  volumes?: VolumeOverview[];
+  restarting?: Array<{ namespace: string; pod: string; restarts1h: number }>;
+};
 
 export function useClusterOverview() {
   const discovery = useApi(discoveryApiRef);

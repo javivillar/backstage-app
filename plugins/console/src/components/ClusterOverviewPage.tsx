@@ -1,4 +1,4 @@
-import { Progress, WarningPanel } from '@backstage/core-components';
+import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -9,6 +9,7 @@ import { type AppOverview, type NodeOverview, type Resource, type StorageNamespa
 import { Badge } from './Badge';
 import { ClassicLink } from './ClassicLink';
 import { NeedsAttention } from './NeedsAttention';
+import { useNamespaceCosts } from '../costs';
 
 export type { ClusterOverview } from '../overview';
 import { rq } from './tokens';
@@ -180,9 +181,7 @@ const Apps = ({ apps }: { apps: AppOverview[] }) => {
               </Box>
             </Td>
             <Td>
-              <Typography variant="body2" color="text.secondary">
-                {a.namespace ?? '—'}
-              </Typography>
+              {a.namespace ? <Link to={`/console/namespaces/${a.namespace}`}>{a.namespace}</Link> : '—'}
             </Td>
           </tr>
         ))}
@@ -221,6 +220,36 @@ const Storage = ({ storage }: { storage: StorageNamespace[] }) => (
     </tbody>
   </Box>
 );
+
+/** The namespaces that cost most in the last 7 days (OpenCost, our prices), each linked to its page. */
+const TopCosts = () => {
+  const { costs, money } = useNamespaceCosts('7d');
+  if (!costs?.length) return null;
+  const top = costs.slice(0, 5);
+  const max = top[0].total || 1;
+  return (
+    <Section title="What costs most (last 7 days)" count={costs.length}>
+      <Box sx={{ display: 'grid', gap: 1, p: 2 }}>
+        {top.map(c => (
+          <Box key={c.namespace} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 2fr) minmax(0, 3fr) auto' }, gap: 1.5, alignItems: 'center' }}>
+            <Link to={`/console/namespaces/${c.namespace}`} style={{ overflowWrap: 'anywhere' }}>
+              {c.namespace}
+            </Link>
+            <Box sx={{ height: 8, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${(c.total / max) * 100}%`, bgcolor: rq.primary }} />
+            </Box>
+            <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'right' }}>
+              {money(c.total)}
+            </Typography>
+          </Box>
+        ))}
+        <Typography variant="caption" color="text.secondary">
+          An estimate with our prices, not a bill. <Link to="/console/costs">All the costs</Link>
+        </Typography>
+      </Box>
+    </Section>
+  );
+};
 
 /** Cluster layer: the nodes, Argo CD applications and volumes of this cluster (read from Prometheus by the backend). */
 export const ClusterOverviewPage = () => {
@@ -282,6 +311,7 @@ export const ClusterOverviewPage = () => {
           <Section title="Storage by namespace" count={storage.length}>
             <Storage storage={storage} />
           </Section>
+          <TopCosts />
           <Section title="Backups">
             <Typography sx={{ p: 2 }} color="text.secondary">
               This cluster does not publish backup metrics yet; the disaster recovery plan of each system says how it is

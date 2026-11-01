@@ -13,6 +13,7 @@ import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from '../pages';
 import { rq } from './tokens';
 import { Badge } from './Badge';
+import { QuickFind } from './QuickFind';
 
 const EMBED_KEY = 'rq-console-embedded';
 
@@ -124,6 +125,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
           </Menu>
           <Badge label="beta" bg={rq.accent} fg="#14202E" />
           <Box sx={{ flex: 1 }} />
+          <QuickFind />
           <Button
             href={classicUrl(cfg, classicPathFor(current, pages))}
             endIcon={<OpenInNew fontSize="small" />}

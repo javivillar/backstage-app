@@ -1,8 +1,9 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
-import { CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
+import { AppsV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
 import { Router } from 'express';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
+import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
 import {
   type CalicoGlobalPolicy,
   type CertManagerCertificate,
@@ -28,6 +29,34 @@ async function podsByNamespace(query?: Query): Promise<Record<string, { ready: n
   return out;
 }
 
+/** Items of a list answer of @kubernetes/client-node 0.20 ({ body }) or 1.x (the list itself). */
+const items = <T>(r: unknown): T[] => (r as { body?: { items?: T[] } }).body?.items ?? (r as { items?: T[] }).items ?? [];
+
+/** Deployments, StatefulSets, DaemonSets and Warning events of one namespace. */
+async function readWorkloads(kc: KubeConfig, ns: string): Promise<NamespaceWorkloads> {
+  const apps = kc.makeApiClient(AppsV1Api);
+  const core = kc.makeApiClient(CoreV1Api);
+  const warnings: string[] = [];
+  const soft = async <T>(what: string, f: () => Promise<T[]>): Promise<T[]> => {
+    try {
+      return await f();
+    } catch (e) {
+      const code = (e as { statusCode?: number; response?: { statusCode?: number } }).statusCode ?? (e as { response?: { statusCode?: number } }).response?.statusCode;
+      warnings.push(`${what} could not be read${code ? ` (${code})` : ''}`);
+      return [];
+    }
+  };
+  // 0.20 takes the namespace as the first argument (1.x takes { namespace }): call them positionally, as 0.20 expects
+  const call = (f: unknown, self: unknown) => (f as (namespace: string) => Promise<unknown>).call(self, ns);
+  const [deployments, statefulSets, daemonSets, events] = await Promise.all([
+    soft('Deployments', async () => items<K8sWorkload>(await call(apps.listNamespacedDeployment, apps))),
+    soft('StatefulSets', async () => items<K8sWorkload>(await call(apps.listNamespacedStatefulSet, apps))),
+    soft('DaemonSets', async () => items<K8sWorkload>(await call(apps.listNamespacedDaemonSet, apps))),
+    soft('Events', async () => items<K8sEvent>(await call(core.listNamespacedEvent, core))),
+  ]);
+  return summariseWorkloads({ namespace: ns, deployments, statefulSets, daemonSets, events, warnings });
+}
+
 /** Namespaces, Ingresses, NetworkPolicies, Services and Calico global policies, read with the Backstage service account. */
 async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwork> {
   const core = kc.makeApiClient(CoreV1Api);
@@ -43,8 +72,6 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
       return [];
     }
   };
-  // @kubernetes/client-node 0.20 (the version of this package) answers { body }; read items from either shape
-  const items = <T>(r: unknown): T[] => (r as { body?: { items?: T[] } }).body?.items ?? (r as { items?: T[] }).items ?? [];
   const listCustom = custom.listClusterCustomObject as unknown as (group: string, version: string, plural: string) => Promise<unknown>;
   const [namespaces, ingresses, policies, services, calico, tlsStores, certificates, pods] = await Promise.all([
     soft('Namespaces', async () => items<K8sNamespace>(await core.listNamespace())),
@@ -68,6 +95,8 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *   GET /api/cluster/overview   ClusterOverview (signed-in users; cached 30 s)
  *   GET /api/cluster/network    ClusterNetwork: hosts, segments, namespaces and their policies (signed-in; 30 s)
  *   GET /api/cluster/namespaces/:ns/live   NamespaceLive: pods, restarts, CPU and memory of one namespace (signed-in; 15 s)
+ *   GET /api/cluster/namespaces/:ns/workloads   NamespaceWorkloads: Deployments, StatefulSets, DaemonSets and the
+ *                                               Warning events of the last hour (signed-in; 15 s; Kubernetes API)
  *
  * Config: costs.prometheusUrl (the same Prometheus as the costs). Without it /overview answers 503. /network reads the
  * Kubernetes API with the service account of Backstage (read-only ClusterRole of the chart) when it runs in a cluster.
@@ -88,6 +117,7 @@ export default createBackendPlugin({
         let cache: { at: number; body: ClusterOverview } | undefined;
         let netCache: { at: number; body: ClusterNetwork } | undefined;
         const nsCache = new Map<string, { at: number; body: NamespaceLive }>();
+        const wlCache = new Map<string, { at: number; body: NamespaceWorkloads }>();
         let kc: KubeConfig | undefined;
         if (process.env.KUBERNETES_SERVICE_HOST) {
           kc = new KubeConfig();
@@ -162,6 +192,37 @@ export default createBackendPlugin({
           } catch (e) {
             logger.error(`cluster namespace ${ns}: ${(e as Error).message}`);
             res.status(502).json({ error: `Prometheus did not answer: ${(e as Error).message}` });
+          }
+        });
+        router.get('/namespaces/:ns/workloads', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['user'] });
+          } catch {
+            res.status(401).json({ error: 'Sign in to read the cluster' });
+            return;
+          }
+          const ns = req.params.ns;
+          if (!NAMESPACE_NAME.test(ns)) {
+            res.status(400).json({ error: 'Not a namespace name' });
+            return;
+          }
+          if (!kc) {
+            res.status(503).json({ error: 'Backstage does not run inside the cluster: the workloads cannot be read.' });
+            return;
+          }
+          try {
+            const hit = wlCache.get(ns);
+            if (hit && Date.now() - hit.at < 15_000) {
+              res.json(hit.body);
+              return;
+            }
+            const body = await readWorkloads(kc, ns);
+            if (wlCache.size > 200) wlCache.clear();
+            wlCache.set(ns, { at: Date.now(), body });
+            res.json(body);
+          } catch (e) {
+            logger.error(`cluster workloads ${ns}: ${(e as Error).message}`);
+            res.status(502).json({ error: `The workloads could not be read: ${(e as Error).message}` });
           }
         });
         httpRouter.use(router);

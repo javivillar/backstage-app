@@ -24,6 +24,7 @@ export const QUERIES = {
   pvcUsed: 'kubelet_volume_stats_used_bytes',
   pvcInfo: 'kube_persistentvolumeclaim_info{job="kube-state-metrics"}',
   pvcCapacity: 'kubelet_volume_stats_capacity_bytes',
+  restarting: 'sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{job="kube-state-metrics"}[1h])) > 2',
 } as const;
 
 export type Resource = { allocatable: number; requested: number; used?: number };
@@ -50,6 +51,8 @@ export type ClusterOverview = {
   apps: AppOverview[];
   storage: StorageNamespace[];
   volumes: VolumeOverview[];
+  /** pods restarted more than twice in the last hour (crash loops), most first */
+  restarting: Array<{ namespace: string; pod: string; restarts1h: number }>;
 };
 
 const num = (s: Sample) => Number(s.value[1]);
@@ -157,6 +160,10 @@ export async function readOverview(query: Query, now = new Date()): Promise<Clus
 
   return {
     generatedAt: now.toISOString(),
+    restarting: r.restarting
+      .filter(x => x.metric.pod)
+      .map(x => ({ namespace: x.metric.namespace, pod: x.metric.pod, restarts1h: Math.round(num(x)) }))
+      .sort((a, b) => b.restarts1h - a.restarts1h),
     volumes: [...volumes.values()].sort((a, b) => usedShare(b) - usedShare(a) || a.pvc.localeCompare(b.pvc)),
     nodes: [...nodes.values()].sort((a, b) => a.name.localeCompare(b.name)),
     apps: [...apps.values()].sort((a, b) => a.name.localeCompare(b.name)),

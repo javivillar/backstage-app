@@ -23,10 +23,15 @@ export function needsAttention(o?: ClusterOverview, n?: ClusterNetwork, now = ne
     if (outOfSync.length) {
       out.push({ severity: 'info', title: `${outOfSync.length} application${outOfSync.length === 1 ? '' : 's'} out of sync with git`, detail: outOfSync.slice(0, 4).map(x => x.name).join(', ') + (outOfSync.length > 4 ? '…' : ''), to: '/console/applications' });
     }
+    const loops = o.restarting ?? [];
+    for (const r of loops.slice(0, 3)) {
+      out.push({ severity: 'bad', title: `${r.pod} restarted ${r.restarts1h} times in the last hour`, detail: r.namespace, to: `/console/namespaces/${r.namespace}` });
+    }
+    if (loops.length > 3) out.push({ severity: 'warn', title: `${loops.length - 3} more pods restarting`, detail: [...new Set(loops.slice(3).map(r => r.namespace))].join(', '), to: '/console/applications' });
     for (const v of o.volumes ?? []) {
       if (v.usedBytes === undefined || !v.capacityBytes) continue;
       const share = v.usedBytes / v.capacityBytes;
-      if (share >= 0.8) out.push({ severity: share >= 0.9 ? 'bad' : 'warn', title: `Volume ${v.pvc} is ${Math.round(share * 100)}% full`, detail: v.namespace, to: '/console/storage' });
+      if (share >= 0.8) out.push({ severity: share >= 0.9 ? 'bad' : 'warn', title: `Volume ${v.pvc} is ${Math.round(share * 100)}% full`, detail: v.namespace, to: `/console/namespaces/${v.namespace}` });
     }
   }
   if (n) {

@@ -1,4 +1,4 @@
-import { Progress, WarningPanel } from '@backstage/core-components';
+import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -63,7 +63,7 @@ export const StoragePage = () => {
             head={['Volume', 'Namespace', 'Size', 'Used', 'Storage class']}
             rows={volumes.map(v => [
               <b>{v.pvc}</b>,
-              v.namespace,
+              <Link to={`/console/namespaces/${v.namespace}`}>{v.namespace}</Link>,
               bytes(v.requestedBytes),
               <Used v={v} />,
               v.storageClass ? <Badge outlined label={v.storageClass} /> : '—',

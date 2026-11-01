@@ -23,6 +23,7 @@ const data: Record<string, ReturnType<typeof s>[]> = {
   [QUERIES.pvcUsed]: [s({ namespace: 'a', persistentvolumeclaim: 'p1' }, 2e9)],
   [QUERIES.pvcInfo]: [s({ namespace: 'a', persistentvolumeclaim: 'p1', storageclass: 'longhorn' }, 1), s({ namespace: 'a', persistentvolumeclaim: 'p2', storageclass: 'longhorn-retain' }, 1), s({ namespace: 'b', persistentvolumeclaim: 'q', storageclass: 'longhorn' }, 1)],
   [QUERIES.pvcCapacity]: [s({ namespace: 'a', persistentvolumeclaim: 'p1' }, 10e9)],
+  [QUERIES.restarting]: [s({ namespace: 'dh', pod: 'kafka-0' }, 11.1), s({ namespace: 'dh', pod: 'exporter' }, 12.4)],
 };
 
 const query: Query = async q => data[q] ?? [];
@@ -58,6 +59,14 @@ describe('readOverview', () => {
       { namespace: 'a', pvc: 'p1', requestedBytes: 10e9, usedBytes: 2e9, capacityBytes: 10e9, storageClass: 'longhorn' },
       { namespace: 'a', pvc: 'p2', requestedBytes: 5e9, storageClass: 'longhorn-retain' },
       { namespace: 'b', pvc: 'q', requestedBytes: 20e9, storageClass: 'longhorn' },
+    ]);
+  });
+
+  it('lists the pods restarting in the last hour, most first', async () => {
+    const o = await readOverview(query);
+    expect(o.restarting).toEqual([
+      { namespace: 'dh', pod: 'exporter', restarts1h: 12 },
+      { namespace: 'dh', pod: 'kafka-0', restarts1h: 11 },
     ]);
   });
 });

@@ -91,7 +91,7 @@ export const ApplicationsPage = () => {
                 <Badge label={a.sync} {...syncColour(a.sync)} />
                 {a.autosync && <Badge outlined label="auto" />}
               </Box>,
-              a.namespace ?? '—',
+              a.namespace ? <Link to={`/console/namespaces/${a.namespace}`}>{a.namespace}</Link> : '—',
             ])}
           />
         </Paper>
