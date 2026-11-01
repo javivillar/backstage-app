@@ -6,6 +6,8 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import OpenInNew from '@mui/icons-material/OpenInNew';
+import { useConsoleConfig } from '../config';
 import { NAV_ICONS } from '../navIcons';
 import { useClusterOverview } from '../overview';
 import { useConsolePages } from '../pages';
@@ -16,12 +18,26 @@ import { rq } from './tokens';
 
 type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
-type Section = { label: string; plugin: string; path: string; columns: Column[]; title: (r: Row) => string; facts?: (r: Row) => Array<[string, ReactNode]> };
+/** a host of the platform from its first label: host('iam') → https://iam.<domain> */
+type HostOf = (sub: string) => string;
+type Section = {
+  label: string;
+  plugin: string;
+  path: string;
+  columns: Column[];
+  title: (r: Row) => string;
+  facts?: (r: Row) => Array<[string, ReactNode]>;
+  /** where the element is seen in its product (a new tab); undefined when it has no page of its own */
+  open?: (r: Row, host: HostOf) => string | undefined;
+};
 /** One platform service of Manage: what it does (label), the product, its Argo CD application and its sections. */
-export type ManageService = { id: string; label: string; product: string; app: string; sub: string; sections?: Section[] };
+export type ManageService = { id: string; label: string; product: string; app: string; sub: string; sections?: Section[]; home?: (host: HostOf) => string };
 
 const list = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? ''));
 const owner = (v: unknown) => String(v ?? '').replace(/^user:default\//, '').replace(/^group:default\//, '') || '—';
+const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+const enc = (v: unknown) => encodeURIComponent(String(v ?? ''));
+const kcUrl = (host: HostOf, what: string) => `${host('iam')}/admin/RefresquitoTime/console/#/RefresquitoTime/${what}`;
 const gb = (b: unknown) => (typeof b === 'number' ? `${(b / 1024 ** 3).toFixed(b > 1024 ** 3 ? 1 : 3)} GB` : '—');
 
 /** The services of Manage, in the order of the menu. Sections only for the ones the console draws itself. */
@@ -32,12 +48,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'Keycloak',
     app: 'iam-oneke',
     sub: 'Users, groups and SSO clients of every application (realm RefresquitoTime).',
+    home: host => kcUrl(host, 'users'),
     sections: [
       {
         label: 'Users',
         plugin: 'keycloak-manager',
         path: '/users',
         title: r => String(r.username),
+        open: (_, host) => kcUrl(host, 'users'),
         columns: [
           { key: 'username', label: 'User' },
           { key: 'displayName', label: 'Name' },
@@ -45,12 +63,13 @@ export const MANAGE_SERVICES: ManageService[] = [
           { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
         ],
       },
-      { label: 'Groups', plugin: 'keycloak-manager', path: '/groups', title: r => String(r.name), columns: [{ key: 'name', label: 'Group' }, { key: 'owner', label: 'Owner', render: r => (r.owner ? owner(r.owner) : <Badge label="no owner" {...TONES.warn} />) }] },
+      { label: 'Groups', plugin: 'keycloak-manager', path: '/groups', title: r => String(r.name), open: (_, host) => kcUrl(host, 'groups'), columns: [{ key: 'name', label: 'Group' }, { key: 'owner', label: 'Owner', render: r => (r.owner ? owner(r.owner) : <Badge label="no owner" {...TONES.warn} />) }] },
       {
         label: 'SSO clients',
         plugin: 'keycloak-manager',
         path: '/clients',
         title: r => String(r.clientId),
+        open: (_, host) => kcUrl(host, 'clients'),
         columns: [
           { key: 'clientId', label: 'Client' },
           { key: 'name', label: 'Name' },
@@ -66,12 +85,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'Gravitee',
     app: 'gravitee-oneke',
     sub: 'APIs published to the other applications and to partners, their plans and subscriptions.',
+    home: host => `${host('gravitee')}/console/`,
     sections: [
       {
         label: 'APIs',
         plugin: 'gravitee-manager',
         path: '/apis',
         title: r => `${String(r.name)} ${String(r.version ?? '')}`.trim(),
+        open: (r, host) => (r.id ? `${host('gravitee')}/console/#!/DEFAULT/apis/${enc(r.id)}` : undefined),
         columns: [
           { key: 'name', label: 'API' },
           { key: 'version', label: 'Version' },
@@ -90,27 +111,29 @@ export const MANAGE_SERVICES: ManageService[] = [
       },
     ],
   },
-  { id: 'datahub', label: 'Data management', product: 'DataHub', app: 'datahub-oneke', sub: 'The data assets of the zone, their classification, owners and lineage.' },
+  { id: 'datahub', label: 'Data management', product: 'DataHub', app: 'datahub-oneke', sub: 'The data assets of the zone, their classification, owners and lineage.', home: host => host('datahub') },
   {
     id: 'superset',
     label: 'Business intelligence',
     product: 'Superset',
     app: 'superset-oneke',
     sub: 'Dashboards, charts, datasets and the database connections they read.',
+    home: host => host('superset'),
     sections: [
       {
         label: 'Dashboards',
         plugin: 'superset-manager',
         path: '/dashboards',
         title: r => String(r.name),
+        open: r => str(r.dashboardUrl),
         columns: [
           { key: 'name', label: 'Dashboard', render: r => (r.dashboardUrl ? <a href={String(r.dashboardUrl)} target="_blank" rel="noreferrer">{String(r.name)}</a> : String(r.name)) },
           { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' },
         ],
       },
-      { label: 'Charts', plugin: 'superset-manager', path: '/charts', title: r => String(r.name), columns: [{ key: 'name', label: 'Chart' }, { key: 'vizType', label: 'Type' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
-      { label: 'Datasets', plugin: 'superset-manager', path: '/datasets', title: r => String(r.name), columns: [{ key: 'name', label: 'Dataset' }, { key: 'connection', label: 'Connection' }, { key: 'kind', label: 'Kind' }] },
-      { label: 'Connections', plugin: 'superset-manager', path: '/connections', title: r => String(r.name), columns: [{ key: 'name', label: 'Connection' }, { key: 'backend', label: 'Database' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
+      { label: 'Charts', plugin: 'superset-manager', path: '/charts', title: r => String(r.name), open: r => str(r.exploreUrl), columns: [{ key: 'name', label: 'Chart' }, { key: 'vizType', label: 'Type' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
+      { label: 'Datasets', plugin: 'superset-manager', path: '/datasets', title: r => String(r.name), open: (r, host) => (r.id ? `${host('superset')}/explore/?datasource_type=table&datasource_id=${enc(r.id)}` : undefined), columns: [{ key: 'name', label: 'Dataset' }, { key: 'connection', label: 'Connection' }, { key: 'kind', label: 'Kind' }] },
+      { label: 'Connections', plugin: 'superset-manager', path: '/connections', title: r => String(r.name), open: (_, host) => `${host('superset')}/databaseview/list/`, columns: [{ key: 'name', label: 'Connection' }, { key: 'backend', label: 'Database' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
     ],
   },
   {
@@ -119,12 +142,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'Camunda',
     app: 'bpm-oneke',
     sub: 'Process definitions, running instances and their human tasks.',
+    home: host => `${host('bpm')}/camunda/app/cockpit/`,
     sections: [
       {
         label: 'Process definitions',
         plugin: 'camunda-manager',
         path: '/process-definitions',
         title: r => String(r.name ?? r.key),
+        open: r => str(r.cockpitUrl),
         columns: [
           { key: 'name', label: 'Process' },
           { key: 'key', label: 'Key', render: r => <code>{String(r.key)}</code> },
@@ -146,12 +171,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'SeaweedFS',
     app: 'seaweedfs-oneke',
     sub: 'Buckets of the applications, the groups that use them and their access policies.',
+    home: host => host('admin-seaweedfs'),
     sections: [
       {
         label: 'Buckets',
         plugin: 'seaweedfs-manager',
         path: '/buckets',
         title: r => String(r.name),
+        open: (r, host) => `${host('seaweedfs')}/files?path=${enc(`/buckets/${String(r.name)}`)}`,
         columns: [
           { key: 'name', label: 'Bucket' },
           { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
@@ -180,12 +207,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'Alfresco',
     app: 'alfrescodms-oneke',
     sub: 'Sites, users and the documents of the applications.',
+    home: host => `${host('alfrescodms')}/share/`,
     sections: [
       {
         label: 'Sites',
         plugin: 'alfresco-manager',
         path: '/sites',
         title: r => String(r.title ?? r.id),
+        open: (r, host) => (r.id ? `${host('alfrescodms')}/share/page/site/${enc(r.id)}/dashboard` : undefined),
         columns: [
           { key: 'title', label: 'Site' },
           { key: 'id', label: 'Id', render: r => <code>{String(r.id)}</code> },
@@ -207,12 +236,14 @@ export const MANAGE_SERVICES: ManageService[] = [
     product: 'Activepieces',
     app: 'activepieces-oneke',
     sub: 'Projects and the automation flows that connect the applications.',
+    home: host => host('activepieces'),
     sections: [
       {
         label: 'Projects',
         plugin: 'activepieces-manager',
         path: '/projects',
         title: r => String(r.displayName ?? r.id),
+        open: r => str(r.url),
         columns: [
           { key: 'displayName', label: 'Project' },
           { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
@@ -230,6 +261,19 @@ export const MANAGE_SERVICES: ManageService[] = [
     ],
   },
 ];
+
+/** The hosts of the platform: the domain is the one of the classic Backstage (backstage.<domain>), else this page's. */
+function useHostOf(): HostOf {
+  const cfg = useConsoleConfig();
+  let base: URL;
+  try {
+    base = new URL(cfg.classicBaseUrl || window.location.origin);
+  } catch {
+    base = new URL(window.location.origin);
+  }
+  const domain = base.hostname.split('.').slice(1).join('.');
+  return sub => `${base.protocol}//${sub}.${domain}`;
+}
 
 /** GET a manager backend: { items }. */
 function useManagerList(plugin?: string, path?: string) {
@@ -319,8 +363,10 @@ export const ManageHubPage = () => (
 );
 
 /** The table of one section with a search box, and the detail of the selected row beside it. */
-const SectionView = ({ section }: { section: Section }) => {
+const SectionView = ({ section, product }: { section: Section; product: string }) => {
   const st = useManagerList(section.plugin, section.path);
+  const host = useHostOf();
+  const urlOf = (r: Row) => section.open?.(r, host);
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
   const rows = useMemo(() => (st.items ?? []).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())), [st.items, q]);
@@ -338,6 +384,7 @@ const SectionView = ({ section }: { section: Section }) => {
                 {section.columns.map(c => (
                   <th key={c.key}>{c.label}</th>
                 ))}
+                {section.open && <th aria-label={`Open in ${product}`} />}
               </tr>
             </thead>
             <tbody>
@@ -353,6 +400,24 @@ const SectionView = ({ section }: { section: Section }) => {
                   {section.columns.map(c => (
                     <td key={c.key}>{c.render ? c.render(r) : String(r[c.key] ?? '—')}</td>
                   ))}
+                  {section.open && (
+                    <td style={{ width: 36 }}>
+                      {urlOf(r) && (
+                        <Box
+                          component="a"
+                          href={urlOf(r)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Open ${section.title(r)} in ${product}`}
+                          aria-label={`Open ${section.title(r)} in ${product}`}
+                          onClick={e => e.stopPropagation()}
+                          sx={{ display: 'inline-grid', placeItems: 'center', color: rq.primary }}
+                        >
+                          <OpenInNew fontSize="small" />
+                        </Box>
+                      )}
+                    </td>
+                  )}
                 </Box>
               ))}
             </tbody>
@@ -363,6 +428,13 @@ const SectionView = ({ section }: { section: Section }) => {
       {picked && (
         <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, position: { lg: 'sticky' }, top: 12 }}>
           <Typography sx={{ fontWeight: 600 }}>{section.title(picked)}</Typography>
+          {urlOf(picked) && (
+            <Box>
+              <Button size="small" variant="contained" disableElevation href={urlOf(picked)!} target="_blank" rel="noreferrer" endIcon={<OpenInNew fontSize="small" />} sx={{ textTransform: 'none' }}>
+                Open in {product}
+              </Button>
+            </Box>
+          )}
           <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '4px 12px', m: 0, fontSize: 14 }}>
             {(section.facts?.(picked) ?? section.columns.map(c => [c.label, c.render ? c.render(picked) : String(picked[c.key] ?? '—')] as [string, ReactNode])).map(([k, v]) => (
               <Fragment key={k}>
@@ -389,6 +461,7 @@ export const ManageServicePage = () => {
   const classic = pages.find(p => p.id === id);
   const [tab, setTab] = useState(0);
   const ov = useClusterOverview();
+  const host = useHostOf();
   if (!s) return <WarningPanel title="Not found" message={`There is no service ${id} in Manage.`} />;
   const h = healthOf(s.app.replace(/-oneke$/, ''), ov.data?.apps ?? []);
   const sections = s.sections ?? [];
@@ -409,6 +482,11 @@ export const ManageServicePage = () => {
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <Badge label={h.tone === 'off' ? 'state unknown' : h.label} {...TONES[h.tone]} />
+          {s.home && (
+            <Button href={s.home(host)} target="_blank" rel="noreferrer" variant="outlined" endIcon={<OpenInNew fontSize="small" />} sx={{ textTransform: 'none' }}>
+              Open {s.product}
+            </Button>
+          )}
           {classic && sections.length > 0 && (
             <Button component={Link} to={`/console/${classic.id}`} variant="outlined" sx={{ textTransform: 'none' }}>
               Create and change (full manager)
@@ -431,7 +509,7 @@ export const ManageServicePage = () => {
               </Button>
             ))}
           </Box>
-          <SectionView key={sections[tab].path} section={sections[tab]} />
+          <SectionView key={sections[tab].path} section={sections[tab]} product={s.product} />
         </>
       ) : (
         <Box>{classic ? classic.element : <Typography color="text.secondary">This portal does not include its manager.</Typography>}</Box>
