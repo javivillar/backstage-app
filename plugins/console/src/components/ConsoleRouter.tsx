@@ -25,6 +25,7 @@ import { ManageHubPage, ManageServicePage } from './ManagePages';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { DependencyExplorer } from './DependencyExplorer';
+import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage } from './PortalIndexes';
 
@@ -79,6 +80,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/apis" element={<PortalApisPage />} />
         <Route path="/quality" element={<PortalQualityPage />} />
         <Route path="/dependencies" element={<DependencyExplorer />} />
+        <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         {pages.filter(p => !NATIVE.has(p.id)).map(p => (
           <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage page={p} />} />

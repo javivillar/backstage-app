@@ -469,9 +469,21 @@ const SectionView = ({ section, product }: { section: Section; product: string }
                   onKeyDown={e => e.key === 'Enter' && setSel(i)}
                   sx={{ cursor: 'pointer', bgcolor: r === picked ? 'rgba(26,141,255,0.10)' : undefined, '&:hover td': { bgcolor: 'action.hover' } }}
                 >
-                  {section.columns.map(c => (
-                    <td key={c.key}>{c.render ? c.render(r) : String(r[c.key] ?? '—')}</td>
-                  ))}
+                  {section.columns.map((c, ci) => {
+                    const v = c.render ? c.render(r) : String(r[c.key] ?? '—');
+                    const url = ci === 0 && !c.render ? urlOf(r) : undefined;
+                    return (
+                      <td key={c.key}>
+                        {url ? (
+                          <Box component="a" href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title={`Open in ${product}`} sx={{ color: rq.primary, fontWeight: 500, textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                            {v}
+                          </Box>
+                        ) : (
+                          v
+                        )}
+                      </td>
+                    );
+                  })}
                   {section.open && (
                     <td style={{ width: 36 }}>
                       {urlOf(r) && (
