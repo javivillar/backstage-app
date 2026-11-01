@@ -9,6 +9,8 @@ import { type AppOverview, type NodeOverview, type Resource, type StorageNamespa
 import { Badge } from './Badge';
 import { ClassicLink } from './ClassicLink';
 import { NeedsAttention } from './NeedsAttention';
+import { OpsActions } from './OpsActions';
+import { type InfraView, useInfra, useZone } from '../zone';
 import { useNamespaceCosts } from '../costs';
 
 export type { ClusterOverview } from '../overview';
@@ -255,6 +257,10 @@ const TopCosts = () => {
 export const ClusterOverviewPage = () => {
   const cfg = useConsoleConfig();
   const { loading, data, error, reload } = useClusterOverview();
+  const infra = useInfra();
+  const zoneView = useZone();
+  const { zone, program } = cfg.cluster;
+  const own = !!zone && !!program && (infra.data?.admins ?? [`${zone}/${program}`]).includes(`${zone}/${program}`);
   const where = [cfg.cluster.zone, cfg.cluster.program].filter(Boolean).join(' / ');
 
   const nodes = data?.nodes ?? [];
@@ -285,6 +291,12 @@ export const ClusterOverviewPage = () => {
           Refresh
         </Button>
       </Box>
+      {zone && program && (
+        <Paper variant="outlined" sx={{ borderRadius: '12px', p: 2, display: 'grid', gap: 1 }}>
+          <Typography sx={{ fontWeight: 600 }}>Operations</Typography>
+          <OpsActions target={{ zone, program }} allowed={!!infra.data?.allowed} own={own} results={(zoneView.data as InfraView | undefined)?.reconcile?.actions} onDone={zoneView.reload} />
+        </Paper>
+      )}
       {loading && !data && <Progress />}
       {error && <WarningPanel title="The overview of the cluster could not be read" message={error} />}
       {data && (

@@ -64,6 +64,11 @@ export const OpsActions = ({ target, allowed, own = false, results = [], onDone 
           </Typography>
         )}
       </Box>
+      {own && !target.vm && (
+        <Typography variant="caption" color="text.secondary">
+          No Stop or Start here: this console runs in this cluster, so once stopped nothing could start it again. Stop and start it from the host (cluster.sh) or from the console of another cluster.
+        </Typography>
+      )}
       {pending && (
         <ConfirmBar
           text={pending.confirm}

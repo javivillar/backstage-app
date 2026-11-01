@@ -113,7 +113,33 @@ export const MANAGE_SERVICES: ManageService[] = [
       { label: 'Connections', plugin: 'superset-manager', path: '/connections', title: r => String(r.name), columns: [{ key: 'name', label: 'Connection' }, { key: 'backend', label: 'Database' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
     ],
   },
-  { id: 'camunda', label: 'Business process', product: 'Camunda', app: 'bpm-oneke', sub: 'Process definitions, running instances and their human tasks.' },
+  {
+    id: 'camunda',
+    label: 'Business process',
+    product: 'Camunda',
+    app: 'bpm-oneke',
+    sub: 'Process definitions, running instances and their human tasks.',
+    sections: [
+      {
+        label: 'Process definitions',
+        plugin: 'camunda-manager',
+        path: '/process-definitions',
+        title: r => String(r.name ?? r.key),
+        columns: [
+          { key: 'name', label: 'Process' },
+          { key: 'key', label: 'Key', render: r => <code>{String(r.key)}</code> },
+          { key: 'version', label: 'Version' },
+          { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
+        ],
+        facts: r => [
+          ['Key', <code>{String(r.key)}</code>],
+          ['Latest version', String(r.version ?? '—')],
+          ['Owner', owner(r.owner)],
+          ['Cockpit', r.cockpitUrl ? <a href={String(r.cockpitUrl)} target="_blank" rel="noreferrer">Instances, incidents and tasks</a> : '—'],
+        ],
+      },
+    ],
+  },
   {
     id: 'seaweedfs',
     label: 'S3 buckets',
@@ -148,8 +174,61 @@ export const MANAGE_SERVICES: ManageService[] = [
       { label: 'Policies', plugin: 'seaweedfs-manager', path: '/policies', title: r => String(r.name), columns: [{ key: 'name', label: 'Policy' }] },
     ],
   },
-  { id: 'alfresco', label: 'Document management system', product: 'Alfresco', app: 'alfrescodms-oneke', sub: 'Sites, users and the documents of the applications.' },
-  { id: 'activepieces', label: 'Workflow integration', product: 'Activepieces', app: 'activepieces-oneke', sub: 'Projects and the automation flows that connect the applications.' },
+  {
+    id: 'alfresco',
+    label: 'Document management system',
+    product: 'Alfresco',
+    app: 'alfrescodms-oneke',
+    sub: 'Sites, users and the documents of the applications.',
+    sections: [
+      {
+        label: 'Sites',
+        plugin: 'alfresco-manager',
+        path: '/sites',
+        title: r => String(r.title ?? r.id),
+        columns: [
+          { key: 'title', label: 'Site' },
+          { key: 'id', label: 'Id', render: r => <code>{String(r.id)}</code> },
+          { key: 'visibility', label: 'Visibility', render: r => <Badge label={String(r.visibility ?? '?')} {...TONES[r.visibility === 'PUBLIC' ? 'warn' : 'ok']} /> },
+          { key: 'role', label: 'My role', render: r => String(r.role ?? '—') },
+        ],
+        facts: r => [
+          ['Id', <code>{String(r.id)}</code>],
+          ['Description', String(r.description || '—')],
+          ['Visibility', String(r.visibility ?? '—')],
+          ['My role', String(r.role ?? '— (admin)')],
+        ],
+      },
+    ],
+  },
+  {
+    id: 'activepieces',
+    label: 'Workflow integration',
+    product: 'Activepieces',
+    app: 'activepieces-oneke',
+    sub: 'Projects and the automation flows that connect the applications.',
+    sections: [
+      {
+        label: 'Projects',
+        plugin: 'activepieces-manager',
+        path: '/projects',
+        title: r => String(r.displayName ?? r.id),
+        columns: [
+          { key: 'displayName', label: 'Project' },
+          { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
+          { key: 'role', label: 'My role', render: r => String(r.role ?? '—') },
+          { key: 'created', label: 'Created', render: r => (r.created ? new Date(String(r.created)).toLocaleDateString() : '—') },
+        ],
+        facts: r => [
+          ['Owner', owner(r.owner)],
+          ['My role', String(r.role ?? '— (admin)')],
+          ['Can', [r.canReadFlows && 'read flows', r.canWriteFlows && 'edit flows', r.canManageMembers && 'manage members'].filter(Boolean).join(', ') || 'nothing'],
+          ['Created', r.created ? new Date(String(r.created)).toLocaleString() : '—'],
+          ['Flows', r.url ? <a href={String(r.url)} target="_blank" rel="noreferrer">Open the project in Activepieces</a> : '—'],
+        ],
+      },
+    ],
+  },
 ];
 
 /** GET a manager backend: { items }. */

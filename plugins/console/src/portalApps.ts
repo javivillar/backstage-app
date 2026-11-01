@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 /** An application of the platform the Portal menu links to: found in the catalog by its application name. */
 export type PortalApp = { application: string; label: string; hint?: string };
-export type PortalLink = { label: string; url: string; hint?: string };
+export type PortalLink = { application: string; label: string; url: string; hint?: string };
 
 /** console.portalApps of app-config; by default the support (Incidents) and personnel security (Accreditation). */
 export const DEFAULT_PORTAL_APPS: PortalApp[] = [
@@ -36,8 +36,8 @@ export function usePortalLinks(): PortalLink[] {
       apps.map(a =>
         catalog
           .getEntities({ filter: { kind: 'component', 'metadata.annotations.refresquito.io/application': a.application }, fields: ['metadata.annotations'] })
-          .then(r => ({ label: a.label, hint: a.hint, url: appUrl(r.items) }))
-          .catch(() => ({ label: a.label, hint: a.hint, url: undefined })),
+          .then(r => ({ application: a.application, label: a.label, hint: a.hint, url: appUrl(r.items) }))
+          .catch(() => ({ application: a.application, label: a.label, hint: a.hint, url: undefined })),
       ),
     ).then(all => alive && setLinks(all.filter((l): l is PortalLink => !!l.url)));
     return () => {

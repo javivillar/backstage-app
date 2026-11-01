@@ -6,6 +6,7 @@ import { useConsoleAccess } from '../access';
 import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, ConsolePagesContext } from '../pages';
 import { ClassicPage } from './ClassicPage';
+import { AppFrame } from './AppFrame';
 import { ClusterFrame } from './ClusterFrame';
 import { ClusterOverviewPage } from './ClusterOverviewPage';
 import { NetworkPage } from './NetworkPage';
@@ -78,6 +79,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         ))}
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/clusters/:id" element={<ClusterFrame />} />
+        <Route path="/app/:application" element={<AppFrame />} />
         <Route path="/cluster" element={<ClusterOverviewPage />} />
         <Route path="/cluster/scale" element={<ClusterScalePage />} />
         <Route path="/cis-cluster" element={<CisClusterPage />} />

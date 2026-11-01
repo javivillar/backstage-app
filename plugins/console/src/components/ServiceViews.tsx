@@ -538,42 +538,47 @@ export const ServiceSecurity = () => {
   );
   const hosts = (d.network?.hosts ?? []).filter(h => h.namespace === d.namespace);
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
-      <Section title="Vulnerabilities in its images" sub="scans of Wazuh, read through the SBOM">
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1 }}>
-          {box(t.critical, 'Critical', t.critical ? 'bad' : 'off')}
-          {box(t.high, 'High', t.high ? 'warn' : 'off')}
-          {box(t.medium, 'Medium', 'off')}
-          {box(t.low, 'Low', 'off')}
-        </Box>
-        <Typography variant="body2" color="text.secondary">
-          {t.kev} known exploited (KEV). Details and fixes: <Link to={`${d.base}/sbom`}>SBOM</Link> · <Link to={`${d.base}/quality`}>Quality & Security</Link>
-        </Typography>
-      </Section>
+    <Box sx={{ display: 'grid', gap: 2 }}>
+      {/* the summaries side by side, same height; the detail by image below, full width */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'stretch' }}>
+        <Section title="Vulnerabilities in its images" sub="scans of Wazuh, read through the SBOM">
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1 }}>
+            {box(t.critical, 'Critical', t.critical ? 'bad' : 'off')}
+            {box(t.high, 'High', t.high ? 'warn' : 'off')}
+            {box(t.medium, 'Medium', 'off')}
+            {box(t.low, 'Low', 'off')}
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {t.kev} known exploited (KEV). Details and fixes: <Link to={`${d.base}/sbom`}>SBOM</Link> · <Link to={`${d.base}/quality`}>Quality & Security</Link>
+          </Typography>
+        </Section>
+        <Section title="Exposure and access">
+          <Table
+            head={['', '']}
+            rows={[
+              ['Published host', hosts.length ? <Badge label={hosts.every(h => h.tls) ? 'TLS' : 'Some without TLS'} {...(hosts.every(h => h.tls) ? TONES.ok : TONES.warn)} /> : <Badge label="Internal" {...TONES.info} />],
+              ['Network isolation', d.ns ? <Badge label={d.ns.isolation} {...(d.ns.isolation === 'open' ? TONES.warn : TONES.ok)} /> : '—'],
+              ['Who can do what', <Link to={`${d.base}/access`}>Access (Keycloak)</Link>],
+            ]}
+          />
+        </Section>
+      </Box>
       <Section title="By image">
         {d.findings.length ? (
           <Table
-            head={['Image', 'Critical', 'High', 'Scan']}
+            head={['Image', 'Critical', 'High', 'Medium', 'Low', 'Scan']}
             rows={d.findings.map(f => [
               <span title={f.image} style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{shortImage(f.image)}</span>,
               String(f.counts.CRITICAL ?? 0),
               String(f.counts.HIGH ?? 0),
+              String(f.counts.MEDIUM ?? 0),
+              String(f.counts.LOW ?? 0),
               f.error ? <Badge label={f.error} {...TONES.off} /> : <Badge label="Scanned" {...TONES.ok} />,
             ])}
           />
         ) : (
           <Typography color="text.secondary">No image known for it.</Typography>
         )}
-      </Section>
-      <Section title="Exposure and access">
-        <Table
-          head={['', '']}
-          rows={[
-            ['Published host', hosts.length ? <Badge label={hosts.every(h => h.tls) ? 'TLS' : 'Some without TLS'} {...(hosts.every(h => h.tls) ? TONES.ok : TONES.warn)} /> : <Badge label="Internal" {...TONES.info} />],
-            ['Network isolation', d.ns ? <Badge label={d.ns.isolation} {...(d.ns.isolation === 'open' ? TONES.warn : TONES.ok)} /> : '—'],
-            ['Who can do what', <Link to={`${d.base}/access`}>Access (Keycloak)</Link>],
-          ]}
-        />
       </Section>
     </Box>
   );

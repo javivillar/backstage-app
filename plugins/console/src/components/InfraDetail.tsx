@@ -260,10 +260,10 @@ export const VmDetailPage = () => {
   let ssh = '';
   if (ip) ssh = bastion ? `ssh -J refresquito@${bastion} refresquito@${ip}` : `ssh refresquito@${ip}`;
   const pending = vm?.state === 'PENDING';
-  const events: Array<{ at?: string; text: string }> = [];
+  const events: Array<{ at?: string; text: string; when?: string }> = [];
   if (request?.requested_at) events.push({ at: request.requested_at, text: `Asked from the console by ${(request.requested_by ?? '').replace(/^user:default\//, '')}: ${request.size}, ${request.image}` });
   for (const h of vm?.history ?? []) {
-    events.push({ at: h.start, text: `Deployed on ${h.host}` });
+    events.push({ at: h.start, text: `Deployed on ${h.host}`, when: h.start ? undefined : 'since it was created' });
     if (h.end) events.push({ at: h.end, text: `Left ${h.host}: ${HISTORY_ACTIONS[h.action ?? ''] ?? `action ${h.action}`}` });
   }
   if (pending) events.push({ text: 'Waiting for room in the hosts (OpenNebula keeps memory free on every host): it starts by itself when there is room' });
@@ -308,7 +308,7 @@ export const VmDetailPage = () => {
               sub="used"
               pct={vm?.memoryUsedGb !== undefined && vm.memoryGb ? (vm.memoryUsedGb / vm.memoryGb) * 100 : undefined}
             />
-            <Meter label={`Disk · ${disk ? Math.round(disk.sizeMb / 1024) : size?.disk_gb ?? '?'} GB`} value={disk?.image ?? request?.image ?? '—'} />
+            <Meter label={`Disk · ${disk?.image ?? request?.image ?? 'image unknown'}`} value={`${disk ? Math.round(disk.sizeMb / 1024) : size?.disk_gb ?? '?'} GB`} />
             <Meter label="Network since it started" value={vm?.netRxMb !== undefined ? `${vm.netRxMb} MB in` : '—'} sub={vm?.netTxMb !== undefined ? `${vm.netTxMb} MB out` : undefined} />
           </Box>
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(460px, 100%), 1fr))', alignItems: 'start' }}>
@@ -373,7 +373,7 @@ export const VmDetailPage = () => {
                       <Box key={i} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 1.5, fontSize: 14 }}>
                         <span>{ev.text}</span>
                         <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                          {ev.at ? new Date(ev.at).toLocaleString() : 'now'}
+                          {ev.at ? new Date(ev.at).toLocaleString() : ev.when ?? 'now'}
                         </Typography>
                       </Box>
                     ))}
@@ -434,7 +434,33 @@ export const VmDetailPage = () => {
                   />
                 </Card>
               )}
-              {infra.data && !request && <Typography color="text.secondary">Not a VM of the console: it is managed by OneFlow or by hand.</Typography>}
+              {!request && vm && (
+                <Card
+                  title={prog?.cluster && vm.role && vm.role !== 'zone router' ? `Node of cluster ${prog.cluster.name}` : 'Managed outside the console'}
+                  sub={
+                    prog?.cluster && vm.role && vm.role !== 'zone router'
+                      ? 'OneFlow keeps this VM as a node of the cluster: it is stopped, started and restarted with the cluster, not on its own.'
+                      : 'Not a VM of the console: it is created by configuration.py (zone router, VNF) or by hand.'
+                  }
+                >
+                  <Facts
+                    items={[
+                      ['Role', vm.role],
+                      ['Cluster', prog?.cluster ? `${prog.cluster.name} · ${prog.cluster.state}` : ''],
+                      ['Programme', progName ? <Link to={programPath ?? ''}>{`${zoneName}/${progName}`}</Link> : 'the zone'],
+                    ]}
+                  />
+                  {prog?.cluster && progName && vm.role !== 'zone router' && (
+                    <OpsActions
+                      target={{ zone: zoneName, program: progName }}
+                      allowed={!!infra.data?.allowed}
+                      own={(infra.data?.admins ?? []).includes(`${zoneName}/${progName}`)}
+                      results={view?.reconcile?.actions}
+                      onDone={reload}
+                    />
+                  )}
+                </Card>
+              )}
             </Box>
           </Box>
         </>

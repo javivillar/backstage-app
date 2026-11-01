@@ -137,7 +137,7 @@ describe('Infrastructure layer', () => {
     );
     expect(await screen.findByText('console-nato-a400m · nato-a400m')).toBeInTheDocument();
     expect(screen.getByText('02:00:0a')).toBeInTheDocument();
-    expect(screen.getByText('30 GB')).toBeInTheDocument();
+    expect(screen.getAllByText('30 GB').length).toBe(2); // the disk meter and the table of disks
   });
 
   it('groups the kube-bench failures by check', () => {
