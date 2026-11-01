@@ -107,7 +107,10 @@ const describe = (t: ToolCall) => {
  * The page of an assistant: questions answered by a model that looks with the READ-ONLY tools of its MCP server. It
  * proposes; the operator acts. OpsAssistantPage and SecAssistantPage are this page with their profile.
  */
-export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
+/** The other assistants, for the switcher of the console variant: [title, console path]. */
+export type AssistantLink = { title: string; to: string; current: boolean };
+
+export const AssistantPage = ({ profile, variant = 'classic', others = [] }: { profile: AssistantProfile; variant?: 'classic' | 'console'; others?: AssistantLink[] }) => {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const catalog = useApi(catalogApiRef);
@@ -502,6 +505,177 @@ export const AssistantPage = ({ profile }: { profile: AssistantProfile }) => {
       </Box>
       </Box>
     );
+
+  if (variant === 'console') {
+    const usage = state.exchanges.reduce((t, x) => t + (x.usage?.input ?? 0) + (x.usage?.output ?? 0), 0);
+    const card = { border: 1, borderColor: 'divider', borderRadius: '12px', bgcolor: 'background.paper' } as const;
+    let status: JSX.Element | undefined;
+    if (infoError) status = <WarningPanel title="The assistant is not reachable" message={infoError} />;
+    else if (!info) status = <Progress />;
+    else if (!info.allowed) status = <WarningPanel title="No access" message={`You are not in a group allowed to use the ${profile.title.toLowerCase()}.`} />;
+    else if (!info.enabled) status = <WarningPanel title="Not configured" message={profile.notConfigured} />;
+    return (
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '240px minmax(0, 1fr) 260px' }, alignItems: 'start' }}>
+        <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1 }}>
+          <Typography variant="overline" color="text.secondary">
+            Assistants
+          </Typography>
+          {others.map(o => (
+            <Button key={o.to} href={o.to} variant={o.current ? 'contained' : 'text'} disableElevation sx={{ justifyContent: 'flex-start', textTransform: 'none' }}>
+              {o.title}
+            </Button>
+          ))}
+          <Typography variant="overline" color="text.secondary" sx={{ mt: 1 }}>
+            Conversations
+          </Typography>
+          <Button variant="outlined" disabled={busy || !state.exchanges.length} onClick={reset} sx={{ textTransform: 'none' }}>
+            New conversation
+          </Button>
+          <List dense sx={{ maxHeight: '50vh', overflowY: 'auto', p: 0 }}>
+            {conversations?.map(c => (
+              <ListItem
+                key={c.id}
+                disablePadding
+                secondaryAction={
+                  <IconButton edge="end" size="small" aria-label={`Delete ${c.title}`} title="Delete" disabled={busy} onClick={() => remove(c.id)}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                }
+              >
+                <ListItemButton selected={c.id === state.id} disabled={busy} onClick={() => c.id !== state.id && open(c.id).catch(e => setKeepError((e as Error).message))} sx={{ borderRadius: '8px' }}>
+                  <ListItemText primary={c.title} secondary={new Date(c.updatedAt).toLocaleString()} primaryTypographyProps={{ noWrap: true, title: c.title, fontSize: 14 }} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+          <Typography variant="caption" color={keepError ? 'warning.main' : 'text.secondary'}>
+            {keepError ? `Conversations are not being kept: ${keepError}` : `Kept ${info?.keepDays ?? 90} days after their last change, only for you.`}
+          </Typography>
+        </Box>
+        <Box sx={{ ...card, display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minHeight: 560, minWidth: 0 }}>
+          <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography sx={{ fontWeight: 600 }}>{profile.title}</Typography>
+            {state.system && <Chip size="small" color="primary" variant="outlined" label={`about ${state.system}`} />}
+            {info?.model && <Chip size="small" label={info.model} />}
+            <Box sx={{ flex: 1 }} />
+            {usage > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                {(usage / 1000).toFixed(1)} k tokens
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ p: 2, display: 'grid', gap: 1.5, alignContent: 'start', minWidth: 0 }}>
+            {status}
+            {!status && state.exchanges.length === 0 && (
+              <>
+                <Typography color="text.secondary">{profile.intro}</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {(about?.examples ?? profile.examples).map(e => (
+                    <Chip key={e} label={e} onClick={() => ask(e)} variant="outlined" />
+                  ))}
+                </Box>
+              </>
+            )}
+            {state.exchanges.map((x, i) => (
+              <Box key={i} sx={{ display: 'grid', gap: 1 }}>
+                <Box sx={{ justifySelf: 'end', maxWidth: '80%', bgcolor: 'rgba(26,141,255,0.10)', px: 1.5, py: 1, borderRadius: '12px 12px 2px 12px' }}>
+                  <Typography sx={{ whiteSpace: 'pre-wrap' }}>{x.question}</Typography>
+                </Box>
+                {(x.toolCalls ?? (pending(x) ? progress?.toolCalls : undefined) ?? []).length > 0 && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {(x.toolCalls ?? progress?.toolCalls ?? []).map((t, j) => (
+                      <Chip key={j} size="small" variant="outlined" sx={{ borderStyle: 'dashed' }} label={describe(t)} color={t.isError ? 'warning' : 'default'} />
+                    ))}
+                  </Box>
+                )}
+                {pending(x) && (
+                  <Box>
+                    <Progress />
+                    <Typography variant="caption" color="text.secondary">
+                      {progress ? `${profile.working} ${(progress.elapsedMs / 1000).toFixed(0)} s` : 'Thinking…'}
+                    </Typography>
+                  </Box>
+                )}
+                {x.error && <WarningPanel severity="error" title="No answer" message={x.error} />}
+                {x.answer && (
+                  <Box sx={{ maxWidth: '80ch' }}>
+                    <MarkdownContent content={x.answer} dialect="gfm" />
+                    <Typography variant="caption" color="text.secondary">
+                      {x.model}
+                      {x.ms !== undefined && ` · ${(x.ms / 1000).toFixed(0)} s`}
+                      {x.usage && ` · ${(((x.usage.input ?? 0) + (x.usage.output ?? 0)) / 1000).toFixed(1)} k tokens`}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            ))}
+            <div ref={bottom} />
+          </Box>
+          <Box sx={{ borderTop: 1, borderColor: 'divider', p: 1.25, display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+            <TextField
+              fullWidth
+              multiline
+              maxRows={6}
+              size="small"
+              placeholder={about?.prefix ? `${profile.placeholder}` : profile.placeholder}
+              value={question}
+              disabled={busy || !!status}
+              onChange={e => setQuestion(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  ask(question);
+                }
+              }}
+              inputProps={{ 'aria-label': 'Question' }}
+            />
+            {busy ? (
+              <Button color="warning" variant="outlined" onClick={cancel} sx={{ textTransform: 'none' }}>
+                Cancel
+              </Button>
+            ) : (
+              <Button variant="contained" disabled={!question.trim() || !!status} onClick={() => ask(question)} sx={{ textTransform: 'none' }}>
+                Send
+              </Button>
+            )}
+          </Box>
+        </Box>
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <Box sx={{ ...card, p: 1.5, display: 'grid', gap: 1 }}>
+            <Typography sx={{ fontWeight: 600 }}>What it sees</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {profile.intro}
+            </Typography>
+            {project && <Chip size="small" color="primary" variant="outlined" label={`project ${project}`} />}
+            <TextField
+              select
+              size="small"
+              label="Charge its cost to"
+              value={state.system ?? FROM_TOOLS}
+              disabled={busy}
+              onChange={e => {
+                const system = e.target.value || undefined;
+                setState(({ system: _, ...rest }) => (system ? { ...rest, system } : rest));
+              }}
+              helperText="Its tokens go to this system in Costs; without one, to what it looks at."
+            >
+              <MenuItem value={FROM_TOOLS}>What it looks at</MenuItem>
+              {[...new Set([...systems, ...(state.system ? [state.system] : [])])].sort().map(x => (
+                <MenuItem key={x} value={x}>
+                  {x}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+          <Box sx={{ ...card, p: 1.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              It proposes; you act. Check what it says before acting on it.
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Page themeId="tool">

@@ -27,7 +27,7 @@ const json = (body: unknown, status = 200) => ({
 /** the conversations the backend keeps for the user: {id: {title, state}} */
 type Kept = Record<string, { title: string; updatedAt?: string; state: unknown }>;
 
-async function render(jobs: Record<string, unknown>, kept: Kept = {}) {
+async function render(jobs: Record<string, unknown>, kept: Kept = {}, variant: 'classic' | 'console' = 'classic') {
   const calls: string[] = [];
   const puts: Array<{ url: string; body: any }> = [];
   const posts: any[] = [];
@@ -77,7 +77,7 @@ async function render(jobs: Record<string, unknown>, kept: Kept = {}) {
           [catalogApiRef, catalog],
         ]}
       >
-        <AssistantPage profile={profile} />
+        <AssistantPage profile={profile} variant={variant} others={[{ title: 'Operations', to: '/console/ops-assistant', current: true }, { title: 'Security', to: '/console/sec-assistant', current: false }]} />
       </TestApiProvider>,
     ),
   };
@@ -224,3 +224,19 @@ describe('AssistantPage, the system its cost is charged to', () => {
     expect(posts[0]).not.toHaveProperty('system');
   });
 });
+
+describe('AssistantPage in the console', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    Element.prototype.scrollIntoView = jest.fn();
+  });
+
+  it('lists the other assistants and the kept conversations, which can be deleted', async () => {
+    const view = await render({}, { c1: { title: 'Why is Loki restarting?', state: { messages: [], exchanges: [] } } }, 'console');
+    expect(await screen.findByText('Why is Loki restarting?')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Security' })).toHaveAttribute('href', '/console/sec-assistant');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Why is Loki restarting?' }));
+    await waitFor(() => expect(view.calls.filter(u => u.endsWith('/conversations/c1')).length).toBeGreaterThan(0));
+  });
+});
+

@@ -55,11 +55,12 @@ import { TopologyPage } from './components/topology/TopologyPage';
 import { NodesCompliancePage } from './components/compliance/NodesCompliancePage';
 import { ImagesPage } from './components/images/ImagesPage';
 import { CostsPage } from './components/cost/CostsPage';
-import { OpsAssistantPage } from './components/opsassistant/OpsAssistantPage';
-import { SecAssistantPage } from './components/opsassistant/SecAssistantPage';
-import { FunctionalAssistantPage } from './components/opsassistant/FunctionalAssistantPage';
-import { ArchitectAssistantPage } from './components/opsassistant/ArchitectAssistantPage';
-import { DeveloperAssistantPage } from './components/opsassistant/DeveloperAssistantPage';
+import { OpsAssistantPage, OPS } from './components/opsassistant/OpsAssistantPage';
+import { SecAssistantPage, SEC } from './components/opsassistant/SecAssistantPage';
+import { FunctionalAssistantPage, FUNCTIONAL } from './components/opsassistant/FunctionalAssistantPage';
+import { ArchitectAssistantPage, ARCHITECT } from './components/opsassistant/ArchitectAssistantPage';
+import { DeveloperAssistantPage, DEVELOPER } from './components/opsassistant/DeveloperAssistantPage';
+import { AssistantPage, type AssistantProfile } from './components/opsassistant/AssistantPage';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
 import { ConsolePage, type ConsoleClassicPage } from '@internal/plugin-console';
@@ -128,6 +129,19 @@ const topologyPage = <TopologyPage />;
 const cisNodesPage = <NodesCompliancePage />;
 const imagesPage = <ImagesPage />;
 
+/** An assistant inside the console: the same page in its console layout, with the other assistants beside it. */
+const CONSOLE_ASSISTANTS: Array<[string, string, AssistantProfile]> = [
+  ['ops-assistant', 'Operations', OPS],
+  ['sec-assistant', 'Security', SEC],
+  ['functional-assistant', 'Functional', FUNCTIONAL],
+  ['architect-assistant', 'Architect', ARCHITECT],
+  ['developer-assistant', 'Developer', DEVELOPER],
+];
+const ConsoleAssistant = ({ id }: { id: string }) => {
+  const profile = CONSOLE_ASSISTANTS.find(([x]) => x === id)![2];
+  return <AssistantPage profile={profile} variant="console" others={CONSOLE_ASSISTANTS.map(([x, title]) => ({ title, to: `/console/${x}`, current: x === id }))} />;
+};
+
 const consolePages: ConsoleClassicPage[] = [
   { id: 'create', title: 'Create', layer: 'portal', classicPath: '/create', nested: true, element: scaffolderPage },
   { id: 'apis', title: 'APIs', layer: 'portal', classicPath: '/api-docs', element: apiExplorerPage },
@@ -138,11 +152,11 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'topology', title: 'Topology', layer: 'cluster', classicPath: '/topology', element: topologyPage },
   { id: 'cis-nodes', title: 'CIS Kubernetes nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
-  { id: 'ops-assistant', title: 'Operations', product: 'Operations assistant: what happens in the cluster and why', layer: 'assistants', classicPath: '/ops-assistant', element: <OpsAssistantPage /> },
-  { id: 'sec-assistant', title: 'Security', product: 'Security assistant: vulnerabilities, exposure and risk', layer: 'assistants', classicPath: '/sec-assistant', element: <SecAssistantPage /> },
-  { id: 'functional-assistant', title: 'Functional', product: 'Functional assistant: specifications of a system', layer: 'assistants', classicPath: '/functional-assistant', element: <FunctionalAssistantPage /> },
-  { id: 'architect-assistant', title: 'Architect', product: 'Architect assistant: architecture, installation and DR of a system', layer: 'assistants', classicPath: '/architect-assistant', element: <ArchitectAssistantPage /> },
-  { id: 'developer-assistant', title: 'Developer', product: 'Developer assistant: from a change to draft pull requests', layer: 'assistants', classicPath: '/developer-assistant', element: <DeveloperAssistantPage /> },
+  { id: 'ops-assistant', title: 'Operations', product: 'Operations assistant: what happens in the cluster and why', layer: 'assistants', classicPath: '/ops-assistant', element: <ConsoleAssistant id="ops-assistant" /> },
+  { id: 'sec-assistant', title: 'Security', product: 'Security assistant: vulnerabilities, exposure and risk', layer: 'assistants', classicPath: '/sec-assistant', element: <ConsoleAssistant id="sec-assistant" /> },
+  { id: 'functional-assistant', title: 'Functional', product: 'Functional assistant: specifications of a system', layer: 'assistants', classicPath: '/functional-assistant', element: <ConsoleAssistant id="functional-assistant" /> },
+  { id: 'architect-assistant', title: 'Architect', product: 'Architect assistant: architecture, installation and DR of a system', layer: 'assistants', classicPath: '/architect-assistant', element: <ConsoleAssistant id="architect-assistant" /> },
+  { id: 'developer-assistant', title: 'Developer', product: 'Developer assistant: from a change to draft pull requests', layer: 'assistants', classicPath: '/developer-assistant', element: <ConsoleAssistant id="developer-assistant" /> },
   { id: 'keycloak', title: 'IAM', product: 'Keycloak', layer: 'managers', classicPath: '/keycloak-manager', element: <KeycloakManagerPage /> },
   { id: 'gravitee', title: 'API management', product: 'Gravitee', layer: 'managers', classicPath: '/gravitee-manager', element: <GraviteeManagerPage /> },
   { id: 'datahub', title: 'Data management', product: 'DataHub', layer: 'managers', classicPath: '/datahub', element: <DatahubCatalogPage /> },
