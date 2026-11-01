@@ -1,4 +1,4 @@
-import { configApiRef, identityApiRef } from '@backstage/core-plugin-api';
+import { configApiRef, discoveryApiRef, fetchApiRef, identityApiRef } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { MockConfigApi, renderInTestApp, TestApiProvider } from '@backstage/test-utils';
 import { useEntity } from '@backstage/plugin-catalog-react';
@@ -43,6 +43,8 @@ const render = (consoleCfg: object, refs: string[] = ['user:default/ana'], route
         [configApiRef, new MockConfigApi({ console: consoleCfg })],
         [identityApiRef, identity(refs)],
         [catalogApiRef, catalog],
+        [discoveryApiRef, { getBaseUrl: async (id: string) => `http://b/api/${id}` }],
+        [fetchApiRef, { fetch: async () => new Response(JSON.stringify({ error: 'not in this test' }), { status: 503 }) }],
       ]}
     >
       <ConsoleRouter

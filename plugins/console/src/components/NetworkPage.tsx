@@ -1,4 +1,4 @@
-import { Progress, WarningPanel } from '@backstage/core-components';
+import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -184,7 +184,7 @@ export const NetworkPage = () => {
             rows={data.namespaces
               .filter(x => system || !x.system)
               .map(x => [
-                x.name,
+                <Link to={`/console/namespaces/${x.name}`}>{x.name}</Link>,
                 x.segment ?? '—',
                 <Badge label={ISOLATION_TEXT[x.isolation]} {...tone(isolationTone(x.isolation))} />,
                 x.policies.length ? x.policies.map(p => p.name).join(', ') : '—',

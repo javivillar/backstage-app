@@ -2,8 +2,9 @@ import { Entity } from '@backstage/catalog-model';
 import { cloneElement, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import Dashboard from '@mui/icons-material/Dashboard';
 import Lan from '@mui/icons-material/Lan';
+import MonitorHeart from '@mui/icons-material/MonitorHeart';
 import RouteIcon from '@mui/icons-material/Route';
-import { EntityNetworkContent, EntityUserJourneyContent } from '@internal/plugin-console';
+import { EntityLiveContent, EntityNetworkContent, EntityUserJourneyContent } from '@internal/plugin-console';
 import RocketLaunch from '@mui/icons-material/RocketLaunch';
 import Cloud from '@mui/icons-material/Cloud';
 import AccountTree from '@mui/icons-material/AccountTree';
@@ -788,11 +789,14 @@ const entityPageWith = (componentExtra?: ReactNode) => (
 export const entityPage = entityPageWith();
 
 /**
- * The entity page inside the console (/console/entity/...): the same tabs, plus the live User journey and Network of a
- * component that says its namespace. The classic portal keeps entityPage as it is.
+ * The entity page inside the console (/console/entity/...): the same tabs, plus Live (its pods now), User journey and
+ * Network of a component that says its namespace. The classic portal keeps entityPage as it is.
  */
 export const consoleEntityPage = entityPageWith(
   <>
+    <EntityLayout.Route path="/live" title={tabLabel(<MonitorHeart />, 'Live')} if={hasNamespace}>
+      <EntityLiveContent />
+    </EntityLayout.Route>
     <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
       <EntityUserJourneyContent />
     </EntityLayout.Route>

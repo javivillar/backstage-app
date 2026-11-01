@@ -33,6 +33,28 @@ the Prometheus of the cluster (`costs.prometheusUrl`, the same one the costs use
 permissions: nodes (kube-state-metrics + node-exporter), Argo CD applications (`argocd_app_info`) and volumes per
 namespace (kube-state-metrics + kubelet). Backups are not published as metrics yet.
 
+## Operate
+
+- **Needs attention** (Portal home and Cluster overview): nodes not ready or cordoned, memory requested over 90%,
+  Argo CD applications not healthy or out of sync, volumes at 80% or more, the cluster certificate under 21 days,
+  namespaces open to the whole cluster. Computed in the browser from `/overview` and `/network`; each item links to
+  the page that shows it.
+- **Cluster › Applications**: every Argo CD application, problems first, search and a "only with problems" filter;
+  linked to its entity page when a component has the same name.
+- **Cluster › Storage**: every volume (requested size, real capacity and use from the kubelet), the fullest first.
+- **Namespace page** `/console/namespaces/<ns>` (linked from Applications, Storage, Network, the overview and Needs
+  attention): segment, isolation, Argo CD state, the catalog entities that run there, the cost of the last 7 days
+  (OpenCost through the proxy `/opencost`), pods, Warning events of the last hour, workloads with their images, job
+  runs, hosts, volumes and policies.
+- **Live** tab of a component with `refresquito.io/namespace` (console only): the same sections for its namespace.
+  Pods: `GET /api/cluster/namespaces/:ns/live` (only pods that exist now; pods of Jobs apart); workloads and events:
+  `GET /api/cluster/namespaces/:ns/workloads` (Kubernetes API; events need cnoe-oneke 0.2.76). Read every 30 s.
+- **Pods restarting** (more than twice in the last hour) in Needs attention, from `/overview`.
+- **Portal home**: a text filter, Argo CD health on each row, "Owned by your groups" (ownership of the signed-in
+  user) and "Your favourites" (the same stars as the classic pages).
+- **Find** in the top bar: type a name, jump to its page in the console.
+- **What costs most** (last 7 days) in the cluster overview.
+
 ## Network
 
 `/console/network` (Cluster menu) and the **User journey** and **Network** tabs of a component that says its namespace
