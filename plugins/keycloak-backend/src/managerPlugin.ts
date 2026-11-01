@@ -9,6 +9,7 @@ import {
 import { securityOf, unowned } from './security';
 
 interface KcUser {
+  id: string;
   username: string;
   email?: string;
   firstName?: string;
@@ -23,6 +24,7 @@ interface KcGroup {
 }
 
 interface KcClient {
+  id: string;
   clientId: string;
   name?: string;
   description?: string;
@@ -75,6 +77,8 @@ export const keycloakManagerPlugin = createBackendPlugin({
             }
             const items = users
               .map(u => ({
+                // the id opens it in the Keycloak admin console (console › Manage › IAM)
+                id: u.id,
                 username: u.username,
                 email: u.email,
                 displayName: [u.firstName, u.lastName].filter(Boolean).join(' '),
@@ -112,6 +116,7 @@ export const keycloakManagerPlugin = createBackendPlugin({
             }
             const items = all
               .map(g => ({
+                id: g.id,
                 name: g.name,
                 owner: ownerFromAttributes(g.attributes),
               }))
@@ -131,6 +136,7 @@ export const keycloakManagerPlugin = createBackendPlugin({
             const clients = (await r.json()) as KcClient[];
             const items = clients
               .map(c => ({
+                id: c.id,
                 clientId: c.clientId,
                 name: c.name,
                 publicClient: c.publicClient,

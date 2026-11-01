@@ -55,7 +55,7 @@ export const MANAGE_SERVICES: ManageService[] = [
         plugin: 'keycloak-manager',
         path: '/users',
         title: r => String(r.username),
-        open: (_, host) => kcUrl(host, 'users'),
+        open: (r, host) => kcUrl(host, r.id ? `users/${enc(r.id)}/settings` : 'users'),
         columns: [
           { key: 'username', label: 'User' },
           { key: 'displayName', label: 'Name' },
@@ -63,13 +63,13 @@ export const MANAGE_SERVICES: ManageService[] = [
           { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
         ],
       },
-      { label: 'Groups', plugin: 'keycloak-manager', path: '/groups', title: r => String(r.name), open: (_, host) => kcUrl(host, 'groups'), columns: [{ key: 'name', label: 'Group' }, { key: 'owner', label: 'Owner', render: r => (r.owner ? owner(r.owner) : <Badge label="no owner" {...TONES.warn} />) }] },
+      { label: 'Groups', plugin: 'keycloak-manager', path: '/groups', title: r => String(r.name), open: (r, host) => kcUrl(host, r.id ? `groups/${enc(r.id)}` : 'groups'), columns: [{ key: 'name', label: 'Group' }, { key: 'owner', label: 'Owner', render: r => (r.owner ? owner(r.owner) : <Badge label="no owner" {...TONES.warn} />) }] },
       {
         label: 'SSO clients',
         plugin: 'keycloak-manager',
         path: '/clients',
         title: r => String(r.clientId),
-        open: (_, host) => kcUrl(host, 'clients'),
+        open: (r, host) => kcUrl(host, r.id ? `clients/${enc(r.id)}/settings` : 'clients'),
         columns: [
           { key: 'clientId', label: 'Client' },
           { key: 'name', label: 'Name' },
@@ -191,6 +191,7 @@ export const MANAGE_SERVICES: ManageService[] = [
         plugin: 'seaweedfs-manager',
         path: '/groups',
         title: r => String(r.name),
+        open: (_, host) => host('admin-seaweedfs'),
         columns: [
           { key: 'name', label: 'Group' },
           { key: 'memberCount', label: 'Members' },
@@ -198,7 +199,7 @@ export const MANAGE_SERVICES: ManageService[] = [
           { key: 'owner', label: 'Owner', render: r => owner(r.owner) },
         ],
       },
-      { label: 'Policies', plugin: 'seaweedfs-manager', path: '/policies', title: r => String(r.name), columns: [{ key: 'name', label: 'Policy' }] },
+      { label: 'Policies', plugin: 'seaweedfs-manager', path: '/policies', title: r => String(r.name), open: (_, host) => host('admin-seaweedfs'), columns: [{ key: 'name', label: 'Policy' }] },
     ],
   },
   {
