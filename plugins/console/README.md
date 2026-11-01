@@ -1,5 +1,7 @@
 # Console plugin
 
+User guide: TechDocs of cnoe-oneke, page **Console (beta)** (`charts/cnoe-oneke/CONSOLE.md` of refresquito-services).
+
 A cloud-provider style console for the Refresquito portal, at `/console`. It **coexists** with the classic pages of
 Backstage: it adds routes and never changes the existing ones. Both read the same backends (catalog, scaffolder,
 Tech Insights, OpenCost…); the console stores nothing of its own.
@@ -32,6 +34,19 @@ Links to other entities (`/catalog/...`) inside those cards stay in the console;
 the Prometheus of the cluster (`costs.prometheusUrl`, the same one the costs use), so it needs no Kubernetes
 permissions: nodes (kube-state-metrics + node-exporter), Argo CD applications (`argocd_app_info`) and volumes per
 namespace (kube-state-metrics + kubelet). Backups are not published as metrics yet.
+
+## 1.0: service page, zone, actions
+
+- **Service page**: the console header (identity, vital signs that open their tab, Actions, Ask the ops assistant) and,
+  for a component with `refresquito.io/namespace`, the console's own Overview (`ServiceOverview`) and the tabs Live,
+  Network, User journey, Changes, Security, Costs (`ServiceViews.tsx`). Data read once per page (`ServiceData.tsx`):
+  `/api/cluster` (live, workloads, network, overview), OpenCost (week by day), costs `/deployments` (changes), SBOM
+  `/vulnerabilities` (findings per image). The classic tabs keep working, restyled (`ClassicFrame entity`).
+- **Zone layer** (read-only): `/console/infrastructure` (+ vms, networks, security-groups) from `GET /api/cluster/zone`:
+  `topology.json` that the OpenNebula host publishes every 5 min in the ConfigMap `refresquito-topology`.
+- **Actions**: `POST /api/cluster/actions/{sync,restart}` through Argo CD (the credentials of the Argo CD plugin),
+  only `console.actions.groups` (default backstage-admin); logged, shown in Changes.
+- **Assistants** and **Manage** menus: the classic pages inside the console.
 
 ## Operate
 

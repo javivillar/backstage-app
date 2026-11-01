@@ -7,7 +7,7 @@ export type ConsoleClassicPage = {
   id: string;
   title: string;
   /** menu group of the console */
-  layer: 'portal' | 'cluster';
+  layer: 'portal' | 'cluster' | 'assistants' | 'managers';
   /** where the classic portal mounts it, e.g. /create */
   classicPath: string;
   /** the page has sub-routes of its own (e.g. the scaffolder): /create/x → /console/create/x */

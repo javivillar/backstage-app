@@ -4,7 +4,18 @@ import Dashboard from '@mui/icons-material/Dashboard';
 import Lan from '@mui/icons-material/Lan';
 import MonitorHeart from '@mui/icons-material/MonitorHeart';
 import RouteIcon from '@mui/icons-material/Route';
-import { EntityLiveContent, EntityNetworkContent, EntityUserJourneyContent } from '@internal/plugin-console';
+import {
+  EntityLiveContent,
+  EntityNetworkContent,
+  EntityUserJourneyContent,
+  ServiceChanges,
+  ServiceCosts,
+  ServiceOverview,
+  ServiceSecurity,
+} from '@internal/plugin-console';
+import GppMaybe from '@mui/icons-material/GppMaybe';
+import History from '@mui/icons-material/History';
+import Savings from '@mui/icons-material/Savings';
 import RocketLaunch from '@mui/icons-material/RocketLaunch';
 import Cloud from '@mui/icons-material/Cloud';
 import AccountTree from '@mui/icons-material/AccountTree';
@@ -405,10 +416,10 @@ const qualityContent = (
   </div>
 );
 
-const serviceEntityPageWith = (extra?: ReactNode) => (
+const serviceEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
-      {overviewContent}
+      {overview ?? overviewContent}
     </EntityLayout.Route>
     <EntityLayout.Route path="/ci-cd" title={tabLabel(<RocketLaunch />, 'CI/CD')}>
       {cicdContent}
@@ -487,10 +498,10 @@ const serviceEntityPageWith = (extra?: ReactNode) => (
   </EntityLayout>
 );
 
-const websiteEntityPageWith = (extra?: ReactNode) => (
+const websiteEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
-      {overviewContent}
+      {overview ?? overviewContent}
     </EntityLayout.Route>
     <EntityLayout.Route path="/ci-cd" title={tabLabel(<RocketLaunch />, 'CI/CD')}>
       {cicdContent}
@@ -585,10 +596,10 @@ const resourceGroupPage = (
   </EntityLayout>
 );
 
-const defaultEntityPageWith = (extra?: ReactNode) => (
+const defaultEntityPageWith = (extra?: ReactNode, overview?: ReactElement) => (
   <EntityLayout>
     <EntityLayout.Route path="/" title={tabLabel(<Dashboard />, 'Overview')}>
-      {overviewContent}
+      {overview ?? overviewContent}
     </EntityLayout.Route>
     {/* an image of the image catalog (Harbor): its vulnerabilities with the VEX, SBOM, provenance, history */}
     <EntityLayout.Route path="/image" title={tabLabel(<Inventory />, 'Image')} if={isImageAvailable}>
@@ -620,15 +631,15 @@ const defaultEntityPageWith = (extra?: ReactNode) => (
 );
 const defaultEntityPage = defaultEntityPageWith();
 
-const componentPageWith = (extra?: ReactNode) => (
+const componentPageWith = (extra?: ReactNode, overview?: ReactElement) => (
   <EntitySwitch>
     <EntitySwitch.Case if={isComponentType('service')}>
-      {serviceEntityPageWith(extra)}
+      {serviceEntityPageWith(extra, overview)}
     </EntitySwitch.Case>
     <EntitySwitch.Case if={isComponentType('website')}>
-      {websiteEntityPageWith(extra)}
+      {websiteEntityPageWith(extra, overview)}
     </EntitySwitch.Case>
-    <EntitySwitch.Case>{defaultEntityPageWith(extra)}</EntitySwitch.Case>
+    <EntitySwitch.Case>{defaultEntityPageWith(extra, overview)}</EntitySwitch.Case>
   </EntitySwitch>
 );
 
@@ -770,9 +781,9 @@ const domainPage = (
   </EntityLayout>
 );
 
-const entityPageWith = (componentExtra?: ReactNode) => (
+const entityPageWith = (componentExtra?: ReactNode, componentOverview?: ReactElement) => (
   <EntitySwitch>
-    <EntitySwitch.Case if={isKind('component')} children={componentPageWith(componentExtra)} />
+    <EntitySwitch.Case if={isKind('component')} children={componentPageWith(componentExtra, componentOverview)} />
     <EntitySwitch.Case if={isKind('api')} children={apiPage} />
     <EntitySwitch.Case if={isKind('group')} children={groupPage} />
     <EntitySwitch.Case if={isKind('user')} children={userPage} />
@@ -788,20 +799,37 @@ const entityPageWith = (componentExtra?: ReactNode) => (
 
 export const entityPage = entityPageWith();
 
+/** In the console, a component that says its namespace gets the console's own Overview; any other, the classic one. */
+const ConsoleOverview = () => {
+  const { entity } = useEntity();
+  return hasNamespace(entity) ? <ServiceOverview /> : overviewContent;
+};
+
 /**
- * The entity page inside the console (/console/entity/...): the same tabs, plus Live (its pods now), User journey and
- * Network of a component that says its namespace. The classic portal keeps entityPage as it is.
+ * The entity page inside the console (/console/entity/...): the same tabs, the console's Overview, plus Live, Network,
+ * User journey, Changes, Security and Costs of a component that says its namespace. The classic portal keeps
+ * entityPage as it is.
  */
 export const consoleEntityPage = entityPageWith(
   <>
     <EntityLayout.Route path="/live" title={tabLabel(<MonitorHeart />, 'Live')} if={hasNamespace}>
       <EntityLiveContent />
     </EntityLayout.Route>
-    <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
-      <EntityUserJourneyContent />
-    </EntityLayout.Route>
     <EntityLayout.Route path="/network" title={tabLabel(<Lan />, 'Network')} if={hasNamespace}>
       <EntityNetworkContent />
     </EntityLayout.Route>
+    <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
+      <EntityUserJourneyContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/changes" title={tabLabel(<History />, 'Changes')} if={hasNamespace}>
+      <ServiceChanges />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/security" title={tabLabel(<GppMaybe />, 'Security')} if={hasNamespace}>
+      <ServiceSecurity />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
+      <ServiceCosts />
+    </EntityLayout.Route>
   </>,
+  <ConsoleOverview />,
 );

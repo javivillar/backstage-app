@@ -7,11 +7,10 @@ import Typography from '@mui/material/Typography';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
-import { Badge } from './Badge';
 import { ClassicFrame } from './ClassicFrame';
-import { ClassicLink } from './ClassicLink';
+import { ServiceDataProvider } from './ServiceData';
+import { ServiceHeader } from './ServiceViews';
 import { classify, entityPath } from './classify';
-import { rq } from './tokens';
 
 type State = { loading: boolean; entity?: Entity; error?: Error };
 
@@ -37,32 +36,6 @@ function useEntityFromRoute() {
   return { ...state, refresh };
 }
 
-const Header = ({ entity }: { entity: Entity }) => {
-  const kind = classify(entity);
-  const owner = (entity.spec as { owner?: string } | undefined)?.owner;
-  const system = (entity.spec as { system?: string } | undefined)?.system;
-  const lifecycle = (entity.spec as { lifecycle?: string } | undefined)?.lifecycle;
-  return (
-    <Box sx={{ display: 'grid', gap: 0.75, mb: 1 }}>
-      <Typography variant="body2" color="text.secondary">
-        <Link to="/console">Portal</Link> / {entity.kind}
-      </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          {entity.metadata.title ?? entity.metadata.name}
-        </Typography>
-        {kind === 'business' && <Badge label="Business application" bg={rq.biz.bg} fg={rq.biz.fg} />}
-        {kind === 'service' && <Badge label="Refresquito service" bg={rq.svc.bg} fg={rq.svc.fg} />}
-        {lifecycle && <Badge outlined label={lifecycle} />}
-      </Box>
-      <Typography variant="body2" color="text.secondary">
-        {[owner && `Owner ${owner}`, system && `System ${system}`].filter(Boolean).join(' · ')}
-        {(owner || system) && ' · '}
-        <ClassicLink path={entityPath(entity)} />
-      </Typography>
-    </Box>
-  );
-};
 
 /**
  * /console/entity/:namespace/:kind/:name/*: the classic entity page (tabs and cards, passed in by the app) under the
@@ -71,26 +44,31 @@ const Header = ({ entity }: { entity: Entity }) => {
 export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
   const cfg = useConsoleConfig();
   const { loading, entity, error, refresh } = useEntityFromRoute();
-
-
   return (
-    <Box sx={{ display: 'grid', gap: 1 }}>
+    <Box sx={{ display: 'grid', gap: 2 }}>
       {loading && <Progress />}
-      {entity && <Header entity={entity} />}
+      {entity && (
+        <Typography variant="body2" color="text.secondary">
+          <Link to="/console">Portal</Link> / {classify(entity) === 'business' ? 'Business applications' : entity.kind} / {entity.metadata.title ?? entity.metadata.name}
+        </Typography>
+      )}
       {!content && entity && (
         <Typography color="text.secondary">
           This portal does not pass the entity cards to the console:{' '}
           <a href={classicUrl(cfg, entityPath(entity))}>open the classic page</a>.
         </Typography>
       )}
-      {content && !loading && (
-        <ClassicFrame>
+      {content && !loading && entity && (
+        <ServiceDataProvider entity={entity}>
+          <ServiceHeader />
+          <ClassicFrame entity>
           <AsyncEntityProvider loading={loading} entity={entity} error={error} refresh={refresh}>
             {content}
           </AsyncEntityProvider>
-        </ClassicFrame>
+          </ClassicFrame>
+        </ServiceDataProvider>
       )}
-      {!content && error && <Typography color="error">{error.message}</Typography>}
+      {!entity && error && <Typography color="error">{error.message}</Typography>}
     </Box>
   );
 };

@@ -21,10 +21,15 @@ describe('clusterWorkloads', () => {
         { type: 'Warning', reason: 'BackOff', message: 'Back-off restarting again', count: 2, lastTimestamp: '2026-11-01T09:55:00Z', involvedObject: { kind: 'Pod', name: 'kafka-0' } },
         { type: 'Warning', reason: 'FailedMount', count: 1, lastTimestamp: '2026-11-01T07:00:00Z', involvedObject: { kind: 'Pod', name: 'old' } },
         { type: 'Normal', reason: 'Pulled', lastTimestamp: '2026-11-01T09:59:00Z' },
+        { type: 'Warning', reason: 'Unhealthy', count: 1, lastTimestamp: new Date('2026-11-01T09:40:00Z'), involvedObject: { kind: 'Pod', name: 'api' } },
       ],
       now,
     );
-    expect(events).toEqual([{ reason: 'BackOff', object: 'Pod kafka-0', message: 'Back-off restarting again', count: 5, last: '2026-11-01T09:55:00Z' }]);
+    expect(events).toEqual([
+      { reason: 'BackOff', object: 'Pod kafka-0', message: 'Back-off restarting again', count: 5, last: '2026-11-01T09:55:00.000Z' },
+      // the client gives Date objects: they count too
+      { reason: 'Unhealthy', object: 'Pod api', message: '', count: 1, last: '2026-11-01T09:40:00.000Z' },
+    ]);
   });
 
   it('puts the workloads not ready first', () => {
