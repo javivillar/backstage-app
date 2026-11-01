@@ -521,8 +521,7 @@ export default createBackendPlugin({
           const out = addSegregation(toml.text, view, b.zone, b.program);
           if (typeof out === 'string') return out;
           const message = `console: new segregation ${b.zone}/${b.program} (n=${out.n}${out.enabled ? `, enables zone ${b.zone}` : ''})`;
-          const pull = await infraRepo.pullRequest(slug, message, body({ zone: b.zone, program: b.program, n: out.n, enablesZone: out.enabled }, user) +
-            '\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user.\n',
+          const pull = await infraRepo.pullRequest(slug, message, `${body({ zone: b.zone, program: b.program, n: out.n, enablesZone: out.enabled }, user)}\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user.\n`,
             [{ path: `${infraDir}/network.toml`, text: out.text }]);
           return { message, pull };
         });
@@ -538,7 +537,7 @@ export default createBackendPlugin({
           if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for a cluster in ${b.zone}/${b.program}.`;
           const file: ClusterFile = { zone: b.zone, program: b.program, profile: b.profile, ...(workers !== undefined ? { workers } : {}), requested_by: user, requested_at: new Date().toISOString() };
           const message = `console: new cluster in ${b.zone}/${b.program} (profile ${b.profile})`;
-          const pull = await infraRepo.pullRequest(slug, message, body(file, user) + '\nOnce merged, the host creates it within 5 minutes (configuration.py reconcile → cluster-create).\n',
+          const pull = await infraRepo.pullRequest(slug, message, `${body(file, user)}\nOnce merged, the host creates it within 5 minutes (configuration.py reconcile → cluster-create).\n`,
             [{ path: `${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, text: `${JSON.stringify(file, null, 2)}\n` }]);
           return { message, pull };
         });

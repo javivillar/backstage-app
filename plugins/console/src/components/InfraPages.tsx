@@ -59,6 +59,13 @@ const Kpis = ({ children }: { children: ReactNode }) => (
   <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))' }}>{children}</Box>
 );
 
+function programState(p: { declared: boolean; ok: boolean | null }): [string, Tone] {
+  if (!p.declared) return ['Not in network.toml', 'warn'];
+  if (p.ok) return ['Applied', 'ok'];
+  if (p.ok === false) return ['Incomplete', 'warn'];
+  return ['Declared', 'info'];
+}
+
 /** The zones of the catalog as lanes, their programmes (segregations) as nodes. */
 export function catalogLanes(catalog: CatalogZone[]): FlowLane[] {
   return [...catalog]
@@ -67,19 +74,30 @@ export function catalogLanes(catalog: CatalogZone[]): FlowLane[] {
       label: `${z.label ?? z.name}${z.block ? ` · ${z.block}` : ''}`,
       nodes: z.programs.length
         ? z.programs.map(p => {
-            const tone: Tone = !p.declared ? 'warn' : p.ok === false ? 'warn' : p.ok ? 'ok' : 'info';
-            return {
-              title: `${z.name}/${p.name}`,
-              sub: `n=${p.n ?? '?'}${p.cluster ? ` · cluster ${p.cluster}` : ' · no cluster'}`,
-              state: !p.declared ? 'Not in network.toml' : p.ok ? 'Applied' : p.ok === false ? 'Incomplete' : 'Declared',
-              tone,
-            };
+            const [state, tone] = programState(p);
+            return { title: `${z.name}/${p.name}`, sub: `n=${p.n ?? '?'}${p.cluster ? ` · cluster ${p.cluster}` : ' · no cluster'}`, state, tone };
           })
         : [{ title: z.enabled ? 'No programme yet' : 'Reserved', sub: z.enabled ? 'enabled, empty' : 'a new segregation enables it', tone: 'off' as Tone, dashed: true }],
     }));
 }
 
-const stepTone = (state: string): Tone => (state === 'done' || state === 'ok' || state === 'applied' ? 'ok' : state === 'failed' || state === 'refused' ? 'bad' : 'info');
+export function stepTone(state: string): Tone {
+  if (state === 'done' || state === 'ok' || state === 'applied') return 'ok';
+  if (state === 'failed' || state === 'refused') return 'bad';
+  return 'info';
+}
+
+function lastRun(s: ReconcileStatus): string {
+  if (s.finished) return new Date(s.finished).toLocaleString();
+  if (s.started) return `started ${new Date(s.started).toLocaleString()}`;
+  return '—';
+}
+
+function segregationHelp(taken: boolean, nameOk: boolean, z: CatalogZone | undefined, program: string, nextN?: number): string {
+  if (taken) return 'It already exists in this zone';
+  if (program && !nameOk) return 'Lowercase letters, digits and "-"';
+  return `${z?.name ?? '…'}/${program || '…'} · n=${nextN ?? '?'}${z && !z.enabled ? ' · enables the zone' : ''}`;
+}
 
 /** What the host did following main (configuration.py reconcile, every 5 minutes). */
 export const ReconcileCard = ({ status, only }: { status?: ReconcileStatus; only?: (s: { zone?: string; program?: string }) => boolean }) => {
@@ -91,7 +109,7 @@ export const ReconcileCard = ({ status, only }: { status?: ReconcileStatus; only
       ) : (
         <>
           <Typography variant="body2" color="text.secondary">
-            Last run {status.finished ? new Date(status.finished).toLocaleString() : status.started ? `started ${new Date(status.started).toLocaleString()}` : '—'}
+            Last run {lastRun(status)}
           </Typography>
           {status.error && <Typography color="error">{status.error}</Typography>}
           {status.segregation && !only && (
@@ -166,7 +184,7 @@ export const PlatformPage = () => {
                   value={form.program}
                   onChange={e => setForm(f => ({ ...f, program: e.target.value.toLowerCase() }))}
                   error={!!form.program && (!nameOk || taken)}
-                  helperText={taken ? 'It already exists in this zone' : form.program && !nameOk ? 'Lowercase letters, digits and "-"' : `${z?.name ?? '…'}/${form.program || '…'} · n=${nextN ?? '?'}${z && !z.enabled ? ' · enables the zone' : ''}`}
+                  helperText={segregationHelp(taken, nameOk, z, form.program, nextN)}
                 />
                 <Button type="submit" variant="contained" disabled={busy || !infra.data?.allowed || !z || !nameOk || taken} sx={{ textTransform: 'none', justifySelf: 'start' }}>
                   Open the pull request

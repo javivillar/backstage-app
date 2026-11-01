@@ -9,7 +9,7 @@ import { useClusterPost } from '../post';
 import { type InfraView, reconcileStep, SCALE_LIMITS, useInfra, useZone } from '../zone';
 import { Badge } from './Badge';
 import { Flow, TONES } from './Flow';
-import { ReconcileCard } from './InfraPages';
+import { ReconcileCard, stepTone } from './InfraPages';
 import { Card } from './NamespaceSections';
 import { ConfirmBar, ResultNote, useChange } from './Requests';
 
@@ -67,7 +67,7 @@ export const ClusterScalePage = () => {
             {step && (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Typography variant="body2">Host:</Typography>
-                <Badge label={`${step.action} · ${step.state}`} {...TONES[step.state === 'failed' ? 'bad' : step.state === 'ok' || step.state === 'done' ? 'ok' : 'info']} />
+                <Badge label={`${step.action} · ${step.state}`} {...TONES[stepTone(step.state)]} />
               </Box>
             )}
           </Card>

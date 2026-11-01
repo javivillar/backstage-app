@@ -62,10 +62,8 @@ export const ConfirmBar = ({ text, onYes, onNo }: { text: string; onYes: () => v
 );
 
 /** The pull requests of the console waiting for review: merged, the change happens. */
-export const PullList = ({ pulls, empty }: { pulls: ConsolePull[]; empty?: string }) =>
-  pulls.length === 0 ? (
-    empty ? <Typography color="text.secondary">{empty}</Typography> : null
-  ) : (
+export const PullList = ({ pulls }: { pulls: ConsolePull[] }) =>
+  pulls.length === 0 ? null : (
     <Table
       head={['Waiting for review', 'Change', 'Opened']}
       rows={pulls.map(p => [
