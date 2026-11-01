@@ -15,6 +15,8 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import GradeIcon from '@mui/icons-material/Grade';
 import GridViewIcon from '@mui/icons-material/GridView';
 import GroupsIcon from '@mui/icons-material/Groups';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import WidgetsIcon from '@mui/icons-material/Widgets';
 import HubIcon from '@mui/icons-material/Hub';
 import InsightsIcon from '@mui/icons-material/Insights';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
@@ -62,6 +64,8 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/quality': GradeIcon,
   '/console/costs': PaymentsIcon,
   '/console/assistants': GroupsIcon,
+  '/console/create/templates/default/python-framework-app': TerminalIcon,
+  '/console/create/templates/default/spring-framework-app': WidgetsIcon,
   '/console/ops-assistant': EngineeringIcon,
   '/console/sec-assistant': ShieldIcon,
   '/console/functional-assistant': LightbulbIcon,
