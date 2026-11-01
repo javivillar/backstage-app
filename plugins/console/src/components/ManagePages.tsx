@@ -38,6 +38,23 @@ const owner = (v: unknown) => String(v ?? '').replace(/^user:default\//, '').rep
 const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
 const enc = (v: unknown) => encodeURIComponent(String(v ?? ''));
 const kcUrl = (host: HostOf, what: string) => `${host('iam')}/admin/RefresquitoTime/console/#/RefresquitoTime/${what}`;
+const names = (v: unknown) => (Array.isArray(v) ? v.map(x => String((x as { name?: string })?.name ?? '')).filter(Boolean).join(', ') : '');
+/** the governance score of a DataHub asset (datahub-backend governance.ts) */
+const governed = (v: unknown) => {
+  const sc = v as { score?: number; governed?: boolean } | undefined;
+  if (!sc || typeof sc.score !== 'number') return '—';
+  return <Badge label={`${Math.round(sc.score)} %`} {...TONES[sc.governed ? 'ok' : 'warn']} />;
+};
+const dataFacts = (r: Row): Array<[string, ReactNode]> => [
+  ['Description', String(r.description || '—')],
+  ['Domain', String((r.domain as { name?: string } | undefined)?.name ?? '—')],
+  ['Owners', names(r.owners) || '—'],
+  ['Classification', String(r.classification ?? '—')],
+  ['Personal data', r.personalData ? 'yes' : 'no'],
+  ['Retention', r.retentionDays ? `${String(r.retentionDays)} days` : '—'],
+  ['Terms', names(r.terms) || '—'],
+  ['Governed', governed(r.score)],
+];
 const gb = (b: unknown) => (typeof b === 'number' ? `${(b / 1024 ** 3).toFixed(b > 1024 ** 3 ? 1 : 3)} GB` : '—');
 
 /** The services of Manage, in the order of the menu. Sections only for the ones the console draws itself. */
@@ -111,7 +128,61 @@ export const MANAGE_SERVICES: ManageService[] = [
       },
     ],
   },
-  { id: 'datahub', label: 'Data management', product: 'DataHub', app: 'datahub-oneke', sub: 'The data assets of the zone, their classification, owners and lineage.', home: host => host('datahub') },
+  {
+    id: 'datahub',
+    label: 'Data management',
+    product: 'DataHub',
+    app: 'datahub-oneke',
+    sub: 'The data assets of the zone, their classification, owners and lineage.',
+    home: host => host('datahub'),
+    sections: [
+      {
+        label: 'Datasets',
+        plugin: 'datahub-manager',
+        path: '/search?type=dataset&count=50',
+        title: r => String(r.name),
+        open: r => str(r.url),
+        columns: [
+          { key: 'name', label: 'Dataset' },
+          { key: 'platform', label: 'Platform', render: r => String(r.platform ?? '—') },
+          { key: 'classification', label: 'Classification', render: r => String(r.classification ?? '—') },
+          { key: 'owners', label: 'Owners', render: r => names(r.owners) || '—' },
+          { key: 'score', label: 'Governed', render: r => governed(r.score) },
+        ],
+        facts: dataFacts,
+      },
+      {
+        label: 'Data products',
+        plugin: 'datahub-manager',
+        path: '/search?type=dataProduct&count=50',
+        title: r => String(r.name),
+        open: r => str(r.url),
+        columns: [
+          { key: 'name', label: 'Data product' },
+          { key: 'platform', label: 'Platform', render: r => String(r.platform ?? '—') },
+          { key: 'classification', label: 'Classification', render: r => String(r.classification ?? '—') },
+          { key: 'owners', label: 'Owners', render: r => names(r.owners) || '—' },
+          { key: 'score', label: 'Governed', render: r => governed(r.score) },
+        ],
+        facts: dataFacts,
+      },
+      {
+        label: 'Pipelines',
+        plugin: 'datahub-manager',
+        path: '/search?type=dataFlow&count=50',
+        title: r => String(r.name),
+        open: r => str(r.url),
+        columns: [
+          { key: 'name', label: 'Pipeline' },
+          { key: 'platform', label: 'Platform', render: r => String(r.platform ?? '—') },
+          { key: 'classification', label: 'Classification', render: r => String(r.classification ?? '—') },
+          { key: 'owners', label: 'Owners', render: r => names(r.owners) || '—' },
+          { key: 'score', label: 'Governed', render: r => governed(r.score) },
+        ],
+        facts: dataFacts,
+      },
+    ],
+  },
   {
     id: 'superset',
     label: 'Business intelligence',
