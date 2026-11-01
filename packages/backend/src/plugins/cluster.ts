@@ -5,7 +5,8 @@ import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
-import { GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
+import { type ConsolePull, GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
+import { addSegregation, type ClusterFile, clusterFileName, refuseCluster, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
 import { type K8sEvent, type K8sWorkload, type NamespaceWorkloads, summariseWorkloads } from './clusterWorkloads';
@@ -108,11 +109,17 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *                               entity, as its owner when console.actions.owners), and the last actions
  *   POST /api/cluster/actions/sync     { app }                        sync an Argo CD application with git
  *   POST /api/cluster/actions/restart  { app, namespace, kind, name } restart a workload (Argo CD action)
- *   GET  /api/cluster/zone/vms         { policy, vms, allowed }: the VMs requested from the console and their state
- *   POST /api/cluster/zone/vms         { zone, program, name, size, image }  request a VM (backstage-admin)
- *   POST /api/cluster/zone/vms/delete  { zone, program, name }               delete it
- *        One file per VM in console.vms.dir of console.vms.repo (main): Argo CD syncs console-vms-oneke and
+ *   GET  /api/cluster/zone/vms         { policy, vms, pulls, allowed }: the VMs of the console, their state, open PRs
+ *   POST /api/cluster/zone/vms         { zone, program, name, size, image }  pull request that adds the VM (backstage-admin)
+ *   POST /api/cluster/zone/vms/delete  { zone, program, name }               pull request that deletes it
+ *        One file per VM in console.vms.chart/vms of console.vms.repo: merged, Argo CD syncs console-vms-oneke and
  *        Crossplane (provider-terraform) creates the VM in OpenNebula; its Workspace says how it goes.
+ *   GET  /api/cluster/infra            { allowed, pulls, clusters }: open PRs of segregations/clusters, cluster files
+ *   POST /api/cluster/infra/segregations    { zone, program }                       PR adding the programme to network.toml
+ *   POST /api/cluster/infra/clusters        { zone, program, profile, workers? }    PR adding clusters/<zone>-<program>.json
+ *   POST /api/cluster/infra/clusters/scale  { zone, program, workers, storage }     committed directly to main
+ *        In console.infra.repo (javivillar/opennebula), console.infra.dir (configuration): the host follows main
+ *        (configuration.py reconcile) and applies them. Only console.actions.groups (backstage-admin).
  *        Actions: only the groups of console.actions.groups (default backstage-admin), through Argo CD.
  *
  * Config: costs.prometheusUrl (the same Prometheus as the costs). Without it /overview answers 503. /network reads the
@@ -228,6 +235,15 @@ export default createBackendPlugin({
           }
           return zoneCache.body;
         };
+        // the infrastructure as code: network.toml and clusters/*.json of the opennebula repository (the host follows main)
+        const infraRepo = new GitHubFiles(config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', config.getOptionalString('console.infra.branch') ?? 'main', ghToken);
+        const infraDir = config.getOptionalString('console.infra.dir') ?? 'configuration';
+        const readClusterFiles = async (): Promise<Array<ClusterFile & { file: string; sha: string }>> => {
+          const files = (await infraRepo.list(`${infraDir}/clusters`)).filter(f => f.name.endsWith('.json'));
+          return Promise.all(files.map(async f => ({ ...(JSON.parse((await infraRepo.get(f.path)).text) as ClusterFile), file: f.path, sha: f.sha })));
+        };
+        const pullsOf = (repo: GitHubFiles) => repo.openPulls().catch(() => [] as ConsolePull[]);
+
         const zonePrograms = async (): Promise<string[]> => ((await readZone())?.zones ?? []).flatMap(z => z.programs.map(p => `${z.name}/${p.name}`));
 
         const router = Router();
@@ -424,17 +440,30 @@ export default createBackendPlugin({
         router.get('/zone/vms', async (req, res) => {
           try {
             const { admin } = await actor(req);
-            const [{ policy, vms }, states] = await Promise.all([readRequests(), readWorkspaces()]);
+            const [{ policy, vms }, states, pulls] = await Promise.all([readRequests(), readWorkspaces(), pullsOf(vmRepo)]);
             res.json({
               policy,
               allowed: admin,
+              pulls: pulls.filter(p => p.branch.startsWith('console/vm-')),
               vms: vms.map(({ sha: _sha, file: _file, ...v }) => ({ ...v, state: states.get(`vm-${v.zone}-${v.program}-${v.name}`) })),
             });
           } catch (e) {
             res.status(502).json({ error: (e as Error).message });
           }
         });
-        const vmAction = (path: string, run: (b: Record<string, string>, user: string) => Promise<string>) =>
+        router.get('/infra', async (req, res) => {
+          try {
+            const { admin } = await actor(req);
+            const [pulls, clusters] = await Promise.all([pullsOf(infraRepo), readClusterFiles().catch(() => [])]);
+            res.json({ allowed: admin, repo: config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', pulls, clusters: clusters.map(({ sha: _s, file: _f, ...c }) => c) });
+          } catch (e) {
+            res.status(502).json({ error: (e as Error).message });
+          }
+        });
+
+        /** What backstage-admin may change from the console: run() answers the outcome or "!reason". */
+        type Outcome = { message: string; pull?: { number: number; url: string } };
+        const adminAction = (path: string, what: string, run: (b: Record<string, string>, user: string) => Promise<Outcome | string>) =>
           router.post(path, async (req, res) => {
             let who: Awaited<ReturnType<typeof actor>>;
             try {
@@ -444,38 +473,87 @@ export default createBackendPlugin({
               return;
             }
             if (!who.admin) {
-              res.status(403).json({ error: `Only ${groups.join(', ')} can create or delete VMs.` });
+              res.status(403).json({ error: `Only ${groups.join(', ')} can ${what}.` });
               return;
             }
             try {
               const body = Object.fromEntries(Object.entries(req.body ?? {}).map(([k, v]) => [k, String(v)]));
-              const message = await run(body, who.user);
-              if (message.startsWith('!')) {
-                res.status(400).json({ error: message.slice(1) });
+              const out = await run(body, who.user);
+              if (typeof out === 'string') {
+                res.status(400).json({ error: out });
                 return;
               }
-              record({ at: new Date().toISOString(), user: who.user, action: 'vm', target: message, result: 'done' });
-              res.json({ ok: true });
+              record({ at: new Date().toISOString(), user: who.user, action: what, target: out.message, result: 'done', ...(out.pull ? { message: `pull request #${out.pull.number}` } : {}) });
+              res.json({ ok: true, ...out });
             } catch (e) {
               res.status(502).json({ error: (e as Error).message });
             }
           });
-        vmAction('/zone/vms', async (b, user) => {
+        const body = (fields: Record<string, unknown>, user: string) =>
+          `Asked from the Refresquito console by \`${user}\`.\n\n\`\`\`json\n${JSON.stringify(fields, null, 2)}\n\`\`\`\n`;
+
+        adminAction('/zone/vms', 'create or delete VMs', async (b, user) => {
           const v: VmRequest = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image, requested_by: user, requested_at: new Date().toISOString() };
-          const { policy, vms } = await readRequests();
+          const [{ policy, vms }, pulls] = await Promise.all([readRequests(), pullsOf(vmRepo)]);
           const no = refuse(policy, vms, v, await zonePrograms());
-          if (no) return `!${no}`;
+          if (no) return no;
+          const slug = `vm-new-${vmFileName(v).replace(/\.json$/, '')}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for VM ${v.name}.`;
           const message = `console: create VM ${v.name} in ${v.zone}/${v.program} (${v.size}, ${v.image})`;
-          await vmRepo.put(`${vmChart}/vms/${vmFileName(v)}`, `${JSON.stringify(v, null, 2)}\n`, `${message} (by ${user})`);
-          return message;
+          const pull = await vmRepo.pullRequest(slug, message, body(v, user), [{ path: `${vmChart}/vms/${vmFileName(v)}`, text: `${JSON.stringify(v, null, 2)}\n` }]);
+          return { message, pull };
         });
-        vmAction('/zone/vms/delete', async (b, user) => {
+        adminAction('/zone/vms/delete', 'create or delete VMs', async (b, user) => {
           const { vms } = await readRequests();
           const v = vms.find(x => x.zone === b.zone && x.program === b.program && x.name === b.name);
-          if (!v) return `!There is no VM ${b.name} in ${b.zone}/${b.program}.`;
+          if (!v) return `There is no VM ${b.name} in ${b.zone}/${b.program}.`;
           const message = `console: delete VM ${v.name} in ${v.zone}/${v.program}`;
-          await vmRepo.remove(v.file, v.sha, `${message} (by ${user})`);
-          return message;
+          const pull = await vmRepo.pullRequest(`vm-del-${vmFileName(v).replace(/\.json$/, '')}`, message, body({ zone: v.zone, program: v.program, name: v.name }, user), [{ path: v.file, text: null }]);
+          return { message, pull };
+        });
+
+        adminAction('/infra/segregations', 'create network segregations', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const [toml, pulls] = await Promise.all([infraRepo.get(`${infraDir}/network.toml`), pullsOf(infraRepo)]);
+          const slug = `seg-${b.zone}-${b.program}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for ${b.zone}/${b.program}.`;
+          const out = addSegregation(toml.text, view, b.zone, b.program);
+          if (typeof out === 'string') return out;
+          const message = `console: new segregation ${b.zone}/${b.program} (n=${out.n}${out.enabled ? `, enables zone ${b.zone}` : ''})`;
+          const pull = await infraRepo.pullRequest(slug, message, body({ zone: b.zone, program: b.program, n: out.n, enablesZone: out.enabled }, user) +
+            '\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user.\n',
+            [{ path: `${infraDir}/network.toml`, text: out.text }]);
+          return { message, pull };
+        });
+
+        adminAction('/infra/clusters', 'create Kubernetes clusters', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const workers = b.workers === undefined || b.workers === '' ? undefined : Number(b.workers);
+          const [files, pulls] = await Promise.all([readClusterFiles(), pullsOf(infraRepo)]);
+          const no = refuseCluster(view, files, { zone: b.zone, program: b.program, profile: b.profile, workers });
+          if (no) return no;
+          const slug = `cluster-${b.zone}-${b.program}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for a cluster in ${b.zone}/${b.program}.`;
+          const file: ClusterFile = { zone: b.zone, program: b.program, profile: b.profile, ...(workers !== undefined ? { workers } : {}), requested_by: user, requested_at: new Date().toISOString() };
+          const message = `console: new cluster in ${b.zone}/${b.program} (profile ${b.profile})`;
+          const pull = await infraRepo.pullRequest(slug, message, body(file, user) + '\nOnce merged, the host creates it within 5 minutes (configuration.py reconcile → cluster-create).\n',
+            [{ path: `${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, text: `${JSON.stringify(file, null, 2)}\n` }]);
+          return { message, pull };
+        });
+
+        adminAction('/infra/clusters/scale', 'scale Kubernetes clusters', async (b, user) => {
+          const view = await readZone();
+          if (!view) return 'The host has not published the topology yet.';
+          const files = await readClusterFiles();
+          const current = files.find(f => f.zone === b.zone && f.program === b.program);
+          const out = scaleCluster(view, current, { zone: b.zone, program: b.program, workers: Number(b.workers), storage: Number(b.storage) }, user);
+          if (typeof out === 'string') return out;
+          const message = `console: scale cluster ${b.zone}/${b.program} to ${out.workers} workers, ${out.storage} storage`;
+          const { file: _f, sha, ...clean } = { ...(current ?? {}), ...out } as ClusterFile & { file?: string; sha?: string };
+          await infraRepo.put(`${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, `${JSON.stringify(clean, null, 2)}\n`, `${message} (by ${user})`, sha);
+          return { message };
         });
 
         httpRouter.use(router);

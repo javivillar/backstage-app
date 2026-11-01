@@ -60,9 +60,9 @@ const fetchFake = async (url: RequestInfo | URL, init?: RequestInit) => {
   const u = String(url);
   if (init?.method === 'POST') {
     posts.push({ url: u, body: JSON.parse(String(init.body)) });
-    return new Response('{"ok":true}');
+    return new Response('{"ok":true,"pull":{"number":12,"url":"https://github.com/x/pull/12"}}');
   }
-  if (u.endsWith('/zone/vms')) return new Response(JSON.stringify({ policy: vmPolicy, vms: vmList, allowed: true }));
+  if (u.endsWith('/zone/vms')) return new Response(JSON.stringify({ policy: vmPolicy, vms: vmList, allowed: true, pulls: [{ number: 11, title: 'console: delete VM old in nato/sirtap', url: 'https://github.com/x/pull/11', branch: 'console/vm-del-nato-sirtap-old-x', created: '2026-11-01T10:00:00Z' }] }));
   const key = Object.keys(answers).find(k => u.includes(k));
   if (u.includes('/opencost/')) {
     const daily = u.includes('accumulate=false');
@@ -142,8 +142,10 @@ describe('zone pages', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create VM' }));
     expect(screen.getByText(/private network of sirtap \(nato-sirtap-pub|private network of sirtap/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'builder' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Request the VM' }));
+    expect(screen.getByText('Delete VM')).toBeInTheDocument(); // a pull request waiting for review
+    fireEvent.click(screen.getByRole('button', { name: 'Open the pull request' }));
     await waitFor(() => expect(posts.find(p => p.url.endsWith('/zone/vms'))?.body).toEqual({ zone: 'nato', program: 'sirtap', name: 'builder', image: 'ubuntu-22.04-cis', size: 'small' }));
-    expect(await screen.findByText(/Requested: builder is in git/)).toBeInTheDocument();
+    expect(await screen.findByText(/Pull request #12 opened for builder/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Review the pull request' })).toHaveAttribute('href', 'https://github.com/x/pull/12');
   });
 });

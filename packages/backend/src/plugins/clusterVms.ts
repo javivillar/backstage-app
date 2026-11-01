@@ -1,6 +1,6 @@
 /**
  * The VMs requested from the console (Zone > Virtual machines), as code: one JSON file per VM in
- * charts/console-vms-oneke/vms of refresquito-services (main, no pull request: the user's decision). Argo CD syncs
+ * charts/console-vms-oneke/vms of refresquito-services, through a pull request (merged: it is in main). Argo CD syncs
  * that chart in this cluster and Crossplane (provider-terraform) creates the VM in OpenNebula; how a VM is built and
  * what it may be is in the chart and its policy.json. The checks here repeat the chart's, so a request that would
  * fail is refused at once; the state of each VM is read from its Workspace.
@@ -35,7 +35,15 @@ export function refuse(policy: VmPolicy, existing: VmRequest[], v: VmRequest, pr
   return undefined;
 }
 
-/** Files of a GitHub repository through the contents API: one commit per change. */
+/** A file change of a pull request: text to write, or null to delete the file. */
+export type FileChange = { path: string; text: string | null };
+/** An open pull request of the console. */
+export type ConsolePull = { number: number; title: string; url: string; branch: string; created: string; body: string };
+
+/** Branches of the console's pull requests start with this (how the console finds its pending requests). */
+export const PR_PREFIX = 'console/';
+
+/** Files of a GitHub repository through the contents API: one commit per change, or a pull request. */
 export class GitHubFiles {
   constructor(
     private readonly repo: string,
@@ -50,6 +58,14 @@ export class GitHubFiles {
 
   private url(path: string) {
     return `https://api.github.com/repos/${this.repo}/contents/${path}`;
+  }
+
+  private api(path: string) {
+    return `https://api.github.com/repos/${this.repo}/${path}`;
+  }
+
+  private async send(url: string, method: string, body: unknown) {
+    return this.fetchFn(url, { method, headers: { ...this.headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   }
 
   private async check(res: Response, what: string) {
@@ -73,22 +89,56 @@ export class GitHubFiles {
     return ((await res.json()) as Array<{ name: string; path: string; sha: string; type: string }>).filter(f => f.type === 'file');
   }
 
-  async put(path: string, text: string, message: string, sha?: string): Promise<void> {
-    const res = await this.fetchFn(this.url(path), {
-      method: 'PUT',
-      headers: { ...this.headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, branch: this.branch, content: Buffer.from(text, 'utf8').toString('base64'), ...(sha ? { sha } : {}) }),
-    });
+  /** The sha of a file, or undefined when it does not exist. */
+  async sha(path: string, branch = this.branch): Promise<string | undefined> {
+    const res = await this.fetchFn(`${this.url(path)}?ref=${encodeURIComponent(branch)}`, { headers: this.headers() });
+    if (res.status === 404) return undefined;
+    await this.check(res, path);
+    return ((await res.json()) as { sha: string }).sha;
+  }
+
+  async put(path: string, text: string, message: string, sha?: string, branch = this.branch): Promise<void> {
+    const res = await this.send(this.url(path), 'PUT', { message, branch, content: Buffer.from(text, 'utf8').toString('base64'), ...(sha ? { sha } : {}) });
     await this.check(res, path);
   }
 
-  async remove(path: string, sha: string, message: string): Promise<void> {
-    const res = await this.fetchFn(this.url(path), {
-      method: 'DELETE',
-      headers: { ...this.headers(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, branch: this.branch, sha }),
-    });
+  async remove(path: string, sha: string, message: string, branch = this.branch): Promise<void> {
+    const res = await this.send(this.url(path), 'DELETE', { message, branch, sha });
     await this.check(res, path);
+  }
+
+  /**
+   * A pull request against the branch with these changes: a new branch console/<slug>-<time> from it, one commit per
+   * file, then the pull request. Returns its number and address.
+   */
+  async pullRequest(slug: string, title: string, body: string, changes: FileChange[]): Promise<{ number: number; url: string }> {
+    const ref = await this.fetchFn(this.api(`git/ref/heads/${encodeURIComponent(this.branch)}`), { headers: this.headers() });
+    await this.check(ref, `branch ${this.branch}`);
+    const base = ((await ref.json()) as { object: { sha: string } }).object.sha;
+    const branch = `${PR_PREFIX}${slug}-${Date.now().toString(36)}`;
+    await this.check(await this.send(this.api('git/refs'), 'POST', { ref: `refs/heads/${branch}`, sha: base }), `branch ${branch}`);
+    for (const c of changes) {
+      const sha = await this.sha(c.path, branch);
+      if (c.text === null) {
+        if (sha) await this.remove(c.path, sha, title, branch);
+      } else {
+        await this.put(c.path, c.text, title, sha, branch);
+      }
+    }
+    const pr = await this.send(this.api('pulls'), 'POST', { title, head: branch, base: this.branch, body });
+    await this.check(pr, 'pull request');
+    const made = (await pr.json()) as { number: number; html_url: string };
+    return { number: made.number, url: made.html_url };
+  }
+
+  /** The open pull requests of the console (branch console/...), newest first. */
+  async openPulls(): Promise<ConsolePull[]> {
+    const res = await this.fetchFn(this.api(`pulls?state=open&base=${encodeURIComponent(this.branch)}&per_page=50`), { headers: this.headers() });
+    await this.check(res, 'pull requests');
+    const list = (await res.json()) as Array<{ number: number; title: string; html_url: string; created_at: string; body?: string | null; head: { ref: string } }>;
+    return list
+      .filter(p => p.head.ref.startsWith(PR_PREFIX))
+      .map(p => ({ number: p.number, title: p.title, url: p.html_url, branch: p.head.ref, created: p.created_at, body: p.body ?? '' }));
   }
 }
 

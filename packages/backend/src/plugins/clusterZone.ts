@@ -33,8 +33,31 @@ export type Zone = {
 export type DriftItem = { zone: string; program?: string; kind: 'network' | 'security group' | 'router' | 'cluster'; name: string; detail: string };
 /** What vms-apply did with each VM requested from the console (configuration/vms.py of opennebula). */
 export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
+/** Every zone of the catalog (reserved ones too) with its programmes: where a new segregation can go. */
+export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; declared: boolean; ok: boolean | null; cluster?: string }> };
+/** A OneKE profile of [kubernetes.profiles]: the marketplace. */
+export type ClusterProfile = {
+  name: string;
+  default: boolean;
+  description: string;
+  counts: Record<'vnf' | 'master' | 'worker' | 'storage', number>;
+  memoryMb: number;
+  roles: Record<'vnf' | 'master' | 'worker' | 'storage', { vcpu: number; memory_mb: number }>;
+  nodeImage?: string;
+  cni?: string;
+  k8sCis: boolean;
+  k8sPsa?: string;
+  longhorn: boolean;
+};
+export type ReconcileStep = { file?: string; zone?: string; program?: string; action: string; state: string; detail?: string; at?: string };
+/** What the host did following main (configuration.py reconcile). */
+export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[] };
 export type ZoneView = {
   generated?: string;
+  catalog?: CatalogZone[];
+  kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
+  capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number };
+  reconcile?: ReconcileStatus;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
@@ -103,8 +126,41 @@ export function summariseZone(raw: Raw): ZoneView {
     });
   const h = raw.host;
   const cv = raw.console_vms;
+  const catalog: CatalogZone[] = (raw.zones ?? []).map((z: Raw) => ({
+    name: str(z.name),
+    label: z.label || undefined,
+    status: str(z.status),
+    enabled: !!z.enabled,
+    block: z.block || undefined,
+    maxProgramN: typeof z.max_program_n === 'number' ? z.max_program_n : undefined,
+    programs: (z.programs ?? []).map((p: Raw) => ({ name: str(p.name), n: typeof p.n === 'number' ? p.n : undefined, declared: p.declared !== false, ok: typeof p.ok === 'boolean' ? p.ok : null, cluster: p.cluster?.name || undefined })),
+  }));
+  const k = raw.kubernetes;
+  const rc = raw.reconcile;
   return {
     generated: raw.generated ? str(raw.generated) : undefined,
+    catalog,
+    kubernetes: k && Array.isArray(k.profiles)
+      ? {
+          defaultProfile: k.default_profile || undefined,
+          template: k.template || undefined,
+          profiles: k.profiles.map((p: Raw) => ({
+            name: str(p.name),
+            default: !!p.default,
+            description: str(p.description),
+            counts: p.counts ?? {},
+            memoryMb: Number(p.memory_mb ?? 0),
+            roles: p.roles ?? {},
+            nodeImage: p.node_image || undefined,
+            cni: p.cni || undefined,
+            k8sCis: !!p.k8s_cis,
+            k8sPsa: p.k8s_psa || undefined,
+            longhorn: !!p.longhorn,
+          })),
+        }
+      : undefined,
+    capacity: raw.capacity ? { freeMemoryMb: raw.capacity.free_memory_mb ?? undefined, reservedMemoryMb: raw.capacity.reserved_memory_mb ?? undefined } : undefined,
+    reconcile: rc ? { started: rc.started, finished: rc.finished, error: rc.error ?? null, segregation: rc.segregation ?? null, clusters: Array.isArray(rc.clusters) ? rc.clusters : [] } : undefined,
     consoleVms: cv && Array.isArray(cv.vms) ? { applied: cv.applied ? str(cv.applied) : undefined, vms: cv.vms as ConsoleVmStatus[] } : undefined,
     warnings: (raw.warnings ?? []).map(str),
     host: h

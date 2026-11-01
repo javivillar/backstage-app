@@ -1,4 +1,3 @@
-import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
@@ -10,58 +9,44 @@ import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
-
-
-function useVmPost() {
-  const discovery = useApi(discoveryApiRef);
-  const { fetch } = useApi(fetchApiRef);
-  return async (path: string, body: Record<string, string>) => {
-    const res = await fetch(`${await discovery.getBaseUrl('cluster')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const answer = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(answer.error ?? `${res.status} ${res.statusText}`);
-  };
-}
+import { useClusterPost } from '../post';
+import { ConfirmBar, PullList, ResultNote, useChange } from './Requests';
 
 /** Zone › Virtual machines: create a VM (backstage-admin), and the VMs requested from the console with what the host did. */
 export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
   const req = useVmRequests();
-  const post = useVmPost();
+  const post = useClusterPost();
   const spec = req.data?.policy;
   const allowed = !!req.data?.allowed;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ program: zone.programs[0]?.name ?? '', name: '', image: '', size: '' });
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | undefined>();
-  const [pending, setPending] = useState<{ text: string; go: () => Promise<void> } | undefined>();
+  const { note, busy, run } = useChange(req.reload);
+  const [pending, setPending] = useState<{ text: string; go: () => void } | undefined>();
   const image = form.image || Object.keys(spec?.images ?? {})[0] || '';
   const size = form.size || Object.keys(spec?.sizes ?? {})[0] || '';
   const mine = (req.data?.vms ?? []).filter(v => v.zone === zone.name);
-  const run = async (go: () => Promise<void>, ok: string) => {
-    setMsg(undefined);
-    try {
-      await go();
-      setMsg({ ok: true, text: ok });
-      req.reload();
-    } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message });
-    }
-  };
-  const create = () =>
-    run(async () => {
-      await post('/zone/vms', { zone: zone.name, program: form.program, name: form.name.trim(), image, size });
+  const create = async () => {
+    const done = await run(
+      () => post('/zone/vms', { zone: zone.name, program: form.program, name: form.name.trim(), image, size }),
+      a => `Pull request #${a.pull?.number} opened for ${form.name}: once merged, Argo CD and Crossplane create it on the private network of ${form.program} in a few minutes.`,
+    );
+    if (done) {
       setOpen(false);
       setForm(f => ({ ...f, name: '' }));
-    }, `Requested: ${form.name} is in git; Argo CD and Crossplane create it on the private network of ${form.program} in a few minutes.`);
+    }
+  };
   const remove = (v: VmRequest) =>
     setPending({
-      text: `Delete ${v.name}? Its file leaves git and Crossplane destroys the VM and its disk.`,
-      go: () => run(() => post('/zone/vms/delete', { zone: v.zone, program: v.program, name: v.name }), 'Deleted from git: Crossplane destroys the VM in a few minutes.'),
+      text: `Delete ${v.name}? A pull request removes its file; once merged, Crossplane destroys the VM and its disk.`,
+      go: () => run(() => post('/zone/vms/delete', { zone: v.zone, program: v.program, name: v.name }), a => `Pull request #${a.pull?.number} opened: once merged, Crossplane destroys ${v.name}.`),
     });
+  const pulls = req.data?.pulls ?? [];
   const program = zone.programs.find(p => p.name === form.program);
   const privateNet = program?.networks.find(n => n.role === 'private');
   return (
     <Card
       title="VMs requested from the console"
-      sub="As code: one file per VM in git (console-vms-oneke), synced by Argo CD; Crossplane creates it in OpenNebula with the user of its programme, on its private network. Deleting it removes the file and the VM."
+      sub="As code: one file per VM in git (console-vms-oneke), added or removed through a pull request. Once merged, Argo CD syncs it and Crossplane creates the VM in OpenNebula with the user of its programme, on its private network."
     >
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button variant="contained" disabled={!allowed || !spec} onClick={() => setOpen(o => !o)} sx={{ textTransform: 'none' }}>
@@ -103,8 +88,8 @@ export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
             Network: the private network of {form.program || 'the programme'}{privateNet ? ` (${privateNet.name}, ${privateNet.cidr})` : ''}, with its security group. No public address.
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, gridColumn: '1 / -1' }}>
-            <Button type="submit" variant="contained" disabled={!form.name || !form.program} sx={{ textTransform: 'none' }}>
-              Request the VM
+            <Button type="submit" variant="contained" disabled={busy || !form.name || !form.program} sx={{ textTransform: 'none' }}>
+              Open the pull request
             </Button>
             <Button variant="text" onClick={() => setOpen(false)} sx={{ textTransform: 'none' }}>
               Cancel
@@ -112,22 +97,9 @@ export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
           </Box>
         </Box>
       )}
-      {pending && (
-        <Box role="alertdialog" aria-label="Confirm" sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', bgcolor: TONES.warn.bg, borderRadius: '8px', p: 1.25 }}>
-          <Typography sx={{ flex: '1 1 260px' }}>{pending.text}</Typography>
-          <Button variant="contained" onClick={() => { const p = pending; setPending(undefined); p.go(); }} sx={{ textTransform: 'none' }}>
-            Confirm
-          </Button>
-          <Button variant="text" onClick={() => setPending(undefined)} sx={{ textTransform: 'none' }}>
-            Cancel
-          </Button>
-        </Box>
-      )}
-      {msg && (
-        <Typography role="status" sx={{ bgcolor: msg.ok ? TONES.ok.bg : TONES.bad.bg, color: msg.ok ? TONES.ok.fg : TONES.bad.fg, borderRadius: '8px', p: 1.25 }}>
-          {msg.text}
-        </Typography>
-      )}
+      {pending && <ConfirmBar text={pending.text} onYes={() => { const p = pending; setPending(undefined); p.go(); }} onNo={() => setPending(undefined)} />}
+      <ResultNote note={note} />
+      <PullList pulls={pulls} />
       {mine.length === 0 ? (
         <Typography color="text.secondary">None requested yet.</Typography>
       ) : (
