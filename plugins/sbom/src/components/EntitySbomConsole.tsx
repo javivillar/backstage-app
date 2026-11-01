@@ -51,7 +51,7 @@ const Kpi = ({ label, value, sub, tone }: { label: string; value: string; sub?: 
 const tableSx = { width: '100%', borderCollapse: 'collapse', fontSize: 14, '& th': { textAlign: 'left', fontWeight: 500, color: 'text.secondary', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', p: 1, borderBottom: 1, borderColor: 'divider' }, '& td': { p: 1, borderBottom: 1, borderColor: 'divider', verticalAlign: 'top' } } as const;
 
 /** One image (or release): what it is made of, its licences and its vulnerabilities. */
-const SourceView = ({ kind, ref }: { kind: 'image' | 'release'; ref: string }) => {
+const SourceView = ({ kind, imageRef: ref }: { kind: 'image' | 'release'; imageRef: string }) => {
   const sbom = useSbom(kind, ref);
   const vulns = useVulnerabilities(kind === 'image' ? ref : '');
   const [q, setQ] = useState('');
@@ -192,7 +192,7 @@ export const EntitySbomConsoleContent = () => {
           </Button>
         ))}
       </Box>
-      <SourceView key={cur.ref} kind={cur.kind} ref={cur.ref} />
+      <SourceView key={cur.ref} kind={cur.kind} imageRef={cur.ref} />
     </Box>
   );
 };

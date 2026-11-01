@@ -419,25 +419,23 @@ export const ResolutionGroupsPage = () => {
       const owns = (e.relations ?? []).filter(r => r.type === 'ownerOf').map(r => parseEntityRef(r.targetRef));
       const members = (e.relations ?? []).filter(r => r.type === 'hasMember').map(r => parseEntityRef(r.targetRef).name);
       return { e, owns, members };
-    })
-    .filter(g => g.owns.length);
-  const isTeam = (name: string) => name.endsWith('-team');
+    });
   const shown = groups
-    .filter(g => filter === 'all' || (filter === 'teams' ? isTeam(g.e.metadata.name) : !isTeam(g.e.metadata.name)))
+    .filter(g => filter === 'all' || (filter === 'owners' ? g.owns.length > 0 : g.owns.length === 0))
     .filter(g => matches(q, g.e.metadata.name, g.e.metadata.title, g.e.metadata.description, ...g.members, ...g.owns.map(o => o.name)))
-    .sort((a, b) => b.owns.length - a.owns.length);
+    .sort((a, b) => b.owns.length - a.owns.length || titleOf(a.e).localeCompare(titleOf(b.e)));
   return (
     <PortalList
       title="Resolution groups"
-      sub="The teams that answer for the platform: what each one owns and who is in it. Incidents on an element go to the team that owns it."
+      sub="Every group of the catalog: what each one owns and who is in it. Incidents on an element go to the group that owns it."
       q={q}
       setQ={setQ}
       filter={filter}
       setFilter={setFilter}
       filters={[
         ['all', 'All', groups.length],
-        ['teams', 'Teams', groups.filter(g => isTeam(g.e.metadata.name)).length],
-        ['other', 'Other owners', groups.filter(g => !isTeam(g.e.metadata.name)).length],
+        ['owners', 'Own elements', groups.filter(g => g.owns.length).length],
+        ['others', 'Own nothing yet', groups.filter(g => !g.owns.length).length],
       ]}
     >
       {loading && <Progress />}
@@ -475,6 +473,7 @@ export const ResolutionGroupsPage = () => {
                 {byKind.map(([k, n]) => (
                   <Badge key={k} label={`${n} ${KIND_LABEL[k] ?? k}`} outlined />
                 ))}
+                {!byKind.length && <Badge label="owns nothing yet" />}
               </Box>
               {systems.length > 0 && (
                 <Typography variant="body2">
