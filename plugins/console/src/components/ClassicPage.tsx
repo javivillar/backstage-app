@@ -14,7 +14,7 @@ export const ClassicPage = ({ page }: { page: ConsoleClassicPage }) => {
         </Typography>
         <ClassicLink path={page.classicPath} />
       </Box>
-      <ClassicFrame>{page.element}</ClassicFrame>
+      <ClassicFrame entity>{page.element}</ClassicFrame>
     </Box>
   );
 };

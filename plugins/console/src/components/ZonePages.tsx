@@ -156,12 +156,12 @@ export const ZoneVmsPage = () => {
   const [text, setText] = useState('');
   return (
     <ZoneFrame title="Virtual machines">
-      {(zone, view) => {
+      {zone => {
         const t = text.trim().toLowerCase();
         const vms = zoneVms(zone).filter(v => !t || `${v.name} ${v.program} ${v.role} ${v.ips.join(' ')}`.toLowerCase().includes(t));
         return (
           <>
-          <ZoneVmRequests zone={zone} view={view} />
+          <ZoneVmRequests zone={zone} />
           <Card title={`${vms.length} VMs`}>
             <TextField size="small" label="Find a VM, programme or address" value={text} onChange={e => setText(e.target.value)} sx={{ maxWidth: 360 }} />
             <Table

@@ -5,15 +5,12 @@ import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
-import { type Zone, type ZoneView, useVmRequests, type VmRequest } from '../zone';
+import { type Zone, useVmRequests, type VmRequest, vmStatus } from '../zone';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
 
-const STATE_TONE: Record<string, keyof typeof TONES> = {
-  running: 'ok', creating: 'info', starting: 'info', stopping: 'info', stopped: 'off', waiting: 'warn', refused: 'bad', failed: 'bad', deleting: 'info', deleted: 'off', orphan: 'warn',
-};
 
 function useVmPost() {
   const discovery = useApi(discoveryApiRef);
@@ -26,10 +23,10 @@ function useVmPost() {
 }
 
 /** Zone › Virtual machines: create a VM (backstage-admin), and the VMs requested from the console with what the host did. */
-export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) => {
+export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
   const req = useVmRequests();
   const post = useVmPost();
-  const spec = req.data?.spec;
+  const spec = req.data?.policy;
   const allowed = !!req.data?.allowed;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ program: zone.programs[0]?.name ?? '', name: '', image: '', size: '' });
@@ -37,8 +34,7 @@ export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) =
   const [pending, setPending] = useState<{ text: string; go: () => Promise<void> } | undefined>();
   const image = form.image || Object.keys(spec?.images ?? {})[0] || '';
   const size = form.size || Object.keys(spec?.sizes ?? {})[0] || '';
-  const status = new Map((view.consoleVms?.vms ?? []).map(s => [`${s.zone}/${s.program}/${s.name}`, s]));
-  const mine = (spec?.vms ?? []).filter(v => v.zone === zone.name);
+  const mine = (req.data?.vms ?? []).filter(v => v.zone === zone.name);
   const run = async (go: () => Promise<void>, ok: string) => {
     setMsg(undefined);
     try {
@@ -54,15 +50,18 @@ export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) =
       await post('/zone/vms', { zone: zone.name, program: form.program, name: form.name.trim(), image, size });
       setOpen(false);
       setForm(f => ({ ...f, name: '' }));
-    }, `Requested: the host creates ${form.name} on the private network of ${form.program} within about 2 minutes.`);
-  const change = (v: VmRequest, state: VmRequest['state'], text: string) =>
-    setPending({ text, go: () => run(() => post('/zone/vms/state', { zone: v.zone, program: v.program, name: v.name, state }), `Done: the host applies it within about 2 minutes.`) });
+    }, `Requested: ${form.name} is in git; Argo CD and Crossplane create it on the private network of ${form.program} in a few minutes.`);
+  const remove = (v: VmRequest) =>
+    setPending({
+      text: `Delete ${v.name}? Its file leaves git and Crossplane destroys the VM and its disk.`,
+      go: () => run(() => post('/zone/vms/delete', { zone: v.zone, program: v.program, name: v.name }), 'Deleted from git: Crossplane destroys the VM in a few minutes.'),
+    });
   const program = zone.programs.find(p => p.name === form.program);
   const privateNet = program?.networks.find(n => n.role === 'private');
   return (
     <Card
       title="VMs requested from the console"
-      sub={`Created by the host on the private network of their programme, every 2 minutes${view.consoleVms?.applied ? ` (last: ${new Date(view.consoleVms.applied).toLocaleTimeString()})` : ''}. Requests are kept in git (vms.json of the opennebula repository).`}
+      sub="As code: one file per VM in git (console-vms-oneke), synced by Argo CD; Crossplane creates it in OpenNebula with the user of its programme, on its private network. Deleting it removes the file and the VM."
     >
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button variant="contained" disabled={!allowed || !spec} onClick={() => setOpen(o => !o)} sx={{ textTransform: 'none' }}>
@@ -72,7 +71,7 @@ export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) =
         {req.error && <Typography variant="body2" color="error">{req.error}</Typography>}
         {spec && (
           <Typography variant="body2" color="text.secondary">
-            Limits per programme: {spec.limits.vms ?? '—'} VMs, {spec.limits.cpu ?? '—'} CPU, {spec.limits.memory_mb ? `${spec.limits.memory_mb / 1024} GiB` : '—'} · the host keeps {spec.limits.host_reserve_mb ? `${spec.limits.host_reserve_mb / 1024} GiB` : 'some memory'} free
+            Limits per programme: {spec.limits.vms ?? '—'} VMs, {spec.limits.cpu ?? '—'} CPU, {spec.limits.memory_mb ? `${spec.limits.memory_mb / 1024} GiB` : '—'} · the host keeps memory free (a VM that does not fit waits)
           </Typography>
         )}
       </Box>
@@ -133,10 +132,9 @@ export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) =
         <Typography color="text.secondary">None requested yet.</Typography>
       ) : (
         <Table
-          head={['VM', 'Programme', 'Size · image', 'Asked', 'Now', '']}
+          head={['VM', 'Programme', 'Size · image', 'State', '']}
           rows={mine.map(v => {
-            const st = status.get(`${v.zone}/${v.program}/${v.name}`);
-            const now = st?.state ?? 'pending';
+            const st = vmStatus(v);
             return [
               <span>
                 <b>{v.name}</b>
@@ -147,30 +145,18 @@ export const ZoneVmRequests = ({ zone, view }: { zone: Zone; view: ZoneView }) =
               </span>,
               v.program,
               `${v.size} · ${v.image}`,
-              v.state,
               <span>
-                <Badge label={now} {...TONES[STATE_TONE[now] ?? 'info']} />
-                {st?.detail && (
+                <Badge label={st.label} {...TONES[st.tone]} />
+                {st.detail && (
                   <Typography variant="caption" color="text.secondary" component="div">
                     {st.detail}
                   </Typography>
                 )}
               </span>,
-              allowed && v.state !== 'deleted' ? (
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                  {v.state === 'running' ? (
-                    <Button size="small" variant="text" onClick={() => change(v, 'stopped', `Stop ${v.name}? It is powered off; its disk stays.`)} sx={{ textTransform: 'none' }}>
-                      Stop
-                    </Button>
-                  ) : (
-                    <Button size="small" variant="text" onClick={() => change(v, 'running', `Start ${v.name}?`)} sx={{ textTransform: 'none' }}>
-                      Start
-                    </Button>
-                  )}
-                  <Button size="small" variant="text" color="error" onClick={() => change(v, 'deleted', `Delete ${v.name}? The VM and its disk are destroyed.`)} sx={{ textTransform: 'none' }}>
-                    Delete
-                  </Button>
-                </Box>
+              allowed ? (
+                <Button size="small" variant="text" color="error" onClick={() => remove(v)} sx={{ textTransform: 'none' }}>
+                  Delete
+                </Button>
               ) : (
                 ''
               ),
