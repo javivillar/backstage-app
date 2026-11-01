@@ -60,7 +60,36 @@ export const MANAGE_SERVICES: ManageService[] = [
       },
     ],
   },
-  { id: 'gravitee', label: 'API management', product: 'Gravitee', app: 'gravitee-oneke', sub: 'APIs published to the other applications and to partners, their plans and subscriptions.' },
+  {
+    id: 'gravitee',
+    label: 'API management',
+    product: 'Gravitee',
+    app: 'gravitee-oneke',
+    sub: 'APIs published to the other applications and to partners, their plans and subscriptions.',
+    sections: [
+      {
+        label: 'APIs',
+        plugin: 'gravitee-manager',
+        path: '/apis',
+        title: r => `${String(r.name)} ${String(r.version ?? '')}`.trim(),
+        columns: [
+          { key: 'name', label: 'API' },
+          { key: 'version', label: 'Version' },
+          { key: 'contextPath', label: 'Path', render: r => <code>{String(r.contextPath ?? '—')}</code> },
+          { key: 'state', label: 'State', render: r => <Badge label={String(r.state ?? '?')} {...TONES[r.state === 'STARTED' ? 'ok' : 'warn']} /> },
+          { key: 'team', label: 'Team', render: r => owner(r.team ?? r.owner) },
+        ],
+        facts: r => [
+          ['Description', String(r.description ?? '—')],
+          ['Gateway', r.gatewayUrl ? <a href={String(r.gatewayUrl)} target="_blank" rel="noreferrer">{String(r.gatewayUrl)}</a> : '—'],
+          ['Backend', <code>{String(r.backendUrl ?? '—')}</code>],
+          ['Visibility', String(r.visibility ?? '—')],
+          ['Lifecycle', `${String(r.lifecycleState ?? '—')} · ${String(r.deploymentState ?? '—')}`],
+          ['Owner', owner(r.owner)],
+        ],
+      },
+    ],
+  },
   { id: 'datahub', label: 'Data management', product: 'DataHub', app: 'datahub-oneke', sub: 'The data assets of the zone, their classification, owners and lineage.' },
   {
     id: 'superset',

@@ -1,5 +1,6 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
-import { AppsV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
+import { AppsV1Api, AutoscalingV2Api, BatchV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
+import { type K8sObjects, summariseObjects } from './clusterObjects';
 import express, { Router } from 'express';
 import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
@@ -103,6 +104,8 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *   GET /api/cluster/namespaces/:ns/live   NamespaceLive: pods, restarts, CPU and memory of one namespace (signed-in; 15 s)
  *   GET /api/cluster/namespaces/:ns/workloads   NamespaceWorkloads: Deployments, StatefulSets, DaemonSets and the
  *                                               Warning events of the last hour (signed-in; 15 s; Kubernetes API)
+ *   GET /api/cluster/namespaces/:ns/objects   K8sObjects: workloads, services, ingresses, pods, jobs, config maps,
+ *                               autoscalers, network policies, connected (ingress → service → workload → pods); 15 s
  *   GET /api/cluster/zone       ZoneView: the zone as the OpenNebula host publishes it (topology.json in the ConfigMap
  *                               refresquito-topology of this namespace, every 5 min); read-only
  *   GET /api/cluster/actions[?entity=<ref>]   { allowed, groups, owners, log }: whether the user may act (on that
@@ -357,6 +360,66 @@ export default createBackendPlugin({
             res.status(502).json({ error: `The workloads could not be read: ${(e as Error).message}` });
           }
         });
+        // the Kubernetes objects of a namespace, connected (tabs Kubernetes and Topology of a service); 15 s cache
+        const objCache = new Map<string, { at: number; body: K8sObjects }>();
+        router.get('/namespaces/:ns/objects', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['user'] });
+          } catch {
+            res.status(401).json({ error: 'Sign in to read the cluster' });
+            return;
+          }
+          const ns = req.params.ns;
+          if (!NAMESPACE_NAME.test(ns)) {
+            res.status(400).json({ error: 'Not a namespace name' });
+            return;
+          }
+          if (!kc) {
+            res.status(503).json({ error: 'Backstage does not run inside the cluster: the objects cannot be read.' });
+            return;
+          }
+          const hit = objCache.get(ns);
+          if (hit && Date.now() - hit.at < 15_000) {
+            res.json(hit.body);
+            return;
+          }
+          const core = kc.makeApiClient(CoreV1Api);
+          const apps = kc.makeApiClient(AppsV1Api);
+          const batch = kc.makeApiClient(BatchV1Api);
+          const net = kc.makeApiClient(NetworkingV1Api);
+          const auto = kc.makeApiClient(AutoscalingV2Api);
+          type Lister = (n: string) => Promise<unknown>;
+          const call = (api: object, fn: unknown) => (fn as Lister).bind(api);
+          const kinds: Array<[string, Lister]> = [
+            ['deployments', call(apps, apps.listNamespacedDeployment)],
+            ['statefulsets', call(apps, apps.listNamespacedStatefulSet)],
+            ['daemonsets', call(apps, apps.listNamespacedDaemonSet)],
+            ['services', call(core, core.listNamespacedService)],
+            ['pods', call(core, core.listNamespacedPod)],
+            ['configmaps', call(core, core.listNamespacedConfigMap)],
+            ['ingresses', call(net, net.listNamespacedIngress)],
+            ['netpols', call(net, net.listNamespacedNetworkPolicy)],
+            ['jobs', call(batch, batch.listNamespacedJob)],
+            ['cronjobs', call(batch, batch.listNamespacedCronJob)],
+            ['hpas', call(auto, auto.listNamespacedHorizontalPodAutoscaler)],
+          ];
+          const lists: Record<string, Array<Record<string, unknown>>> = {};
+          const errors: string[] = [];
+          await Promise.all(
+            kinds.map(async ([k, list]) => {
+              try {
+                lists[k] = items<Record<string, unknown>>(await list(ns));
+              } catch (e) {
+                errors.push(`${k}: ${(e as { statusCode?: number }).statusCode ?? (e as Error).message}`);
+              }
+            }),
+          );
+          const body = summariseObjects(ns, lists as never, errors);
+          if (objCache.size > 200) objCache.clear();
+          objCache.set(ns, { at: Date.now(), body });
+          res.json(body);
+        });
+
         router.get('/zone', async (req, res) => {
           try {
             await httpAuth.credentials(req, { allow: ['user'] });

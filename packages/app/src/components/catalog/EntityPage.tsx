@@ -16,7 +16,8 @@ import {
   EntityApiContent,
   EntityCicdContent,
   EntityDocsContent,
-  ClassicTabNote,
+  EntityKubernetesContent as ConsoleKubernetes,
+  EntityTopologyContent as ConsoleTopology,
   TechInsightsChecks,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
@@ -102,7 +103,7 @@ import { EntityKubernetesContent, isKubernetesAvailable } from '@backstage/plugi
 import { TopologyPage } from '@backstage-community/plugin-topology';
 import { FillTopology } from './FillTopology';
 import { EntityDatahubCard, EntityDatahubContent, isDatahubAvailable } from '@internal/plugin-datahub';
-import { EntityQualityConsoleContent, EntityQualityDetailContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
+import { EntityQualityConsoleContent, EntityQualityDetailContent, EntitySbomConsoleContent, EntitySbomContent, isSbomAvailable } from '@internal/plugin-sbom';
 import { EntityTechInsightsScorecardContent } from '@backstage-community/plugin-tech-insights';
 import { EntityServiceMetadataCard, hasServiceMetadata } from './EntityServiceMetadataCard';
 import { EntityAvailabilityCard } from './EntityAvailabilityCard';
@@ -112,6 +113,7 @@ import { EntityImageContent, isImageAvailable } from '../images/EntityImageConte
 import { EntityCostCard } from '../cost/EntityCostCard';
 import { EntityAssistantUsageCard } from '../cost/EntityAssistantUsageCard';
 import { ConsoleCosts } from '../cost/ConsoleCosts';
+import { ConsoleIncidents } from './ConsoleIncidents';
 import { NAMESPACE_ANNOTATION } from './usePrometheus';
 
 // services of the stack: the catalog entities that say which namespace they run in
@@ -858,11 +860,17 @@ export const consoleEntityPage = entityPageWith(
     <EntityLayout.Route path="/docs" title={tabLabel(<Description />, 'Docs')}>
       <EntityDocsContent />
     </EntityLayout.Route>
+    <EntityLayout.Route path="/incidents" title={tabLabel(<SupportAgent />, 'Incidents')}>
+      <ConsoleIncidents />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/sbom" title={tabLabel(<Inventory />, 'SBOM')} if={isSbomAvailable}>
+      <EntitySbomConsoleContent />
+    </EntityLayout.Route>
     <EntityLayout.Route path="/kubernetes" title={tabLabel(<Cloud />, 'Kubernetes')} if={isKubernetesAvailable}>
-      <ClassicTabNote title="Kubernetes" tab="/kubernetes" instead={[['Live', '/live'], ['Network', '/network'], ['Changes', '/changes']]} />
+      <ConsoleKubernetes />
     </EntityLayout.Route>
     <EntityLayout.Route path="/topology" title={tabLabel(<BubbleChart />, 'Topology')} if={isKubernetesAvailable}>
-      <ClassicTabNote title="Topology" tab="/topology" instead={[['Dependencies', '/dependencies'], ['Network', '/network']]} />
+      <ConsoleTopology />
     </EntityLayout.Route>
     <EntityLayout.Route path="/user-journey" title={tabLabel(<RouteIcon />, 'User journey')} if={hasNamespace}>
       <EntityUserJourneyContent />
