@@ -11,8 +11,11 @@ import { Flow, type FlowLane, type FlowNode, TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
 
+/** OpenNebula says ACTIVE (VM state) or RUNNING (its LCM state) for a VM that runs. */
+export const vmRuns = (state: string) => state === 'ACTIVE' || state === 'RUNNING';
+
 const vmTone = (state: string) => {
-  if (state === 'ACTIVE' || state === 'RUNNING') return TONES.ok;
+  if (vmRuns(state)) return TONES.ok;
   if (/FAIL|ERROR|UNKNOWN/.test(state)) return TONES.bad;
   return TONES.warn;
 };
@@ -43,7 +46,7 @@ const ZoneFrame = ({ title, children }: { title: string; children: (zone: Zone, 
 
 const routerTone = (exists: boolean, state: string): FlowNode['tone'] => {
   if (!exists) return 'bad';
-  return state === 'ACTIVE' ? 'ok' : 'warn';
+  return vmRuns(state) ? 'ok' : 'warn';
 };
 
 const networkState = (n: { exists: boolean; drift: string[] }) => {
@@ -109,7 +112,7 @@ export const ZoneOverviewPage = () => (
   <ZoneFrame title="Infrastructure">
     {(zone, view) => {
       const vms = zoneVms(zone);
-      const active = vms.filter(v => v.state === 'ACTIVE').length;
+      const active = vms.filter(v => vmRuns(v.state)).length;
       const kpi = (label: string, value: string, tone?: keyof typeof TONES) => (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           <Typography variant="body2" color="text.secondary">

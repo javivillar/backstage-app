@@ -236,6 +236,12 @@ export const ServiceHeader = () => {
   );
 };
 
+const noChanges = (since?: string) =>
+  since ? `No new image since this portal records them (${new Date(since).toLocaleDateString()}).` : 'No new image in the last two months.';
+
+/** registry/repo:tag with a digest tag cut to 12 characters, to read it in a table */
+export const shortImage = (ref: string) => ref.replace(/^[^/]+\.[^/]+\//, '').replace(/:([0-9a-f]{12})[0-9a-f]{28}$/, ':$1');
+
 /* ------------------------------------------------------------------ overview */
 
 const AttentionList = ({ items, base }: { items: Attention[]; base: string }) => {
@@ -327,7 +333,7 @@ export const ServiceOverview = () => {
               </Box>
             ))
           ) : (
-            <Typography color="text.secondary">{changes.error ?? (changes.loading ? 'Reading…' : 'No new image in the last two months.')}</Typography>
+            <Typography color="text.secondary">{changes.error ?? (changes.loading ? 'Reading…' : noChanges(changes.since))}</Typography>
           )}
         </Section>
       </Box>
@@ -403,7 +409,7 @@ export const ServiceChanges = () => {
         {changes.changes?.length ? (
           <Table head={['When', 'Image']} rows={changes.changes.map(c => [new Date(c.at).toLocaleString(), <span style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{c.image}</span>])} />
         ) : (
-          <Typography color="text.secondary">{changes.error ?? (changes.loading ? 'Reading…' : 'None in the last two months.')}</Typography>
+          <Typography color="text.secondary">{changes.error ?? (changes.loading ? 'Reading…' : noChanges(changes.since))}</Typography>
         )}
       </Section>
       <Box sx={{ display: 'grid', gap: 2 }}>
@@ -460,9 +466,9 @@ export const ServiceSecurity = () => {
       <Section title="By image">
         {d.findings.length ? (
           <Table
-            head={['Image', 'C', 'H', 'Scan']}
+            head={['Image', 'Critical', 'High', 'Scan']}
             rows={d.findings.map(f => [
-              <span style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{f.image}</span>,
+              <span title={f.image} style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{shortImage(f.image)}</span>,
               String(f.counts.CRITICAL ?? 0),
               String(f.counts.HIGH ?? 0),
               f.error ? <Badge label={f.error} {...TONES.off} /> : <Badge label="Scanned" {...TONES.ok} />,

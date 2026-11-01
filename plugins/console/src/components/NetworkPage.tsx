@@ -31,7 +31,7 @@ const Section = ({ title, sub, children }: { title: string; sub?: ReactNode; chi
 const cell = { px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', textAlign: 'left' as const, verticalAlign: 'top' as const, fontSize: 14 };
 export const Table = ({ head, rows }: { head: string[]; rows: ReactNode[][] }) => (
   <Box sx={{ overflowX: 'auto' }}>
-    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: Math.min(560, head.length * 120) }}>
       <thead>
         <tr>
           {head.map(h => (

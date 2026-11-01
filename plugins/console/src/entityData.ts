@@ -22,18 +22,24 @@ export function useNamespaceWeek(ns?: string) {
   useEffect(() => {
     if (!ns) return undefined;
     let alive = true;
-    (async () => {
-      const base = `${await discovery.getBaseUrl('proxy')}/opencost/allocation/compute?window=7d&aggregate=namespace`;
-      const [acc, daily] = await Promise.all(
-        [`${base}&accumulate=true`, `${base}&accumulate=false&step=1d`].map(async u => {
-          const r = await fetch(u);
-          if (!r.ok) throw new Error(`OpenCost answered ${r.status}`);
-          return r.json();
-        }),
-      );
-      return parseWeek(acc, daily, ns);
-    })().then(
-      week => alive && setState({ loading: false, week }),
+    const get = async (query: string) => {
+      const r = await fetch(`${await discovery.getBaseUrl('proxy')}/opencost/allocation/compute?window=7d&aggregate=namespace&${query}`);
+      if (!r.ok) throw new Error(`OpenCost answered ${r.status}`);
+      return r.json();
+    };
+    // the week first (the query the Costs page makes); the days are slower for OpenCost: added when they come
+    get('accumulate=true').then(
+      acc => {
+        if (!alive) return;
+        setState({ loading: false, week: parseWeek(acc, null, ns) });
+        get('accumulate=false&step=1d').then(
+          daily => {
+            const week = parseWeek(acc, daily, ns);
+            if (alive && week) setState({ loading: false, week });
+          },
+          () => undefined,
+        );
+      },
       e => alive && setState({ loading: false, error: (e as Error).message }),
     );
     return () => {
@@ -69,7 +75,7 @@ const monthOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1
 export function useNamespaceChanges(ns?: string) {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
-  const [state, setState] = useState<{ loading: boolean; changes?: Change[]; error?: string }>({ loading: !!ns });
+  const [state, setState] = useState<{ loading: boolean; changes?: Change[]; since?: string; error?: string }>({ loading: !!ns });
   useEffect(() => {
     if (!ns) return undefined;
     let alive = true;
@@ -84,9 +90,10 @@ export function useNamespaceChanges(ns?: string) {
           return r.json();
         }),
       );
-      return parseChanges(months, ns);
+      const since = months.map(m => (m as { trackedSince?: string }).trackedSince).filter(Boolean).sort()[0];
+      return { changes: parseChanges(months, ns), since };
     })().then(
-      changes => alive && setState({ loading: false, changes }),
+      r => alive && setState({ loading: false, ...r }),
       e => alive && setState({ loading: false, error: (e as Error).message }),
     );
     return () => {
