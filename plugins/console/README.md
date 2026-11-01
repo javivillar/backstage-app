@@ -156,6 +156,12 @@ show the product on hover (`product` of each page in `App.tsx`); Portal › Home
   BI read their manager backends (`keycloak-manager`, `seaweedfs-manager`, `superset-manager`), the rest embed their
   classic page.
 
+- **CI/CD** (`EntityBuild.tsx`): GitHub Actions runs through `/api/proxy/github` (success rate, usual duration, run
+  bar, table) and the deployments of its Argo CD application (`GET /api/cluster/apps/:app`: history, state, resources).
+- **API**: the operations of each provided API read from its OpenAPI definition (JSON, or YAML without a library),
+  those without authentication marked, who consumes it, and the APIs it consumes with their provider.
+- **Catalogue** (`PortalHome.tsx`): cards with an icon per kind and the Argo CD state, filter chips and search.
+
 ## Configuration
 
 ```yaml

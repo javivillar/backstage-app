@@ -80,3 +80,36 @@ describe('console 1.4', () => {
     expect(await screen.findByText('2')).toBeInTheDocument(); // users of IAM
   });
 });
+
+describe('build tabs', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { openApiOperations, repoSlug, runStats } = require('./EntityBuild');
+  it('reads the operations of an OpenAPI definition in YAML and JSON', () => {
+    const yaml = [
+      'openapi: 3.1.0',
+      'paths:',
+      '  /pets:',
+      '    get:',
+      '      summary: List pets',
+      '    post:',
+      '      summary: Add a pet',
+      '  "/health":',
+      '    get:',
+      '      summary: Health',
+      '      security: []',
+      'components:',
+      '  schemas: {}',
+    ].join('\n');
+    expect(openApiOperations(yaml)).toEqual([
+      { method: 'GET', path: '/pets', summary: 'List pets', open: false },
+      { method: 'POST', path: '/pets', summary: 'Add a pet', open: false },
+      { method: 'GET', path: '/health', summary: 'Health', open: true },
+    ]);
+    expect(openApiOperations('{"paths":{"/a":{"delete":{"summary":"x"}}}}')).toEqual([{ method: 'DELETE', path: '/a', summary: 'x', open: false }]);
+  });
+  it('finds the repository and summarises the runs', () => {
+    expect(repoSlug({ apiVersion: 'v1', kind: 'Component', metadata: { name: 'x', annotations: { 'refresquito.io/repository': 'https://github.com/javivillar/petstore' } } })).toBe('javivillar/petstore');
+    const run = (c: string, s: number) => ({ status: 'completed', conclusion: c, created_at: '2026-11-01T10:00:00Z', updated_at: new Date(Date.parse('2026-11-01T10:00:00Z') + s * 1000).toISOString() });
+    expect(runStats([run('success', 60), run('failure', 30), run('success', 120), run('cancelled', 1)])).toEqual({ rate: 67, median: 60 });
+  });
+});

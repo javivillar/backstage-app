@@ -107,6 +107,7 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *                               refresquito-topology of this namespace, every 5 min); read-only
  *   GET /api/cluster/actions[?entity=<ref>]   { allowed, groups, owners, log }: whether the user may act (on that
  *                               entity, as its owner when console.actions.owners), and the last actions
+ *   GET  /api/cluster/apps/:app        ArgoAppView: deployments (history), state and resources of an Argo CD application
  *   POST /api/cluster/actions/sync     { app }                        sync an Argo CD application with git
  *   POST /api/cluster/actions/restart  { app, namespace, kind, name } restart a workload (Argo CD action)
  *   GET  /api/cluster/zone/vms         { policy, vms, pulls, allowed }: the VMs of the console, their state, open PRs
@@ -377,6 +378,31 @@ export default createBackendPlugin({
           } catch (e) {
             logger.error(`cluster zone: ${(e as Error).message}`);
             res.status(502).json({ error: `The zone could not be read: ${(e as Error).message}` });
+          }
+        });
+
+        // an Argo CD application, read only (the CI/CD tab of a service): deployments, state, resources
+        router.get('/apps/:app', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['user'] });
+          } catch {
+            res.status(401).json({ error: 'Sign in' });
+            return;
+          }
+          const app = String(req.params.app);
+          if (!NAME.test(app)) {
+            res.status(400).json({ error: 'app: the name of an Argo CD application' });
+            return;
+          }
+          if (!argo) {
+            res.status(503).json({ error: 'Argo CD is not configured (argocd.appLocatorMethods).' });
+            return;
+          }
+          try {
+            res.json(await argo.app(app));
+          } catch (e) {
+            const status = (e as { status?: number }).status === 404 ? 404 : 502;
+            res.status(status).json({ error: (e as Error).message });
           }
         });
 

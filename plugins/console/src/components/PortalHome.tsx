@@ -3,6 +3,12 @@ import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import { identityApiRef, useApi, useApiHolder } from '@backstage/core-plugin-api';
 import { catalogApiRef, starredEntitiesApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import type { SvgIconComponent } from '@mui/icons-material';
+import ApiIcon from '@mui/icons-material/Api';
+import GroupsIcon from '@mui/icons-material/Groups';
+import HubIcon from '@mui/icons-material/Hub';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -11,7 +17,7 @@ import { useConsoleConfig } from '../config';
 import { type AppOverview, useClusterOverview } from '../overview';
 import { Badge } from './Badge';
 import { classify, consoleEntityPath } from './classify';
-import { healthColour } from './ClusterOverviewPage';
+import { TONES } from './Flow';
 import { NeedsAttention } from './NeedsAttention';
 import { rq } from './tokens';
 
@@ -72,63 +78,64 @@ export const ownerRef = (owner?: string) => {
   return `group:default/${o}`;
 };
 
-const Kpi = ({ label, value, color }: { label: string; value: number; color?: string }) => (
-  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-    <Typography variant="body2" color="text.secondary">
-      {label}
-    </Typography>
-    <Typography sx={{ fontSize: 30, fontWeight: 600, color }}>{value}</Typography>
-  </Paper>
-);
-
-const EntityList = ({
-  title,
-  items,
-  palette,
-  health,
-  empty = 'None in this cluster.',
-}: {
-  title: string;
-  items: Entity[];
-  palette: { bg: string; fg: string };
-  health: Map<string, AppOverview>;
-  empty?: string;
-}) => (
-  <Paper variant="outlined" component="section" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-    <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Badge label={title} bg={palette.bg} fg={palette.fg} />
+const Kpi = ({ label, value, Icon }: { label: string; value: number; Icon: SvgIconComponent }) => (
+  <Paper variant="outlined" sx={{ p: 1.75, borderRadius: '12px', display: 'flex', gap: 1.5, alignItems: 'center' }}>
+    <Box aria-hidden sx={{ width: 38, height: 38, borderRadius: '10px', display: 'grid', placeItems: 'center', bgcolor: 'rgba(26,141,255,0.10)', color: rq.blue }}>
+      <Icon />
+    </Box>
+    <Box>
+      <Typography sx={{ fontSize: 24, fontWeight: 600, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
       <Typography variant="body2" color="text.secondary">
-        {items.length}
+        {label}
       </Typography>
     </Box>
-    {items.length === 0 && (
-      <Typography sx={{ p: 2 }} color="text.secondary">
-        {empty}
-      </Typography>
-    )}
-    {items.map(e => {
-      const ann = e.metadata.annotations ?? {};
-      const stage = ann['refresquito.io/stage'];
-      const segment = e.metadata.labels?.['refresquito.io/segment'];
-      const suspended = ann['refresquito.io/suspended'] === 'true';
-      const app = health.get(e.metadata.name);
-      return (
-        <Box key={stringifyEntityRef(e)} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
-          <Link to={consoleEntityPath(e)} underline="none" style={{ fontWeight: 600, color: palette.fg, minWidth: 0 }}>
-            {e.metadata.title ?? e.metadata.name}
-          </Link>
-          <Box sx={{ flex: 1 }} />
-          {app && app.health !== 'Healthy' && <Badge label={app.health} {...healthColour(app.health)} />}
-          {stage && <Badge outlined label={stage} />}
-          {segment && <Badge outlined label={segment} />}
-          {suspended && <Badge label="suspended" bg="#FFF3E0" fg="#B45F06" />}
-        </Box>
-      );
-    })}
   </Paper>
 );
 
-/** Portal layer: the software of this cluster, business applications apart from Refresquito services. */
+const HEALTH_DOT: Record<string, string> = { Healthy: TONES.ok.fg, Progressing: TONES.info.fg, Degraded: TONES.bad.fg, Missing: TONES.bad.fg, Suspended: TONES.off.fg };
+
+/** One component of the catalogue: what it is (icon), its name, owner and system, and its state in Argo CD. */
+const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
+  const ann = e.metadata.annotations ?? {};
+  const sp = (e.spec ?? {}) as { owner?: string; system?: string; lifecycle?: string };
+  const business = classify(e) === 'business';
+  const Icon = business ? StorefrontIcon : HubIcon;
+  const suspended = ann['refresquito.io/suspended'] === 'true';
+  let state = app ? app.health : 'not in Argo CD';
+  if (suspended) state = 'suspended';
+  const dot = suspended ? TONES.off.fg : HEALTH_DOT[app?.health ?? ''] ?? TONES.off.fg;
+  return (
+    <Box
+      component={Link}
+      to={consoleEntityPath(e)}
+      sx={{ display: 'grid', gap: 0.75, border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.5, bgcolor: 'background.paper', color: 'text.primary', textDecoration: 'none', minWidth: 0, '&:hover': { borderColor: rq.blue } }}
+    >
+      <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center', minWidth: 0 }}>
+        <Box aria-hidden sx={{ width: 34, height: 34, borderRadius: '9px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: 'action.hover', color: 'text.secondary' }}>
+          <Icon fontSize="small" />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.metadata.title ?? e.metadata.name}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {[business ? 'business application' : 'Refresquito service', sp.owner?.replace(/^group:(default\/)?/, '')].filter(Boolean).join(' · ')}
+          </Typography>
+        </Box>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: 'text.secondary' }}>
+          <Box component="span" aria-hidden sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dot }} />
+          {state}
+        </Box>
+        {ann['refresquito.io/stage'] && <Badge outlined label={ann['refresquito.io/stage']} />}
+        {e.metadata.labels?.['refresquito.io/segment'] && <Badge outlined label={e.metadata.labels['refresquito.io/segment']} />}
+      </Box>
+    </Box>
+  );
+};
+
+type Filter = 'all' | 'business' | 'service' | 'mine' | 'favourites';
+
+/** Portal › Catalogue: the software of this cluster, as cards, filtered by what it is or whose it is. */
 export const PortalHome = () => {
   const cfg = useConsoleConfig();
   const { loading, items, apis, error } = useComponents();
@@ -136,51 +143,71 @@ export const PortalHome = () => {
   const mine = useOwnership();
   const starred = useStarred();
   const [text, setText] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
   const health = useMemo(() => new Map((ov.data?.apps ?? []).map(a => [a.name, a] as const)), [ov.data]);
   if (loading) return <Progress />;
   const t = text.trim().toLowerCase();
   const match = (e: Entity) =>
     !t || e.metadata.name.toLowerCase().includes(t) || (e.metadata.title ?? '').toLowerCase().includes(t) || (e.metadata.labels?.['refresquito.io/segment'] ?? '').includes(t);
-  const byName = (a: Entity, b: Entity) => a.metadata.name.localeCompare(b.metadata.name);
-  const shown = items.filter(match).sort(byName);
-  const business = shown.filter(e => classify(e) === 'business');
-  const services = shown.filter(e => classify(e) === 'service');
-  const owned = shown.filter(e => {
+  const owns = (e: Entity) => {
     const o = ownerRef((e.spec as { owner?: string } | undefined)?.owner);
     return !!o && mine.has(o);
+  };
+  const keep: Record<Filter, (e: Entity) => boolean> = {
+    all: () => true,
+    business: e => classify(e) === 'business',
+    service: e => classify(e) === 'service',
+    mine: owns,
+    favourites: e => starred.has(stringifyEntityRef(e)),
+  };
+  const counts = Object.fromEntries((Object.keys(keep) as Filter[]).map(f => [f, items.filter(keep[f]).length])) as Record<Filter, number>;
+  const shown = items.filter(e => match(e) && keep[filter](e)).sort((a, b) => {
+    // business applications first, then by name
+    const ca = classify(a) === 'business' ? 0 : 1;
+    const cb = classify(b) === 'business' ? 0 : 1;
+    return ca - cb || a.metadata.name.localeCompare(b.metadata.name);
   });
-  const favourites = shown.filter(e => starred.has(stringifyEntityRef(e)));
   const where = [cfg.cluster.zone, cfg.cluster.program].filter(Boolean).join(' / ');
-  const neutral = { bg: '#EEF1F4', fg: '#14202E' };
+  const chips: Array<[Filter, string]> = [
+    ['all', 'All'],
+    ['business', 'Business applications'],
+    ['service', 'Refresquito services'],
+    ['mine', 'Owned by your groups'],
+    ['favourites', 'Favourites'],
+  ];
   return (
-    <Box sx={{ display: 'grid', gap: 3, maxWidth: 1240 }}>
+    <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
       <Box>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          Portal of {cfg.cluster.id}
+          Catalogue
         </Typography>
-        <Typography color="text.secondary">
-          {where ? `${where} · ` : ''}the same catalog as the classic portal, grouped by what each component is.
-        </Typography>
+        <Typography color="text.secondary">{where ? `${where} · ` : ''}the business applications and Refresquito services of {cfg.cluster.id}.</Typography>
       </Box>
       {error && <WarningPanel title="The catalog did not answer" message={error} />}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <Kpi label="Business applications" value={items.filter(e => classify(e) === 'business').length} color={rq.biz.fg} />
-        <Kpi label="Refresquito services" value={items.filter(e => classify(e) === 'service').length} color={rq.svc.fg} />
-        <Kpi label="APIs" value={apis} />
-        <Kpi label="Components" value={items.length} />
+      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))' }}>
+        <Kpi label="Business applications" value={counts.business} Icon={StorefrontIcon} />
+        <Kpi label="Refresquito services" value={counts.service} Icon={HubIcon} />
+        <Kpi label="APIs" value={apis} Icon={ApiIcon} />
+        <Kpi label="Owned by your groups" value={counts.mine} Icon={GroupsIcon} />
       </Box>
       <NeedsAttention limit={5} />
-      <TextField size="small" label="Filter by name, title or segment" value={text} onChange={e => setText(e.target.value)} sx={{ maxWidth: 420 }} />
-      {(owned.length > 0 || favourites.length > 0) && (
-        <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, alignItems: 'start' }}>
-          <EntityList title="Owned by your groups" items={owned} palette={neutral} health={health} empty="Nothing owned by your groups." />
-          <EntityList title="Your favourites" items={favourites} palette={neutral} health={health} empty="Star an entity on its page to keep it here." />
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextField size="small" placeholder="Search by name, title or segment" value={text} onChange={e => setText(e.target.value)} inputProps={{ 'aria-label': 'Search the catalogue' }} sx={{ flex: '1 1 260px', maxWidth: 420 }} />
+        <Box role="group" aria-label="Show" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+          {chips.map(([f, label]) => (
+            <Chip key={f} label={`${label} ${counts[f]}`} onClick={() => setFilter(f)} color={filter === f ? 'primary' : 'default'} variant={filter === f ? 'filled' : 'outlined'} aria-pressed={filter === f} />
+          ))}
+        </Box>
+      </Box>
+      {shown.length === 0 ? (
+        <Typography color="text.secondary">{filter === 'favourites' ? 'Star an entity on its page to keep it here.' : 'Nothing matches.'}</Typography>
+      ) : (
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))' }}>
+          {shown.map(e => (
+            <EntityCard key={stringifyEntityRef(e)} e={e} app={health.get(e.metadata.name)} />
+          ))}
         </Box>
       )}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, alignItems: 'start' }}>
-        <EntityList title="Business applications" items={business} palette={rq.biz} health={health} />
-        <EntityList title="Refresquito services" items={services} palette={rq.svc} health={health} />
-      </Box>
     </Box>
   );
 };

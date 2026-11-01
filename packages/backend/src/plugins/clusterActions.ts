@@ -70,6 +70,14 @@ export class ArgoClient {
     }
   }
 
+  /** An application as the console shows it: its deployments (history), state and resources. Read only. */
+  async app(name: string): Promise<ArgoAppView> {
+    const res = await this.fetchFn(`${this.instance.url}/api/v1/applications/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${await this.bearer()}` } });
+    if (res.status === 404 || res.status === 403) throw Object.assign(new Error(`No Argo CD application ${name}`), { status: 404 });
+    if (!res.ok) throw new Error(`Argo CD answered ${res.status}`);
+    return argoAppView((await res.json()) as ArgoAppRaw);
+  }
+
   /** Sync the application with git now (no prune: a deletion stays a decision of git and Argo CD's own policy). */
   sync(app: string) {
     return this.call(`/api/v1/applications/${encodeURIComponent(app)}/sync`, { prune: false });
@@ -86,4 +94,54 @@ export class ArgoClient {
       action: 'restart',
     });
   }
+}
+
+type ArgoAppRaw = {
+  metadata: { name: string };
+  spec?: { source?: { repoURL?: string; path?: string; targetRevision?: string } };
+  status?: {
+    sync?: { status?: string; revision?: string };
+    health?: { status?: string };
+    history?: Array<{ id: number; revision?: string; deployedAt?: string; deployStartedAt?: string; initiatedBy?: { username?: string; automated?: boolean } }>;
+    operationState?: { phase?: string; message?: string; finishedAt?: string };
+    resources?: Array<{ kind: string; name: string; namespace?: string; status?: string; health?: { status?: string } }>;
+  };
+};
+export type ArgoAppView = {
+  name: string;
+  repo?: string;
+  path?: string;
+  target?: string;
+  sync?: string;
+  revision?: string;
+  health?: string;
+  operation?: { phase?: string; message?: string; finishedAt?: string };
+  history: Array<{ id: number; revision?: string; deployedAt?: string; took?: number; by?: string }>;
+  resources: Array<{ kind: string; name: string; namespace?: string; sync?: string; health?: string }>;
+};
+
+/** The parts of an Argo CD application the console shows, newest deployment first. */
+export function argoAppView(a: ArgoAppRaw): ArgoAppView {
+  const st = a.status ?? {};
+  return {
+    name: a.metadata.name,
+    repo: a.spec?.source?.repoURL,
+    path: a.spec?.source?.path,
+    target: a.spec?.source?.targetRevision,
+    sync: st.sync?.status,
+    revision: st.sync?.revision,
+    health: st.health?.status,
+    operation: st.operationState ? { phase: st.operationState.phase, message: st.operationState.message?.slice(0, 300), finishedAt: st.operationState.finishedAt } : undefined,
+    history: [...(st.history ?? [])]
+      .reverse()
+      .slice(0, 20)
+      .map(h => ({
+        id: h.id,
+        revision: h.revision,
+        deployedAt: h.deployedAt,
+        took: h.deployedAt && h.deployStartedAt ? Math.round((Date.parse(h.deployedAt) - Date.parse(h.deployStartedAt)) / 1000) : undefined,
+        by: h.initiatedBy?.automated ? 'auto-sync' : h.initiatedBy?.username,
+      })),
+    resources: (st.resources ?? []).map(r => ({ kind: r.kind, name: r.name, namespace: r.namespace, sync: r.status, health: r.health?.status })),
+  };
 }
