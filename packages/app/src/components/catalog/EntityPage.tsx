@@ -17,6 +17,7 @@ import {
   EntityCicdContent,
   EntityDocsContent,
   ClassicTabNote,
+  TechInsightsChecks,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
@@ -850,7 +851,7 @@ export const consoleEntityPage = entityPageWith(
     <EntityLayout.Route path="/quality" title={tabLabel(<VerifiedUser />, 'Quality & Security')} if={isApplication}>
       <EntityQualityConsoleContent
         ask={<AskSecurityAssistant />}
-        scorecard={<EntityTechInsightsScorecardContent title="Checks" description="Its catalog entry, the SBOM and vulnerabilities of its images, the line of the Python Framework it is built on." />}
+        scorecard={<TechInsightsChecks />}
       />
     </EntityLayout.Route>
     {/* TechDocs, Kubernetes and Topology only route under the classic entity page: the console reads the docs itself */}

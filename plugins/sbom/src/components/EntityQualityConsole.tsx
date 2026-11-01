@@ -83,6 +83,7 @@ export const EntityQualityConsoleContent = ({ scorecard, ask }: { scorecard?: Re
   else if (!loading && !report) note = `The image ${image} has no quality report attached: it was built before its CI made them.`;
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
+      {ask && <Box sx={{ display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>{ask}</Box>}
       {loading && <Progress />}
       {f && (
         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))' }}>
@@ -93,7 +94,7 @@ export const EntityQualityConsoleContent = ({ scorecard, ask }: { scorecard?: Re
         </Box>
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.4fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
-        <Card title="Scorecard" sub="What an application of the platform must have, checked every hour (Tech Insights)." action={ask}>
+        <Card title="Scorecard" sub="What an application of the platform must have, checked every hour (Tech Insights).">
           {scorecard ?? <Typography color="text.secondary">Not available in this portal.</Typography>}
         </Card>
         <Card
