@@ -21,6 +21,9 @@ export type ZoneVm = {
   disks?: Array<{ image: string; sizeMb: number; datastore?: string; target?: string }>;
   cpuPct?: number;
   memoryUsedGb?: number;
+  netRxMb?: number;
+  netTxMb?: number;
+  history?: Array<{ host: string; start?: string; end?: string; action?: string }>;
 };
 export type ZoneNetwork = { name: string; role?: string; cidr: string; vlan?: number | string; exists: boolean; state?: string; leases: number; drift: string[] };
 export type ZoneSecurityGroup = { name: string; role?: string; exists: boolean; source?: string; rules: string[]; extra: string[]; missing: string[] };
@@ -48,6 +51,7 @@ export type DriftItem = { zone: string; program?: string; kind: string; name: st
 export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 export type ZoneView = {
   generated?: string;
+  domain?: string;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
@@ -109,12 +113,13 @@ export type ClusterProfile = {
   longhorn: boolean;
 };
 export type ReconcileStep = { file?: string; zone?: string; program?: string; action: string; state: string; detail?: string; at?: string; last?: { action?: string; state: string; detail?: string; at?: string } | null };
-export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; main?: { commit?: string; at?: string }; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[] };
+export type ActionResult = { file: string; kind: string; zone?: string; program?: string; vm?: string; requested_by?: string; state: string; detail?: string; at?: string };
+export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; main?: { commit?: string; at?: string }; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[]; actions?: ActionResult[] };
 /** The parts of GET /zone the Infrastructure pages use (the host publishes them with topology.json). */
 export type InfraView = ZoneView & {
   catalog?: CatalogZone[];
   kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
-  capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number };
+  capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
 };
 

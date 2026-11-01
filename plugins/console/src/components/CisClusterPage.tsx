@@ -12,7 +12,8 @@ import { Table } from './NetworkPage';
 
 /** GET /api/sbom/kubebench (wazuh-oneke security exporter): the CIS Kubernetes Benchmark of every node. */
 type Failure = { id: string; section?: string; section_text?: string; node_type?: string; desc?: string; scored?: string; change?: string; expected?: string; actual?: string; remediation?: string };
-type KubeNode = { node: string; role?: string; benchmark?: string; targets?: string; last?: string; status?: string; total_pass?: number; total_fail?: number; total_warn?: number; failures: Failure[] };
+/** Wazuh keeps the totals as text: read them with Number(). */
+type KubeNode = { node: string; role?: string; benchmark?: string; targets?: string; last?: string; status?: string; total_pass?: number | string; total_fail?: number | string; total_warn?: number | string; failures: Failure[] };
 type Kubebench = { configured?: boolean; generated?: string; nodes: KubeNode[] };
 
 /** The same check failing on several nodes is one thing to fix: grouped by check id. */
@@ -54,9 +55,9 @@ export const CisClusterPage = () => {
   const d = state.data;
   const nodes = d?.nodes ?? [];
   const groups = groupFailures(nodes);
-  const pass = nodes.reduce((t, n) => t + (n.total_pass ?? 0), 0);
-  const fail = nodes.reduce((t, n) => t + (n.total_fail ?? 0), 0);
-  const warn = nodes.reduce((t, n) => t + (n.total_warn ?? 0), 0);
+  const pass = nodes.reduce((t, n) => t + Number(n.total_pass ?? 0), 0);
+  const fail = nodes.reduce((t, n) => t + Number(n.total_fail ?? 0), 0);
+  const warn = nodes.reduce((t, n) => t + Number(n.total_warn ?? 0), 0);
   const kpi = (label: string, value: string, sub: string, tone?: keyof typeof TONES) => (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
       <Typography variant="body2" color="text.secondary">
@@ -99,7 +100,7 @@ export const CisClusterPage = () => {
                 `${n.role ?? ''}${n.targets ? ` · ${n.targets}` : ''}`,
                 n.benchmark ?? '',
                 String(n.total_pass ?? ''),
-                n.total_fail ? <Badge label={String(n.total_fail)} {...TONES.bad} /> : <Badge label="0" {...TONES.ok} />,
+                Number(n.total_fail ?? 0) ? <Badge label={String(n.total_fail)} {...TONES.bad} /> : <Badge label="0" {...TONES.ok} />,
                 String(n.total_warn ?? ''),
                 n.last ? new Date(n.last).toLocaleString() : '',
               ])}

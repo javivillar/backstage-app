@@ -107,7 +107,8 @@ export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
         <Table
           head={['VM', 'Programme', 'Size · image', 'State', '']}
           rows={mine.map(v => {
-            const st = vmStatus(v);
+            const inOne = zone.programs.find(p => p.name === v.program)?.vms.find(x => x.name === consoleVmName(v));
+            const st = inOne?.state === 'PENDING' ? { label: 'Waiting for room', tone: 'warn' as const, detail: 'OpenNebula keeps memory free on every host: it starts by itself when there is room' } : vmStatus(v);
             return [
               <span>
                 <Link to={vmHref(consoleVmName(v))}>

@@ -140,6 +140,22 @@ review → merged, waiting for the host → applied/done or failed). The program
 **Menus**: one icon per entry in `navIcons.ts` (by path); the managers have functional names (IAM, API management…) and
 show the product on hover (`product` of each page in `App.tsx`); Portal › Home is called **Catalogue**.
 
+## 1.4: application page, VM page, operations, Manage
+
+- **Entity page**: `ConsoleEntityLayout` reads the same `EntityLayout.Route` children as the classic page and draws a bar
+  of groups (`TAB_GROUPS`: Overview · Operate · Build · Secure · Spend, the rest under More); a console tab replaces
+  the classic one with the same path. The app chooses the layout (`entityPageWith(…, Layout)`).
+- **Overview**: `AboutSection` (catalog metadata) + slots for the app's data cards (availability, Argo CD, service
+  metadata, DataHub); dependencies with the state of their Argo CD application.
+- **Dependencies** (`EntityDependencies.tsx`): who uses it / what it uses from the catalog relations and APIs, as an
+  SVG map, health from Argo CD, detail and blast radius.
+- **VM page**: usage, how to reach it (ssh -J through the VNF), NICs and rules, disks, lifecycle (history of
+  OpenNebula), security, as code, quota; **operations** (`OpsActions`): `POST /api/cluster/infra/actions` commits
+  `configuration/actions/*.json` of opennebula, run once by the host.
+- **Manage** (`ManagePages.tsx`): `/console/manage` hub and `/console/manage/:id` with one layout; IAM, S3 buckets and
+  BI read their manager backends (`keycloak-manager`, `seaweedfs-manager`, `superset-manager`), the rest embed their
+  classic page.
+
 ## Configuration
 
 ```yaml

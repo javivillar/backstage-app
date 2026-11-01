@@ -65,6 +65,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/functional-assistant': LightbulbIcon,
   '/console/architect-assistant': ArchitectureIcon,
   '/console/developer-assistant': CodeIcon,
+  '/console/manage': AppsIcon,
   '/console/keycloak': KeyIcon,
   '/console/gravitee': ApiIcon,
   '/console/datahub': DatasetIcon,

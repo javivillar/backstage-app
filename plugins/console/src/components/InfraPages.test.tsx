@@ -135,7 +135,7 @@ describe('Infrastructure layer', () => {
       </Routes>,
       '/vm/vm-nato-a400m-tools',
     );
-    expect(await screen.findByText('console-nato-a400m')).toBeInTheDocument();
+    expect(await screen.findByText('console-nato-a400m · nato-a400m')).toBeInTheDocument();
     expect(screen.getByText('02:00:0a')).toBeInTheDocument();
     expect(screen.getByText('30 GB')).toBeInTheDocument();
   });

@@ -50,9 +50,9 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
     {items.map(i => {
       const on =
         current === i.to ||
-        (!['/console', '/console/infrastructure', '/console/cluster'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
+        (!['/console', '/console/infrastructure', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
         (i.to === '/console' && current.startsWith('/console/entity/'));
-      const Icon = NAV_ICONS[i.to];
+      const Icon = NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')];
       const link = (
         <Link
           key={i.to}
@@ -170,7 +170,11 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   } else {
     groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
     if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
-    if (navOf('managers').length) groups.push({ title: 'Manage', items: navOf('managers') });
+    if (navOf('managers').length)
+      groups.push({
+        title: 'Manage',
+        items: [{ label: 'All services', to: '/console/manage' }, ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') }))],
+      });
   }
 
   const band: Record<Layer, { text: string; next?: { label: string; to: string } }> = {

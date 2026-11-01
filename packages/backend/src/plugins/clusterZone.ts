@@ -28,6 +28,9 @@ export type ZoneVm = {
   disks?: Array<{ image: string; sizeMb: number; datastore?: string; target?: string }>;
   cpuPct?: number;
   memoryUsedGb?: number;
+  netRxMb?: number;
+  netTxMb?: number;
+  history?: Array<{ host: string; start?: string; end?: string; action?: string }>;
 };
 export type ZoneNetwork = { name: string; role?: string; cidr: string; vlan?: number | string; exists: boolean; state?: string; leases: number; drift: string[] };
 export type ZoneSecurityGroup = { name: string; role?: string; exists: boolean; source?: string; rules: string[]; extra: string[]; missing: string[] };
@@ -72,12 +75,15 @@ export type ClusterProfile = {
 };
 export type ReconcileStep = { file?: string; zone?: string; program?: string; action: string; state: string; detail?: string; at?: string };
 /** What the host did following main (configuration.py reconcile). */
-export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[] };
+export type ActionResult = { file: string; kind: string; zone?: string; program?: string; vm?: string; requested_by?: string; state: string; detail?: string; at?: string };
+export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[]; actions?: ActionResult[] };
 export type ZoneView = {
   generated?: string;
+  /** domain of the names: <vm>.<zone>.<program>.<domain> */
+  domain?: string;
   catalog?: CatalogZone[];
   kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
-  capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number };
+  capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   warnings: string[];
@@ -110,6 +116,11 @@ function vm(x: Raw): ZoneVm {
     disks: Array.isArray(x.disks) ? x.disks.map((d: Raw) => ({ image: str(d.image), sizeMb: Number(d.size_mb ?? 0), datastore: d.datastore || undefined, target: d.target || undefined })) : undefined,
     cpuPct: typeof x.cpu_pct === 'number' ? x.cpu_pct : undefined,
     memoryUsedGb: typeof x.memory_used_gb === 'number' ? x.memory_used_gb : undefined,
+    netRxMb: typeof x.net_rx_mb === 'number' ? x.net_rx_mb : undefined,
+    netTxMb: typeof x.net_tx_mb === 'number' ? x.net_tx_mb : undefined,
+    history: Array.isArray(x.history)
+      ? x.history.map((h: Raw) => ({ host: str(h.host), start: h.start ? new Date(h.start * 1000).toISOString() : undefined, end: h.end ? new Date(h.end * 1000).toISOString() : undefined, action: h.action || undefined }))
+      : undefined,
   };
 }
 
@@ -171,6 +182,7 @@ export function summariseZone(raw: Raw): ZoneView {
   const rc = raw.reconcile;
   return {
     generated: raw.generated ? str(raw.generated) : undefined,
+    domain: raw.domain ? str(raw.domain) : undefined,
     catalog,
     kubernetes: k && Array.isArray(k.profiles)
       ? {
@@ -191,8 +203,8 @@ export function summariseZone(raw: Raw): ZoneView {
           })),
         }
       : undefined,
-    capacity: raw.capacity ? { freeMemoryMb: raw.capacity.free_memory_mb ?? undefined, reservedMemoryMb: raw.capacity.reserved_memory_mb ?? undefined } : undefined,
-    reconcile: rc ? { started: rc.started, finished: rc.finished, error: rc.error ?? null, segregation: rc.segregation ?? null, clusters: Array.isArray(rc.clusters) ? rc.clusters : [] } : undefined,
+    capacity: raw.capacity ? { freeMemoryMb: raw.capacity.schedulable_memory_mb ?? raw.capacity.free_memory_mb ?? undefined, reservedMemoryMb: raw.capacity.reserved_memory_mb ?? undefined, schedulableMemoryMb: raw.capacity.schedulable_memory_mb ?? undefined } : undefined,
+    reconcile: rc ? { started: rc.started, finished: rc.finished, error: rc.error ?? null, segregation: rc.segregation ?? null, clusters: Array.isArray(rc.clusters) ? rc.clusters : [], actions: Array.isArray(rc.actions) ? rc.actions : [] } : undefined,
     consoleVms: cv && Array.isArray(cv.vms) ? { applied: cv.applied ? str(cv.applied) : undefined, vms: cv.vms as ConsoleVmStatus[] } : undefined,
     warnings: (raw.warnings ?? []).map(str),
     host: h
