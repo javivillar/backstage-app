@@ -24,6 +24,8 @@ import { CisClusterPage } from './CisClusterPage';
 import { ManageHubPage, ManageServicePage } from './ManagePages';
 import { ClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
+import { ConsoleTheme } from '../theme/consoleTheme';
+import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
@@ -70,6 +72,8 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
   }
   return (
     <ConsolePagesContext.Provider value={pages}>
+      <I18nProvider>
+      <ConsoleTheme>
       <ConsoleShell embedded={embedded}>
         <Routes>
         <Route path="/" element={<PortalHome />} />
@@ -110,6 +114,8 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="*" element={<Message title="Page not found">This page of the console does not exist.</Message>} />
         </Routes>
       </ConsoleShell>
+      </ConsoleTheme>
+      </I18nProvider>
     </ConsolePagesContext.Provider>
   );
 };
