@@ -143,8 +143,8 @@ body.rq-console { background: ${t.frame}; }
 .rq-console-root { font-family: ${FONT}; color: ${t.ink}; font-size: 14px; line-height: 20px; }
 .rq-console-root code, .rq-console-root pre, .rq-console-root kbd, .rq-console-root samp, .rq-console-root .rq-mono { font-family: ${MONO}; }
 .rq-console-root ::selection { background: ${t.dataSoft}; }
-.rq-console-root a.MuiButton-containedPrimary, .rq-console-root a.MuiButton-containedPrimary:visited { background-color: ${t.primary} !important; background-image: none !important; color: ${t.onPrimary} !important; }
-.rq-console-root a.MuiButton-outlined, .rq-console-root a.MuiButton-text { color: ${t.ink} !important; }
+.rq-console-root a[class*="MuiButton-containedPrimary"], .rq-console-root a[class*="MuiButton-containedPrimary"]:visited { background-color: ${t.primary} !important; background-image: none !important; color: ${t.onPrimary} !important; text-decoration: none !important; }
+.rq-console-root a[class*="MuiButton-outlined"], .rq-console-root a[class*="MuiButton-text"] { color: ${t.ink} !important; background-image: none !important; text-decoration: none !important; }
 .rq-console-root th { text-transform: none !important; letter-spacing: 0 !important; }
 .rq-console-root a:focus-visible, .rq-console-root button:focus-visible { outline: 2px solid ${t.data}; outline-offset: 1px; }
 `}
