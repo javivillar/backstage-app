@@ -109,6 +109,37 @@ const ClassicNote = ({ entity }: { entity: Entity }) => {
 
 /* ---------------- API ---------------- */
 
+const OperationsTable = ({ ops }: { ops: ReturnType<typeof openApiOperations> }) => {
+  const { t } = useI18n();
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>{t('native.api.method')}</TableCell>
+          <TableCell>{t('native.api.path')}</TableCell>
+          <TableCell>{t('native.api.summary')}</TableCell>
+          <TableCell>{t('native.api.protection')}</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {ops.map(o => (
+          <TableRow key={`${o.method} ${o.path}`} hover>
+            <TableCell>
+              <Method method={o.method} />
+            </TableCell>
+            <TableCell>
+              <Id>{o.path}</Id>
+            </TableCell>
+            <TableCell>{o.summary ?? ''}</TableCell>
+            <TableCell>{o.open ? <Pill tone="warn">{t('native.api.noAuth')}</Pill> : <Pill tone="pos">{t('native.api.auth')}</Pill>}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+
 const ApiPage = ({ entity }: { entity: Entity }) => {
   const { t } = useI18n();
   const { pathname } = useLocation();
@@ -211,36 +242,6 @@ const ApiPage = ({ entity }: { entity: Entity }) => {
         </>
       )}
     </>
-  );
-};
-
-const OperationsTable = ({ ops }: { ops: ReturnType<typeof openApiOperations> }) => {
-  const { t } = useI18n();
-  return (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>{t('native.api.method')}</TableCell>
-          <TableCell>{t('native.api.path')}</TableCell>
-          <TableCell>{t('native.api.summary')}</TableCell>
-          <TableCell>{t('native.api.protection')}</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {ops.map(o => (
-          <TableRow key={`${o.method} ${o.path}`} hover>
-            <TableCell>
-              <Method method={o.method} />
-            </TableCell>
-            <TableCell>
-              <Id>{o.path}</Id>
-            </TableCell>
-            <TableCell>{o.summary ?? ''}</TableCell>
-            <TableCell>{o.open ? <Pill tone="warn">{t('native.api.noAuth')}</Pill> : <Pill tone="pos">{t('native.api.auth')}</Pill>}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
   );
 };
 
