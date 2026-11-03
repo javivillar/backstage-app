@@ -48,9 +48,10 @@ const Message = ({ title, children }: { title: string; children: React.ReactNode
 /**
  * /console/*: off unless console.enabled, and only for console.allowedGroups.
  * entityContent: the classic entity page (EntityLayout with its tabs), reused in /console/entity/...
+ * apiDefinition: the classic definition card of an API (Swagger UI with Try it out), shown in the API's Definition tab.
  * pages: classic pages shown in the console menus (create, docs, costs...), reused in /console/<id>/...
  */
-export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: React.ReactNode; pages?: ConsoleClassicPage[] }) => {
+export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { entityContent?: React.ReactNode; pages?: ConsoleClassicPage[]; apiDefinition?: React.ReactNode }) => {
   const access = useConsoleAccess();
   const cfg = useConsoleConfig();
   const embedded = useEmbedded(useLocation().search);
@@ -77,7 +78,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
       <ConsoleShell embedded={embedded}>
         <Routes>
         <Route path="/" element={<PortalHome />} />
-        <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} />} />
+        <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} apiDefinition={apiDefinition} />} />
         {/* pages the console draws itself; their classic version stays at its classic path */}
         <Route path="/cis-nodes" element={<CisNodesPage />} />
         <Route path="/docs" element={<PortalDocsPage />} />

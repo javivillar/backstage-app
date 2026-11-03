@@ -114,6 +114,7 @@ export const ENTITY: Messages = {
   'native.tags': { en: 'Tags', es: 'Etiquetas' },
   'native.count': { en: '{n}', es: '{n}' },
   'native.definition': { en: 'Definition', es: 'Definición' },
+  'native.api.tryIt': { en: 'open an operation and use Try it out to call it', es: 'abre una operación y usa Try it out para llamarla' },
   'native.providedBy': { en: 'Provided by', es: 'La ofrece' },
   'native.api.operations': { en: 'Operations', es: 'Operaciones' },
   'native.api.withoutAuth': { en: 'Without authentication', es: 'Sin autenticación' },

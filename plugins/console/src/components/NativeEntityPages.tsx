@@ -1,7 +1,7 @@
 import { type Entity, parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
 import { Link } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
-import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import { EntityProvider, catalogApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -9,7 +9,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
 import { useI18n } from '../i18n';
@@ -17,6 +17,7 @@ import { MONO } from '../theme/consoleTheme';
 import { openApiOperations } from './EntityBuild';
 import { Method } from './ui-portal';
 import { classify, entityPath } from './classify';
+import { ClassicFrame } from './ClassicFrame';
 import { EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow } from './ui';
 
 /**
@@ -62,7 +63,7 @@ const RefLink = ({ refStr, label }: { refStr: string; label?: string }) => <Link
 const titleOf = (e: Entity) => e.metadata.title ?? e.metadata.name;
 
 /** A table of catalog entities: name (console link), kind, type and lifecycle. */
-const EntityTable = ({ items }: { items: Entity[] }) => {
+const EntityTable = ({ items, compact }: { items: Entity[]; compact?: boolean }) => {
   const { t } = useI18n();
   return (
     <Table size="small">
@@ -70,8 +71,8 @@ const EntityTable = ({ items }: { items: Entity[] }) => {
         <TableRow>
           <TableCell>{t('native.name')}</TableCell>
           <TableCell>{t('native.kind')}</TableCell>
-          <TableCell>{t('native.type')}</TableCell>
-          <TableCell>{t('native.lifecycle')}</TableCell>
+          {!compact && <TableCell>{t('native.type')}</TableCell>}
+          {!compact && <TableCell>{t('native.lifecycle')}</TableCell>}
         </TableRow>
       </TableHead>
       <TableBody>
@@ -88,8 +89,8 @@ const EntityTable = ({ items }: { items: Entity[] }) => {
               )}
             </TableCell>
             <TableCell>{classify(e) === 'business' ? <Pill tone="pos" plain>{t('cat.businessApp')}</Pill> : e.kind}</TableCell>
-            <TableCell>{String(e.spec?.type ?? '—')}</TableCell>
-            <TableCell>{String(e.spec?.lifecycle ?? '—')}</TableCell>
+            {!compact && <TableCell>{String(e.spec?.type ?? '—')}</TableCell>}
+            {!compact && <TableCell>{String(e.spec?.lifecycle ?? '—')}</TableCell>}
           </TableRow>
         ))}
       </TableBody>
@@ -140,7 +141,7 @@ const OperationsTable = ({ ops }: { ops: ReturnType<typeof openApiOperations> })
 };
 
 
-const ApiPage = ({ entity }: { entity: Entity }) => {
+const ApiPage = ({ entity, apiDefinition }: { entity: Entity; apiDefinition?: ReactNode }) => {
   const { t } = useI18n();
   const { pathname } = useLocation();
   const base = consoleRefPath(stringifyEntityRef(entity));
@@ -208,7 +209,7 @@ const ApiPage = ({ entity }: { entity: Entity }) => {
               />
             </Section>
             <Section title={t('native.api.whoUses')} meta={t('native.count', { n: consumers.length })} flush>
-              {users && users.length ? <EntityTable items={users} /> : <EmptyState title={t('native.api.noConsumers')} />}
+              {users && users.length ? <EntityTable items={users} compact /> : <EmptyState title={t('native.api.noConsumers')} />}
             </Section>
           </Row>
           {type === 'openapi' && ops.length > 0 && (
@@ -225,11 +226,20 @@ const ApiPage = ({ entity }: { entity: Entity }) => {
       )}
       {onDefinition && (
         <>
-          {type === 'openapi' && ops.length > 0 && (
+          {!apiDefinition && type === 'openapi' && ops.length > 0 && (
             <Section title={t('native.api.operations')} meta={t('native.count', { n: ops.length })} flush>
               <OperationsTable ops={ops} />
             </Section>
           )}
+          {apiDefinition ? (
+            <Section title={t('native.definition')} meta={t('native.api.tryIt')} flush>
+              <Box sx={{ px: 2.25, pb: 2 }}>
+                <EntityProvider entity={entity}>
+                  <ClassicFrame entity>{apiDefinition}</ClassicFrame>
+                </EntityProvider>
+              </Box>
+            </Section>
+          ) : (
           <Section title={t('native.definition')} meta={type} flush>
             {definition ? (
               <Box component="pre" sx={{ m: 0, p: 2.25, fontFamily: MONO, fontSize: 12.5, lineHeight: '19px', maxHeight: 640, overflow: 'auto', bgcolor: 'action.hover' }}>
@@ -239,6 +249,7 @@ const ApiPage = ({ entity }: { entity: Entity }) => {
               <EmptyState title={t('native.api.noDefinition')} />
             )}
           </Section>
+          )}
         </>
       )}
     </>
@@ -370,10 +381,10 @@ const SystemPage = ({ entity }: { entity: Entity }) => {
 };
 
 /** The native page of an API, group or system. */
-export const NativeEntityPage = ({ entity }: { entity: Entity }) => {
+export const NativeEntityPage = ({ entity, apiDefinition }: { entity: Entity; apiDefinition?: ReactNode }) => {
   switch (entity.kind.toLowerCase()) {
     case 'api':
-      return <ApiPage entity={entity} />;
+      return <ApiPage entity={entity} apiDefinition={apiDefinition} />;
     case 'group':
       return <GroupPage entity={entity} />;
     default:
