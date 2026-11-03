@@ -1,4 +1,9 @@
 import { type PropsWithChildren, createContext, useCallback, useContext, useMemo, useState } from 'react';
+// the texts of the pages, one file per area so they can be translated apart
+import { ZONE } from './messages/zone';
+import { CLUSTER } from './messages/cluster';
+import { PORTAL } from './messages/portal';
+import { ENTITY } from './messages/entity';
 
 /**
  * The languages of the console: English and Spanish. Texts live in MESSAGES by key; a page calls t('key', {n: 3}).
@@ -11,9 +16,9 @@ export const LANGS: Array<{ id: Lang; label: string }> = [
   { id: 'es', label: 'Español' },
 ];
 
-type Messages = Record<string, { en: string; es?: string }>;
+export type Messages = Record<string, { en: string; es?: string }>;
 
-export const MESSAGES: Messages = {
+const SHELL: Messages = {
   // shell
   'shell.switchConsole': { en: 'Switch console', es: 'Cambiar de consola' },
   'shell.platform': { en: 'Platform', es: 'Plataforma' },
@@ -96,6 +101,8 @@ export const MESSAGES: Messages = {
   'page.alfresco': { en: 'Document management system', es: 'Gestión documental' },
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
+
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY };
 
 const KEY = 'rq-console-lang';
 
