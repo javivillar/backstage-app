@@ -88,7 +88,7 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         {pages.filter(p => !NATIVE.has(p.id)).map(p => (
-          <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage page={p} />} />
+          <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage key={p.id} page={p} />} />
         ))}
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/your-clusters" element={<YourClustersPage />} />
