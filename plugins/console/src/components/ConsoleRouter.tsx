@@ -17,12 +17,12 @@ import { CisNodesPage } from './CisNodesPage';
 import { ImageCatalogPage } from './ImageCatalogPage';
 import { ZoneNetworksPage, ZoneOverviewPage, ZoneSecurityGroupsPage, ZoneVmsPage } from './ZonePages';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
-import { MarketplacePage, PlatformPage } from './InfraPages';
+import { MarketplacePage, PlatformOverviewPage, PlatformPage } from './InfraPages';
 import { ClusterScalePage } from './ClusterScalePage';
 import { ProgrammePage, VmDetailPage } from './InfraDetail';
 import { CisClusterPage } from './CisClusterPage';
 import { ManageHubPage, ManageServicePage } from './ManagePages';
-import { ClustersPage } from './ClustersPage';
+import { ClustersPage, YourClustersPage } from './ClustersPage';
 import { ConsoleShell, useEmbedded } from './ConsoleShell';
 import { ConsoleTheme } from '../theme/consoleTheme';
 import { I18nProvider } from '../i18n';
@@ -91,6 +91,8 @@ export const ConsoleRouter = ({ entityContent, pages = [] }: { entityContent?: R
           <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage page={p} />} />
         ))}
         <Route path="/clusters" element={<ClustersPage />} />
+        <Route path="/your-clusters" element={<YourClustersPage />} />
+        <Route path="/infrastructure/overview" element={<PlatformOverviewPage />} />
         <Route path="/clusters/:id" element={<ClusterFrame />} />
         <Route path="/app/:application" element={<AppFrame />} />
         <Route path="/cluster" element={<ClusterOverviewPage />} />

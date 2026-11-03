@@ -7,7 +7,7 @@ import type { ConsoleClassicPage } from './pages';
  */
 export type Layer = 'infra' | 'cluster' | 'portal';
 
-const CLUSTER_PATHS = ['/console/cluster', '/console/cis-cluster', '/console/network', '/console/applications', '/console/storage', '/console/namespaces'];
+const CLUSTER_PATHS = ['/console/your-clusters', '/console/cluster', '/console/cis-cluster', '/console/network', '/console/applications', '/console/storage', '/console/namespaces'];
 
 export function layerOf(path: string, pages: ConsoleClassicPage[] = []): Layer {
   const p = path.replace(/\/+$/, '') || '/console';
@@ -25,4 +25,4 @@ export const LAYER_LOOK: Record<Layer, { bg: string; fg: string; name: string }>
 };
 
 /** Where each layer starts. */
-export const LAYER_HOME: Record<Layer, string> = { infra: '/console/infrastructure', cluster: '/console/cluster', portal: '/console' };
+export const LAYER_HOME: Record<Layer, string> = { infra: '/console/infrastructure/overview', cluster: '/console/cluster', portal: '/console' };

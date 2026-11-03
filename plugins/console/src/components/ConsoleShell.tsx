@@ -67,7 +67,7 @@ const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; 
       {items.map(i => {
         const on =
           current === i.to ||
-          (!['/console', '/console/infrastructure', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
+          (!['/console', '/console/infrastructure', '/console/infrastructure/overview', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
           (i.to === '/console' && current.startsWith('/console/entity/'));
         const Icon = (i.icon && APP_ICONS[i.icon]) || (i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')]);
         const link = (
@@ -162,6 +162,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({
       title: tr('nav.platform'),
       items: [
+        { label: tr('nav.overview'), to: '/console/infrastructure/overview' },
         { label: tr('nav.zonesSegregations'), to: '/console/infrastructure/platform' },
         { label: tr('nav.k8sClusters'), to: '/console/clusters' },
         { label: tr('nav.marketplace'), to: '/console/infrastructure/marketplace' },
@@ -189,6 +190,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.cisCluster'), to: '/console/cis-cluster' },
       ],
     });
+    groups.push({ title: tr('nav.yourClusters'), items: [{ label: tr('nav.allYouAdminister'), to: '/console/your-clusters' }] });
     groups.push({ title: zoneName, items: [{ label: tr('nav.infrastructure'), to: '/console/infrastructure' }] });
     groups.push({ title: tr('nav.itsPortal'), items: [{ label: tr('nav.openPortal'), to: '/console' }] });
   } else {

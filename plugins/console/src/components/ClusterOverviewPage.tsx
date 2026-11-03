@@ -1,12 +1,9 @@
 import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import type { ReactNode } from 'react';
 import { useConsoleConfig } from '../config';
 import { type AppOverview, type NodeOverview, type Resource, type StorageNamespace, useClusterOverview } from '../overview';
-import { Badge } from './Badge';
 import { ClassicLink } from './ClassicLink';
 import { NeedsAttention } from './NeedsAttention';
 import { OpsActions } from './OpsActions';
@@ -14,16 +11,21 @@ import { type InfraView, useInfra, useZone } from '../zone';
 import { useNamespaceCosts } from '../costs';
 
 export type { ClusterOverview } from '../overview';
-import { rq } from './tokens';
+import { useRq } from '../theme/consoleTheme';
+import { useI18n } from '../i18n';
+import { Id, Kpis, Pill, Row, Section, TitleRow, choose, type Tone } from './ui';
+import { ActionsMenu, Sub, Table, UseMeter, healthTone, syncTone } from './ui-infra';
 
 
-const ok = { bg: '#E3F4E8', fg: '#1E6B34' };
-const warn = { bg: '#FFF3E0', fg: '#B45F06' };
-const bad = { bg: '#FDECEA', fg: '#B3261E' };
-const info = { bg: '#E0ECF7', fg: '#003D68' };
+const ok = { bg: '#dcfae5', fg: '#04250e' };
+const warn = { bg: '#fff6e0', fg: '#7a3a06' };
+const bad = { bg: '#ffedea', fg: '#831c1e' };
+const info = { bg: '#d6e3f3', fg: '#0c4595' };
 
 const HEALTH: Record<string, { bg: string; fg: string }> = { Healthy: ok, Progressing: info, Degraded: bad, Missing: bad };
+/** @deprecated use healthTone (ui-infra) with Pill */
 export const healthColour = (h: string) => HEALTH[h] ?? warn;
+/** @deprecated use syncTone (ui-infra) with Pill */
 export const syncColour = (s: string) => (s === 'Synced' ? ok : warn);
 /** Problems first: not healthy, then not synced, then by name. */
 export function appRank(a: AppOverview): number {
@@ -44,209 +46,131 @@ export function bytes(n: number): string {
 }
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-
-const Kpi = ({ label, value, note, colour }: { label: string; value: ReactNode; note?: ReactNode; colour?: string }) => (
-  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-    <Typography variant="body2" color="text.secondary">
-      {label}
-    </Typography>
-    <Typography sx={{ fontSize: 28, fontWeight: 600, color: colour }}>{value}</Typography>
-    {note && (
-      <Typography variant="body2" color="text.secondary">
-        {note}
-      </Typography>
-    )}
-  </Paper>
-);
-
-const Section = ({ title, count, children }: { title: string; count?: number; children: ReactNode }) => (
-  <Paper variant="outlined" component="section" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-    <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', display: 'flex', gap: 1, alignItems: 'baseline' }}>
-      <Typography variant="h6" component="h2" sx={{ fontSize: 17, fontWeight: 600 }}>
-        {title}
-      </Typography>
-      {count !== undefined && (
-        <Typography variant="body2" color="text.secondary">
-          {count}
-        </Typography>
-      )}
-    </Box>
-    <Box sx={{ overflowX: 'auto' }}>{children}</Box>
-  </Paper>
-);
-
-/** Requested (solid) against allocatable, with the real use (marker) when node-exporter has it. */
 const Meter = ({ r, format }: { r: Resource; format: (n: number) => string }) => {
+  const { t } = useI18n();
   const req = r.allocatable ? r.requested / r.allocatable : 0;
-  let colour = rq.primary;
-  if (req > 0.9) colour = bad.fg;
-  else if (req > 0.75) colour = warn.fg;
   return (
-    <Box sx={{ minWidth: 150 }}>
-      <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
-        <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(req, 1) * 100}%`, bgcolor: colour }} />
-        {r.used !== undefined && (
-          <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `calc(${Math.min(r.used, 1) * 100}% - 1px)`, width: 2, bgcolor: 'text.primary' }} />
-        )}
-      </Box>
-      <Typography variant="caption" color="text.secondary">
-        {pct(req)} requested of {format(r.allocatable)}
-        {r.used !== undefined && ` · ${pct(r.used)} in use`}
-      </Typography>
-    </Box>
+    <UseMeter
+      requested={r.requested}
+      capacity={r.allocatable}
+      used={r.used}
+      label={`${t('cluster.requestedOf', { pct: pct(req), cap: format(r.allocatable) })}${r.used !== undefined ? ` · ${t('cluster.inUse', { pct: pct(r.used) })}` : ''}`}
+    />
   );
 };
 
-const cell = { px: 2, py: 1, borderBottom: 1, borderColor: 'divider', textAlign: 'left' as const, verticalAlign: 'top' as const };
-const Th = ({ children }: { children?: ReactNode }) => (
-  <Box component="th" sx={{ ...cell, fontWeight: 600, fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>
-    {children}
-  </Box>
-);
-const Td = ({ children }: { children?: ReactNode }) => (
-  <Box component="td" sx={{ ...cell, fontSize: 14 }}>
-    {children}
-  </Box>
-);
-
-const Nodes = ({ nodes }: { nodes: NodeOverview[] }) => (
-  <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-    <thead>
-      <tr>
-        <Th>Node</Th>
-        <Th>Status</Th>
-        <Th>Pods</Th>
-        <Th>CPU</Th>
-        <Th>Memory</Th>
-        <Th>Kubernetes / OS</Th>
-      </tr>
-    </thead>
-    <tbody>
+const Nodes = ({ nodes }: { nodes: NodeOverview[] }) => {
+  const { t } = useI18n();
+  return (
+    <Table head={[t('cluster.node'), t('cluster.status'), [t('cluster.pods'), 'r'], 'CPU', t('cluster.memory'), t('cluster.k8sOs')]}>
       {nodes.map(n => (
         <tr key={n.name}>
-          <Td>
-            <Box sx={{ fontWeight: 600 }}>{n.name}</Box>
-            <Typography variant="caption" color="text.secondary">
-              {[n.ip, n.roles.length ? n.roles.join(', ') : 'worker'].filter(Boolean).join(' · ')}
-            </Typography>
-          </Td>
-          <Td>
+          <td>
+            <Id>{n.name}</Id>
+            <Sub>{[n.ip, n.roles.length ? n.roles.join(', ') : 'worker'].filter(Boolean).join(' · ')}</Sub>
+          </td>
+          <td>
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {n.ready ? <Badge label="Ready" {...ok} /> : <Badge label="Not ready" {...bad} />}
-              {!n.schedulable && <Badge label="Cordoned" {...warn} />}
+              {n.ready ? <Pill tone="pos">Ready</Pill> : <Pill tone="neg">Not ready</Pill>}
+              {!n.schedulable && <Pill tone="warn">Cordoned</Pill>}
             </Box>
-          </Td>
-          <Td>{n.pods}</Td>
-          <Td>
+          </td>
+          <td className="r">{n.pods}</td>
+          <td>
             <Meter r={n.cpu} format={c => `${Math.round(c * 10) / 10} CPU`} />
-          </Td>
-          <Td>
+          </td>
+          <td>
             <Meter r={n.memory} format={bytes} />
-          </Td>
-          <Td>
-            <Typography variant="body2">{n.kubelet ?? '—'}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {n.os ?? ''}
-            </Typography>
-          </Td>
+          </td>
+          <td>
+            {n.kubelet ?? '—'}
+            <Sub>{n.os ?? ''}</Sub>
+          </td>
         </tr>
       ))}
-    </tbody>
-  </Box>
-);
-
-const Apps = ({ apps }: { apps: AppOverview[] }) => {
-  const sorted = [...apps].sort((a, b) => appRank(a) - appRank(b) || a.name.localeCompare(b.name));
-  return (
-    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <Th>Application</Th>
-          <Th>Health</Th>
-          <Th>Sync</Th>
-          <Th>Namespace</Th>
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map(a => (
-          <tr key={a.name}>
-            <Td>
-              <Box sx={{ fontWeight: 600 }}>{a.name}</Box>
-            </Td>
-            <Td>
-              <Badge label={a.health} {...healthColour(a.health)} />
-            </Td>
-            <Td>
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                <Badge label={a.sync} {...syncColour(a.sync)} />
-                {a.autosync && <Badge outlined label="auto" />}
-              </Box>
-            </Td>
-            <Td>
-              {a.namespace ? <Link to={`/console/namespaces/${a.namespace}`}>{a.namespace}</Link> : '—'}
-            </Td>
-          </tr>
-        ))}
-      </tbody>
-    </Box>
+    </Table>
   );
 };
 
-const Storage = ({ storage }: { storage: StorageNamespace[] }) => (
-  <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-    <thead>
-      <tr>
-        <Th>Namespace</Th>
-        <Th>Volumes</Th>
-        <Th>Size</Th>
-        <Th>Used</Th>
-        <Th>Storage classes</Th>
-      </tr>
-    </thead>
-    <tbody>
-      {storage.map(s => (
-        <tr key={s.namespace}>
-          <Td>{s.namespace}</Td>
-          <Td>{s.volumes}</Td>
-          <Td>{bytes(s.requestedBytes)}</Td>
-          <Td>{s.usedBytes === undefined ? '—' : bytes(s.usedBytes)}</Td>
-          <Td>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {Object.entries(s.classes).map(([c, n]) => (
-                <Badge key={c} outlined label={`${c} ${n}`} />
-              ))}
+const Apps = ({ apps }: { apps: AppOverview[] }) => {
+  const { t } = useI18n();
+  const sorted = [...apps].sort((a, b) => appRank(a) - appRank(b) || a.name.localeCompare(b.name));
+  return (
+    <Table head={[t('cluster.application'), t('cluster.health'), t('cluster.sync'), t('cluster.namespace')]}>
+      {sorted.map(a => (
+        <tr key={a.name}>
+          <td>
+            <Box component="span" sx={{ fontWeight: 500 }}>
+              {a.name}
             </Box>
-          </Td>
+          </td>
+          <td>
+            <Pill tone={healthTone(a.health)}>{a.health}</Pill>
+          </td>
+          <td>
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              <Pill tone={syncTone(a.sync)}>{a.sync}</Pill>
+              {a.autosync && <Pill plain>auto</Pill>}
+            </Box>
+          </td>
+          <td>{a.namespace ? <Link to={`/console/namespaces/${a.namespace}`}><Id>{a.namespace}</Id></Link> : '—'}</td>
         </tr>
       ))}
-    </tbody>
-  </Box>
-);
+    </Table>
+  );
+};
+
+const Storage = ({ storage }: { storage: StorageNamespace[] }) => {
+  const { t } = useI18n();
+  return (
+    <Table head={[t('cluster.namespace'), [t('cluster.volumes'), 'r'], [t('cluster.size'), 'r'], [t('cluster.used'), 'r'], t('cluster.classes')]}>
+      {storage.map(s => (
+        <tr key={s.namespace}>
+          <td>
+            <Id>{s.namespace}</Id>
+          </td>
+          <td className="r">{s.volumes}</td>
+          <td className="r">{bytes(s.requestedBytes)}</td>
+          <td className="r">{s.usedBytes === undefined ? '—' : bytes(s.usedBytes)}</td>
+          <td>
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              {Object.entries(s.classes).map(([c, n]) => (
+                <Pill key={c} plain>{`${c} ${n}`}</Pill>
+              ))}
+            </Box>
+          </td>
+        </tr>
+      ))}
+    </Table>
+  );
+};
 
 /** The namespaces that cost most in the last 7 days (OpenCost, our prices), each linked to its page. */
 const TopCosts = () => {
   const { costs, money } = useNamespaceCosts('7d');
+  const { t } = useI18n();
+  const rqT = useRq();
   if (!costs?.length) return null;
   const top = costs.slice(0, 5);
   const max = top[0].total || 1;
   return (
-    <Section title="What costs most (last 7 days)" count={costs.length}>
-      <Box sx={{ display: 'grid', gap: 1, p: 2 }}>
+    <Section title={t('cluster.topCosts')} meta={costs.length}>
+      <Box sx={{ display: 'grid', gap: 1 }}>
         {top.map(c => (
           <Box key={c.namespace} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 2fr) minmax(0, 3fr) auto' }, gap: 1.5, alignItems: 'center' }}>
             <Link to={`/console/namespaces/${c.namespace}`} style={{ overflowWrap: 'anywhere' }}>
               {c.namespace}
             </Link>
-            <Box sx={{ height: 8, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
-              <Box sx={{ height: '100%', width: `${(c.total / max) * 100}%`, bgcolor: rq.primary }} />
+            <Box sx={{ height: 6, borderRadius: 3, bgcolor: rqT.rule, overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${(c.total / max) * 100}%`, bgcolor: rqT.data }} />
             </Box>
-            <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'right' }}>
+            <Box component="span" sx={{ fontWeight: 500, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {money(c.total)}
-            </Typography>
+            </Box>
           </Box>
         ))}
         <Typography variant="caption" color="text.secondary">
-          An estimate with our prices, not a bill. <Link to="/console/costs">All the costs</Link>
+          {t('cluster.costNote')} <Link to="/console/costs">{t('cluster.allCosts')}</Link>
         </Typography>
       </Box>
     </Section>
@@ -275,61 +199,79 @@ export const ClusterOverviewPage = () => {
   const volumes = storage.reduce((t, s) => t + s.volumes, 0);
   const storageBytes = storage.reduce((t, s) => t + s.requestedBytes, 0);
 
+  const { t } = useI18n();
+  const nodesOk = ready === nodes.length;
+  const finding = data
+    ? choose(
+        [
+          [unhealthy, t('cluster.finding.unhealthy', { n: unhealthy, sync: outOfSync })],
+          [outOfSync, t('cluster.finding.outOfSync', { n: outOfSync })],
+          [nodesOk, t('cluster.finding.ok')],
+        ],
+        t('cluster.finding.nodes', { n: nodes.length - ready }),
+      )
+    : undefined;
+
   return (
-    <Box sx={{ display: 'grid', gap: 3, maxWidth: 1240 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-            Cluster {cfg.cluster.id}
-          </Typography>
-          <Typography color="text.secondary">
-            {where ? `${where} · ` : ''}
-            {data ? `read from Prometheus at ${new Date(data.generatedAt).toLocaleTimeString()}` : 'read from Prometheus'}
-          </Typography>
-        </Box>
-        <Button variant="text" onClick={reload} disabled={loading} sx={{ textTransform: 'none' }}>
-          Refresh
-        </Button>
-      </Box>
-      {zone && program && (
-        <Paper variant="outlined" sx={{ borderRadius: '12px', p: 2, display: 'grid', gap: 1 }}>
-          <Typography sx={{ fontWeight: 600 }}>Operations</Typography>
-          <OpsActions target={{ zone, program }} allowed={!!infra.data?.allowed} own={own} results={(zoneView.data as InfraView | undefined)?.reconcile?.actions} onDone={zoneView.reload} />
-        </Paper>
-      )}
+    <Box sx={{ maxWidth: 1240 }}>
+      <TitleRow
+        crumbs={[[t('cluster.crumb')], [cfg.cluster.id]]}
+        title={`Cluster ${cfg.cluster.id}`}
+        pills={data && <Pill tone={unhealthy ? 'warn' : 'pos'}>{unhealthy ? t('cluster.appsNotHealthy', { n: unhealthy }) : t('cluster.allHealthy')}</Pill>}
+        sub={`${where ? `${where} · ` : ''}${data ? t('cluster.readAt', { time: new Date(data.generatedAt).toLocaleTimeString() }) : t('cluster.read')}`}
+        finding={finding}
+        findingTone={choose<Tone>([[unhealthy || !nodesOk, 'neg'], [outOfSync, 'warn']], 'pos')}
+        actions={
+          <>
+            <Button variant="text" onClick={reload} disabled={loading}>
+              {t('cluster.refresh')}
+            </Button>
+            {zone && program && (
+              <ActionsMenu label={t('cluster.actions')}>
+                <OpsActions target={{ zone, program }} allowed={!!infra.data?.allowed} own={own} results={(zoneView.data as InfraView | undefined)?.reconcile?.actions} onDone={zoneView.reload} />
+              </ActionsMenu>
+            )}
+            <Button variant="contained" component={Link as any} to="/console/applications">
+              {t('cluster.openApps')}
+            </Button>
+          </>
+        }
+      />
       {loading && !data && <Progress />}
-      {error && <WarningPanel title="The overview of the cluster could not be read" message={error} />}
+      {error && <WarningPanel title={t('cluster.unreadable')} message={error} />}
       {data && (
         <>
-          <NeedsAttention />
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-            <Kpi label="Nodes ready" value={`${ready} / ${nodes.length}`} colour={ready === nodes.length ? ok.fg : bad.fg} />
-            <Kpi label="CPU requested" value={pct(cpuReq)} note={`of ${Math.round(sum(n => n.cpu.allocatable))} CPU`} />
-            <Kpi label="Memory requested" value={pct(memReq)} note={`of ${bytes(sum(n => n.memory.allocatable))}`} />
-            <Kpi
-              label="Argo CD applications"
-              value={apps.length}
-              note={`${unhealthy} not healthy · ${outOfSync} out of sync`}
-              colour={unhealthy ? bad.fg : undefined}
-            />
-            <Kpi label="Volumes" value={volumes} note={bytes(storageBytes)} />
+          <Kpis
+            items={[
+              { label: t('cluster.nodesReady'), value: `${ready} / ${nodes.length}`, tone: nodesOk ? undefined : 'bad' },
+              { label: t('cluster.cpuRequested'), value: pct(cpuReq), note: t('cluster.ofCpu', { n: Math.round(sum(n => n.cpu.allocatable)) }) },
+              { label: t('cluster.memRequested'), value: pct(memReq), note: t('cluster.of', { v: bytes(sum(n => n.memory.allocatable)) }) },
+              { label: t('cluster.argoApps'), value: apps.length, note: t('cluster.appsNote', { bad: unhealthy, sync: outOfSync }), tone: unhealthy ? 'bad' : undefined },
+              { label: t('cluster.volumes'), value: volumes, note: bytes(storageBytes) },
+            ]}
+          />
+          <Box sx={{ mb: 3 }}>
+            <NeedsAttention />
           </Box>
-          <Section title="Nodes" count={nodes.length}>
+          <Section title={t('cluster.nodes')} meta={nodes.length} flush>
             <Nodes nodes={nodes} />
           </Section>
-          <Section title="Applications (Argo CD)" count={apps.length}>
+          <Section title={t('cluster.appsArgo')} meta={apps.length} flush>
             <Apps apps={apps} />
           </Section>
-          <Section title="Storage by namespace" count={storage.length}>
-            <Storage storage={storage} />
-          </Section>
-          <TopCosts />
-          <Section title="Backups">
-            <Typography sx={{ p: 2 }} color="text.secondary">
-              This cluster does not publish backup metrics yet; the disaster recovery plan of each system says how it is
-              backed up. See also <ClassicLink path="/topology">Topology</ClassicLink>.
-            </Typography>
-          </Section>
+          <Row spans={[7, 5]}>
+            <Section title={t('cluster.storageByNs')} meta={storage.length} flush>
+              <Storage storage={storage} />
+            </Section>
+            <Box>
+              <TopCosts />
+              <Section title={t('cluster.backups')}>
+                <Typography color="text.secondary">
+                  {t('cluster.backupsNote')} <ClassicLink path="/topology">Topology</ClassicLink>.
+                </Typography>
+              </Section>
+            </Box>
+          </Row>
         </>
       )}
     </Box>

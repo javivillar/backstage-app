@@ -10,6 +10,12 @@ import { type RqTokens, MONO, useRq } from '../theme/consoleTheme';
  */
 
 export type Tone = 'pos' | 'neg' | 'warn' | 'info' | 'neu';
+
+/** The value of the first case whose condition holds, else the fallback (instead of nested ternaries). */
+export function choose<T>(cases: Array<[unknown, T]>, fallback: T): T {
+  for (const [when, value] of cases) if (when) return value;
+  return fallback;
+}
 const tone = (t: RqTokens, k: Tone) => ({ pos: t.pos, neg: t.neg, warn: t.warn, info: t.info, neu: t.neu })[k];
 
 /** A state pill: soft background, a dot unless plain. */
@@ -90,7 +96,7 @@ export const Kpis = ({ items }: { items: Array<{ label: ReactNode; value: ReactN
           <Typography variant="caption" color="text.secondary">
             {k.label}
           </Typography>
-          <Box sx={{ fontSize: 28, lineHeight: '34px', fontVariantNumeric: 'tabular-nums', color: k.tone === 'bad' ? t.negative : k.tone === 'good' ? t.positive : t.ink, overflowWrap: 'anywhere' }}>{k.value}</Box>
+          <Box sx={{ fontSize: 28, lineHeight: '34px', fontVariantNumeric: 'tabular-nums', color: choose([[k.tone === 'bad', t.negative], [k.tone === 'good', t.positive]], t.ink), overflowWrap: 'anywhere' }}>{k.value}</Box>
           {k.note && (
             <Typography variant="caption" color="text.secondary">
               {k.note}

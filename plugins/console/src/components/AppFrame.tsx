@@ -1,10 +1,12 @@
 import { Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import { useParams } from 'react-router-dom';
 import { usePortalLinks } from '../portalApps';
+import { useI18n } from '../i18n';
+import { useRq } from '../theme/consoleTheme';
+import { TitleRow } from './ui';
 
 /**
  * A business application of the Portal menu (Incidents, Accreditation…) inside the console, under the same Keycloak
@@ -13,26 +15,28 @@ import { usePortalLinks } from '../portalApps';
 export const AppFrame = () => {
   const { application } = useParams();
   const links = usePortalLinks();
+  const { t } = useI18n();
+  const rq = useRq();
   const app = links.find(l => l.application === application);
   if (!links.length) return <Progress />;
-  if (!app) return <WarningPanel title={`Unknown application ${application}`} message="It is not in console.portalApps, or the catalog does not know its URL." />;
+  if (!app) return <WarningPanel title={t('app.unknown', { app: application ?? '' })} message={t('app.unknownWhy')} />;
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: 'calc(100vh - 110px)', minHeight: 480 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
-          {app.label}
-        </Typography>
-        {app.hint && <Typography color="text.secondary">{app.hint}</Typography>}
-        <Box sx={{ flex: 1 }} />
-        <Button href={app.url} target="_blank" rel="noopener" endIcon={<OpenInNew fontSize="small" />} size="small">
-          Open in a new tab
-        </Button>
-      </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: 'calc(100vh - 120px)', minHeight: 480 }}>
+      <TitleRow
+        crumbs={[[t('nav.portal'), '/console'], [t('nav.support')], [app.label]]}
+        title={app.label}
+        sub={app.hint}
+        actions={
+          <Button href={app.url} target="_blank" rel="noopener" variant="outlined" endIcon={<OpenInNew fontSize="small" />} size="small">
+            {t('app.newTab')}
+          </Button>
+        }
+      />
       <Box
         component="iframe"
         title={app.label}
         src={app.url}
-        sx={{ flex: 1, width: '100%', border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}
+        sx={{ flex: 1, width: '100%', border: `1px solid ${rq.border}`, borderRadius: '8px', bgcolor: rq.sheet }}
       />
     </Box>
   );

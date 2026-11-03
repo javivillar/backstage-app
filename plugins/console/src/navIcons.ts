@@ -45,6 +45,8 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/infrastructure/platform': LanIcon,
   '/console/infrastructure/marketplace': StorefrontIcon,
   '/console/infrastructure': MapIcon,
+  '/console/infrastructure/overview': DashboardIcon,
+  '/console/your-clusters': GridViewIcon,
   '/console/infrastructure/vms': ComputerIcon,
   '/console/infrastructure/networks': RouterIcon,
   '/console/infrastructure/security-groups': LocalPoliceIcon,

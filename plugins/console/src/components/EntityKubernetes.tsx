@@ -28,7 +28,7 @@ const useObjects = () => {
 };
 
 const Card = ({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) => (
-  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.25, minWidth: 0 }}>
+  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.25, minWidth: 0 }}>
     <Box>
       <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 17 }}>
         {title}

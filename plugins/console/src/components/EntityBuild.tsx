@@ -6,35 +6,18 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useClusterGet } from '../namespace';
-import { Badge } from './Badge';
 import { TONES } from './Flow';
+import { Method } from './ui-portal';
+import { Kpis, Pill, Section } from './ui';
+import { useI18n } from '../i18n';
 import { Table } from './NetworkPage';
 
 /* ------------------------------------------------------------------ shared */
 
 const Card = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => (
-  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.25, minWidth: 0 }}>
-    <Box>
-      <Typography variant="h6" component="h2" sx={{ fontWeight: 600, fontSize: 17 }}>
-        {title}
-      </Typography>
-      {sub && (
-        <Typography variant="body2" color="text.secondary">
-          {sub}
-        </Typography>
-      )}
-    </Box>
-    {children}
-  </Box>
-);
-
-const Kpi = ({ label, value, tone }: { label: string; value: string; tone?: keyof typeof TONES }) => (
-  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.5, bgcolor: 'background.paper' }}>
-    <Typography variant="caption" color="text.secondary">
-      {label}
-    </Typography>
-    <Typography sx={{ fontSize: 22, fontWeight: 600, color: tone ? TONES[tone].fg : undefined, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
-  </Box>
+  <Section title={title} meta={sub}>
+    <Box sx={{ display: 'grid', gap: 1.25, minWidth: 0 }}>{children}</Box>
+  </Section>
 );
 
 const ago = (iso?: string) => {
@@ -128,26 +111,29 @@ export const EntityCicdContent = () => {
   const list = runs.data?.workflow_runs ?? [];
   const stats = runStats(list);
   const last = argo.data?.history[0];
+  const { t } = useI18n();
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))' }}>
-        <Kpi label="Runs that pass (last 20)" value={stats.rate !== undefined ? `${stats.rate} %` : '—'} tone={stats.rate === undefined || stats.rate >= 80 ? 'ok' : 'warn'} />
-        <Kpi label="Usual duration" value={seconds(stats.median)} />
-        <Kpi label="Last deployment" value={last?.deployedAt ? ago(last.deployedAt) : '—'} />
-        <Kpi label="Argo CD" value={argo.data ? `${argo.data.sync ?? '?'} · ${argo.data.health ?? '?'}` : '—'} tone={argoTone(argo.data)} />
-      </Box>
-      <Card title="Pipeline" sub={slug ? <>GitHub Actions of <a href={`https://github.com/${slug}/actions`} target="_blank" rel="noreferrer">{slug}</a>, newest first.</> : 'The catalog does not say its repository (github.com/project-slug).'}>
+    <Box>
+      <Kpis
+        items={[
+          { label: t('ci.pass'), value: stats.rate !== undefined ? `${stats.rate} %` : '—', tone: stats.rate !== undefined && stats.rate < 80 ? 'bad' : undefined },
+          { label: t('ci.duration'), value: seconds(stats.median) },
+          { label: t('ci.lastDeploy'), value: last?.deployedAt ? ago(last.deployedAt) : '—' },
+          { label: 'Argo CD', value: argo.data ? `${argo.data.sync ?? '?'} · ${argo.data.health ?? '?'}` : '—', tone: argoTone(argo.data) === 'warn' ? 'bad' : undefined },
+        ]}
+      />
+      <Card title={t('ci.pipeline')} sub={slug ? <>{t('ci.actionsOf')} <a href={`https://github.com/${slug}/actions`} target="_blank" rel="noreferrer">{slug}</a> · {t('ci.newest')}</> : t('ci.noRepo')}>
         {runs.loading && <Progress />}
-        {runs.error && <WarningPanel severity="warning" title="The runs could not be read" message={runs.error} />}
+        {runs.error && <WarningPanel severity="warning" title={t('ci.noRuns')} message={runs.error} />}
         {list.length > 0 && (
           <>
-            <Box aria-label="Last runs, oldest left" sx={{ display: 'flex', gap: '3px', alignItems: 'flex-end', height: 40 }}>
+            <Box aria-label={t('ci.strip')} sx={{ display: 'flex', gap: '4px', alignItems: 'stretch', height: 24 }}>
               {[...list].reverse().map(r => (
-                <Box key={r.id} title={`${r.name} #${r.id}: ${r.conclusion ?? r.status}`} sx={{ flex: 1, minWidth: 5, height: runTone(r) === 'bad' ? '45%' : '100%', borderRadius: '3px 3px 0 0', bgcolor: TONES[runTone(r)].fg, opacity: runTone(r) === 'off' ? 0.4 : 0.85 }} />
+                <Box key={r.id} title={`${r.name} #${r.id}: ${r.conclusion ?? r.status}`} sx={{ flex: 1, minWidth: 5, borderRadius: '4px', bgcolor: { ok: 'success.main', bad: 'error.main', info: 'secondary.main', warn: 'warning.main', off: 'divider' }[runTone(r)] }} />
               ))}
             </Box>
             <Table
-              head={['Workflow', 'Commit', 'Result', 'Took', 'When']}
+              head={[t('ci.workflow'), t('ci.commit'), t('ci.result'), t('ci.took'), t('ci.when')]}
               rows={list.slice(0, 12).map(r => [
                 <a href={r.html_url} target="_blank" rel="noreferrer">
                   {r.name}
@@ -155,7 +141,7 @@ export const EntityCicdContent = () => {
                 <span>
                   <code>{r.head_sha.slice(0, 7)}</code> {r.display_title}
                 </span>,
-                <Badge label={r.status === 'completed' ? r.conclusion ?? 'done' : r.status} {...TONES[runTone(r)]} />,
+                <Pill tone={({ ok: 'pos', bad: 'neg', info: 'info', warn: 'warn', off: 'neu' } as const)[runTone(r)]}>{r.status === 'completed' ? r.conclusion ?? 'done' : r.status}</Pill>,
                 took(r),
                 ago(r.created_at),
               ])}
@@ -163,21 +149,21 @@ export const EntityCicdContent = () => {
           </>
         )}
       </Card>
-      <Card title="Deployments" sub={`Argo CD application ${appName}: what it synced from git, newest first.`}>
+      <Card title={t('ci.deployments')} sub={t('ci.deploymentsSub', { app: appName })}>
         {argo.loading && !argo.data && <Progress />}
         {argo.error && <Typography color="text.secondary">{argo.error}</Typography>}
         {argo.data && (
           <>
             {argo.data.operation?.phase && argo.data.operation.phase !== 'Succeeded' && (
-              <WarningPanel severity="warning" title={`Last operation: ${argo.data.operation.phase}`} message={argo.data.operation.message ?? ''} />
+              <WarningPanel severity="warning" title={`${t('ci.lastOp')}: ${argo.data.operation.phase}`} message={argo.data.operation.message ?? ''} />
             )}
             <Table
-              head={['Revision', 'Deployed', 'Took', 'By']}
+              head={[t('ci.revision'), t('ci.deployed'), t('ci.took'), t('ci.by')]}
               rows={argo.data.history.map(h => [<code>{(h.revision ?? '').slice(0, 7)}</code>, h.deployedAt ? `${new Date(h.deployedAt).toLocaleString()} · ${ago(h.deployedAt)}` : '', h.took !== undefined ? `${h.took} s` : '', h.by ?? ''])}
             />
             <Typography variant="body2" color="text.secondary">
-              {argo.data.resources.length} resources ·{' '}
-              {argo.data.resources.filter(r => r.health && r.health !== 'Healthy').length ? `not healthy: ${argo.data.resources.filter(r => r.health && r.health !== 'Healthy').map(r => `${r.kind} ${r.name}`).join(', ')}` : 'all healthy'}
+              {t('ci.resources', { n: argo.data.resources.length })} ·{' '}
+              {argo.data.resources.filter(r => r.health && r.health !== 'Healthy').length ? `${t('ci.notHealthy')}: ${argo.data.resources.filter(r => r.health && r.health !== 'Healthy').map(r => `${r.kind} ${r.name}`).join(', ')}` : t('ci.allHealthy')}
             </Typography>
           </>
         )}
@@ -236,12 +222,12 @@ export function openApiOperations(definition: string): Operation[] {
   return out;
 }
 
-const VERB: Record<string, keyof typeof TONES> = { GET: 'info', POST: 'ok', PUT: 'warn', PATCH: 'warn', DELETE: 'bad' };
 
 /** The entity page › API: the APIs it provides (operations, who consumes them) and the ones it consumes. */
 export const EntityApiContent = () => {
   const { entity } = useEntity();
   const catalog = useApi(catalogApiRef);
+  const { t } = useI18n();
   const [apis, setApis] = useState<{ provided: Entity[]; consumed: Entity[] } | undefined>();
   useEffect(() => {
     let alive = true;
@@ -266,36 +252,34 @@ export const EntityApiContent = () => {
     return <Link to={`/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`}>{r.name}</Link>;
   };
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      {apis.provided.length === 0 && apis.consumed.length === 0 && <Typography color="text.secondary">The catalog says no API it provides or consumes.</Typography>}
+    <Box>
+      {apis.provided.length === 0 && apis.consumed.length === 0 && <Typography color="text.secondary">{t('api.none')}</Typography>}
       {apis.provided.map(api => {
         const sp = (api.spec ?? {}) as { type?: string; definition?: string; lifecycle?: string };
         const ops = typeof sp.definition === 'string' ? openApiOperations(sp.definition) : [];
         const consumers = (api.relations ?? []).filter(r => r.type === 'apiConsumedBy').map(r => r.targetRef);
         return (
-          <Box key={api.metadata.name} sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(380px, 100%), 1fr))', alignItems: 'start' }}>
-            <Card title={api.metadata.title ?? api.metadata.name} sub={`${sp.type ?? 'API'} · ${sp.lifecycle ?? ''} · ${ops.length} operations${ops.some(o => o.open) ? ` · ${ops.filter(o => o.open).length} without authentication` : ''}`}>
+          <Box key={api.metadata.name} sx={{ display: 'grid', columnGap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 2fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
+            <Card title={api.metadata.title ?? api.metadata.name} sub={`${sp.type ?? 'API'} · ${sp.lifecycle ?? ''} · ${t('api.ops', { n: ops.length })}${ops.some(o => o.open) ? ` · ${t('api.open', { n: ops.filter(o => o.open).length })}` : ''}`}>
               {ops.length === 0 ? (
-                <Typography color="text.secondary">Its definition has no operations the console can read.</Typography>
+                <Typography color="text.secondary">{t('api.noOps')}</Typography>
               ) : (
                 <Box sx={{ display: 'grid' }}>
                   {ops.map(o => (
-                    <Box key={`${o.method} ${o.path}`} sx={{ display: 'flex', gap: 1, alignItems: 'center', py: 0.75, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap', fontSize: 14 }}>
-                      <Box component="span" sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, minWidth: 56, textAlign: 'center', borderRadius: '4px', px: 0.75, py: 0.25, bgcolor: TONES[VERB[o.method] ?? 'off'].bg, color: TONES[VERB[o.method] ?? 'off'].fg }}>
-                        {o.method}
-                      </Box>
+                    <Box key={`${o.method} ${o.path}`} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', py: 0.75, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap', fontSize: 14 }}>
+                      <Method method={o.method} />
                       <code>{o.path}</code>
                       <Typography component="span" variant="body2" color="text.secondary">
                         {o.summary}
                       </Typography>
-                      {o.open && <Badge label="no auth" {...TONES.warn} />}
+                      {o.open && <Pill tone="warn">{t('api.noAuth')}</Pill>}
                     </Box>
                   ))}
                 </Box>
               )}
-              <Link to={`/console/entity/${api.metadata.namespace ?? 'default'}/api/${api.metadata.name}`}>Full definition</Link>
+              <Link to={`/console/entity/${api.metadata.namespace ?? 'default'}/api/${api.metadata.name}`}>{t('api.full')}</Link>
             </Card>
-            <Card title="Who uses it" sub="Components that say they consume it (catalog).">
+            <Card title={t('api.who')} sub={t('api.whoSub')}>
               {consumers.length ? (
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   {consumers.map(c => (
@@ -303,16 +287,16 @@ export const EntityApiContent = () => {
                   ))}
                 </Box>
               ) : (
-                <Typography color="text.secondary">No consumer is declared.</Typography>
+                <Typography color="text.secondary">{t('api.noConsumer')}</Typography>
               )}
             </Card>
           </Box>
         );
       })}
       {apis.consumed.length > 0 && (
-        <Card title="APIs it consumes">
+        <Card title={t('api.consumes')}>
           <Table
-            head={['API', 'Type', 'Provided by']}
+            head={['API', t('api.type'), t('apis.providedBy')]}
             rows={apis.consumed.map(api => [
               link(`api:${api.metadata.namespace ?? 'default'}/${api.metadata.name}`),
               String((api.spec as { type?: string } | undefined)?.type ?? ''),

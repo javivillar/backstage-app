@@ -2,16 +2,16 @@ import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
 import Switch from '@mui/material/Switch';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import { useConsoleConfig } from '../config';
 import { useClusterOverview, type VolumeOverview } from '../overview';
-import { Badge } from './Badge';
 import { bytes } from './ClusterOverviewPage';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
+import { useI18n } from '../i18n';
+import { Id, Kpis, Pill, Section, TitleRow } from './ui';
 
 const Used = ({ v }: { v: VolumeOverview }) => {
   if (v.usedBytes === undefined || !v.capacityBytes) return <Typography variant="body2" color="text.secondary">not mounted now</Typography>;
@@ -21,8 +21,8 @@ const Used = ({ v }: { v: VolumeOverview }) => {
   else if (share >= 0.8) t = TONES.warn;
   return (
     <Box sx={{ minWidth: 160 }}>
-      <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
-        <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(share, 1) * 100}%`, bgcolor: t.fg }} />
+      <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: 'action.selected', overflow: 'hidden' }}>
+        <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(share, 1) * 100}%`, bgcolor: t === TONES.info ? '#0c4595' : t.fg }} />
       </Box>
       <Typography variant="caption" color="text.secondary">
         {Math.round(share * 100)}% · {bytes(v.usedBytes)} of {bytes(v.capacityBytes)}
@@ -39,37 +39,53 @@ export const StoragePage = () => {
   const volumes = (data?.volumes ?? []).filter(v => all || v.usedBytes !== undefined);
   const full = (data?.volumes ?? []).filter(v => v.usedBytes !== undefined && v.capacityBytes && v.usedBytes / v.capacityBytes >= 0.8).length;
   const total = (data?.volumes ?? []).reduce((t, v) => t + v.requestedBytes, 0);
+  const { t } = useI18n();
+  // the fullest first; volumes not mounted now at the end
+  const share = (v: VolumeOverview) => (v.usedBytes !== undefined && v.capacityBytes ? v.usedBytes / v.capacityBytes : -1);
+  const sorted = [...volumes].sort((a, b) => share(b) - share(a));
   return (
-    <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-            Storage of {cfg.cluster.id}
-          </Typography>
-          <Typography color="text.secondary">
-            {data ? `${data.volumes?.length ?? 0} volumes · ${bytes(total)} requested · ${full} at 80% or more` : 'Volumes of the cluster (Longhorn)'}
-          </Typography>
-        </Box>
-        <Button variant="text" onClick={reload} disabled={loading} sx={{ textTransform: 'none' }}>
-          Refresh
-        </Button>
-      </Box>
+    <Box sx={{ maxWidth: 1240 }}>
+      <TitleRow
+        crumbs={[[cfg.cluster.id, '/console/cluster'], [t('nav.storage')]]}
+        title={t('storage.title', { cluster: cfg.cluster.id })}
+        sub={t('storage.sub')}
+        finding={data && (full ? t('storage.finding', { n: full }) : t('storage.findingOk'))}
+        findingTone={full ? 'warn' : 'pos'}
+        actions={
+          <Button variant="text" onClick={reload} disabled={loading}>
+            {t('cluster.refresh')}
+          </Button>
+        }
+      />
       {loading && !data && <Progress />}
-      {error && <WarningPanel title="The volumes could not be read" message={error} />}
+      {error && <WarningPanel title={t('storage.unreadable')} message={error} />}
       {data && (
-        <Paper variant="outlined" component="section" sx={{ borderRadius: 2, p: 2, display: 'grid', gap: 1 }}>
-          <FormControlLabel control={<Switch size="small" checked={all} onChange={e => setAll(e.target.checked)} />} label="Show the volumes not mounted now" />
-          <Table
-            head={['Volume', 'Namespace', 'Size', 'Used', 'Storage class']}
-            rows={volumes.map(v => [
-              <b>{v.pvc}</b>,
-              <Link to={`/console/namespaces/${v.namespace}`}>{v.namespace}</Link>,
-              bytes(v.requestedBytes),
-              <Used v={v} />,
-              v.storageClass ? <Badge outlined label={v.storageClass} /> : '—',
-            ])}
+        <>
+          <Kpis
+            items={[
+              { label: t('storage.count'), value: data.volumes?.length ?? 0 },
+              { label: t('storage.requested'), value: bytes(total) },
+              { label: t('storage.full'), value: full, tone: full ? 'bad' : undefined },
+            ]}
           />
-        </Paper>
+          <Section flush>
+            <Box sx={{ px: 2.25, py: 1 }}>
+              <FormControlLabel control={<Switch size="small" checked={all} onChange={e => setAll(e.target.checked)} />} label={t('storage.showAll')} />
+            </Box>
+            <Table
+              head={['Volume', t('cluster.namespace'), t('cluster.size'), t('cluster.used'), 'Storage class']}
+              rows={sorted.map(v => [
+                <Id>{v.pvc}</Id>,
+                <Link to={`/console/namespaces/${v.namespace}`}>
+                  <Id>{v.namespace}</Id>
+                </Link>,
+                bytes(v.requestedBytes),
+                <Used v={v} />,
+                v.storageClass ? <Pill plain>{v.storageClass}</Pill> : '—',
+              ])}
+            />
+          </Section>
+        </>
       )}
     </Box>
   );

@@ -7,7 +7,8 @@ import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useEffect, useMemo, useState } from 'react';
 import { type AppOverview, useClusterOverview } from '../overview';
-import { Badge } from './Badge';
+import { useI18n } from '../i18n';
+import { Pill, type Tone as UiTone } from './ui';
 import { TONES } from './Flow';
 import { rq } from './tokens';
 
@@ -73,6 +74,7 @@ export const EntityDependenciesContent = () => {
   const { entity } = useEntity();
   const catalog = useApi(catalogApiRef);
   const ov = useClusterOverview();
+  const { t } = useI18n();
   const paper = useTheme().palette.background.paper;
   const [related, setRelated] = useState<Map<string, Entity> | undefined>();
   const [sel, setSel] = useState<string | undefined>();
@@ -120,7 +122,7 @@ export const EntityDependenciesContent = () => {
     return (
       <g key={`e-${n.side}-${n.ref}`}>
         <path d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`} fill="none" stroke={on ? rq.blue : 'currentColor'} strokeOpacity={on ? 1 : 0.28} strokeWidth={on ? 2.2 : 1.5} />
-        <text x={mx} y={(y1 + y2) / 2 - 6} textAnchor="middle" fontSize={10.5} fill="currentColor" opacity={0.65} fontFamily="monospace">
+        <text x={mx} y={(y1 + y2) / 2 - 6} textAnchor="middle" fontSize={10.5} fill="currentColor" opacity={0.65} fontFamily='"IBM Plex Mono", ui-monospace, monospace'>
           {n.via}
         </text>
       </g>
@@ -140,9 +142,9 @@ export const EntityDependenciesContent = () => {
         onKeyDown={ev => (ev.key === 'Enter' || ev.key === ' ') && pick()}
         style={{ cursor: 'pointer' }}
       >
-        <rect x={x} y={yy} width={nodeW} height={nodeH} rx={10} fill={paper} stroke={on ? rq.blue : 'currentColor'} strokeOpacity={on ? 1 : 0.25} strokeWidth={on ? 2 : 1.2} />
+        <rect x={x} y={yy} width={nodeW} height={nodeH} rx={6} fill={paper} stroke={on ? rq.blue : 'currentColor'} strokeOpacity={on ? 1 : 0.25} strokeWidth={on ? 2 : 1.2} />
         <circle cx={x + 16} cy={yy + nodeH / 2} r={5} fill={FILL[h.tone]} />
-        <text x={x + 30} y={yy + 19} fontSize={13} fontWeight={600} fill="currentColor">
+        <text x={x + 30} y={yy + 19} fontSize={13} fontWeight={500} fill="currentColor">
           {n.title.length > 30 ? `${n.title.slice(0, 29)}…` : n.title}
         </text>
         <text x={x + 30} y={yy + 35} fontSize={11} fill="currentColor" opacity={0.65}>
@@ -153,29 +155,29 @@ export const EntityDependenciesContent = () => {
   };
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
-      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.5 }}>
+      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.5 }}>
         <Box>
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 600 }}>
-            Dependency map
+          <Typography variant="h5" component="h2">
+            {t('dep.map')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            From the catalog (dependencies and APIs), with the state of each one in Argo CD. Click a box to see the link.
+            {t('dep.mapSub')}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Badge label="healthy" {...TONES.ok} />
-          <Badge label="out of sync / progressing" {...TONES.warn} />
-          <Badge label="degraded" {...TONES.bad} />
-          <Badge label="not in Argo CD" {...TONES.off} />
+          <Pill tone="pos">{t('dep.healthy')}</Pill>
+          <Pill tone="warn">{t('dep.progressing')}</Pill>
+          <Pill tone="neg">{t('dep.degraded')}</Pill>
+          <Pill tone="neu">{t('cat.notInArgo')}</Pill>
         </Box>
         {nodes.length === 0 ? (
-          <Typography color="text.secondary">The catalog says nothing it uses or that uses it (relations dependsOn, consumesApi, providesApi).</Typography>
+          <Typography color="text.secondary">{t('dep.none')}</Typography>
         ) : (
           <Box sx={{ overflowX: 'auto', color: 'text.primary' }}>
-            <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Dependency map of ${entity.metadata.name}`} style={{ display: 'block', minWidth: 860, width: '100%' }}>
-              {[['Who uses it', X.up], ['Application', X.center], ['What it uses', X.down]].map(([t, x]) => (
-                <text key={String(t)} x={Number(x)} y={22} fontSize={11} letterSpacing="0.08em" fill="currentColor" opacity={0.6}>
-                  {String(t).toUpperCase()}
+            <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${t('dep.map')} · ${entity.metadata.name}`} style={{ display: 'block', minWidth: 860, width: '100%' }}>
+              {[[t('dep.usedBy'), X.up], [t('dep.app'), X.center], [t('dep.uses'), X.down]].map(([label, x]) => (
+                <text key={String(label)} x={Number(x)} y={22} fontSize={12} fontWeight={500} fill="currentColor" opacity={0.6}>
+                  {String(label)}
                 </text>
               ))}
               {up.map((n, i) => edge(X.up + nodeW, y(i, up.length) + nodeH / 2, X.center, cy, n))}
@@ -198,15 +200,15 @@ export const EntityDependenciesContent = () => {
       </Box>
       {selected && (
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 2 }}>
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1 }}>
+            <Typography variant="subtitle1">
               <Link to={`/console/entity/${parseEntityRef(selected.ref).namespace}/${selected.kind}/${selected.name}`}>{selected.title}</Link>
             </Typography>
             <Box>
-              <Badge label={healthOf(selected.name, apps).label} {...TONES[healthOf(selected.name, apps).tone]} />
+              <Pill tone={({ ok: 'pos', warn: 'warn', bad: 'neg', off: 'neu' } as Record<string, UiTone>)[healthOf(selected.name, apps).tone] ?? 'neu'}>{healthOf(selected.name, apps).label}</Pill>
             </Box>
             <Typography variant="body2">
-              {selected.side === 'down' ? `${entity.metadata.name} ${selected.via} ${selected.name}.` : `${selected.name} uses ${entity.metadata.name} (${selected.via}).`}
+              {selected.side === 'down' ? `${entity.metadata.name} ${selected.via} ${selected.name}.` : t('dep.usesIt', { a: selected.name, b: entity.metadata.name, via: selected.via })}
             </Typography>
             {selected.description && (
               <Typography variant="body2" color="text.secondary">
@@ -215,21 +217,21 @@ export const EntityDependenciesContent = () => {
             )}
             {selected.owner && (
               <Typography variant="body2" color="text.secondary">
-                Owner: {selected.owner.replace(/^group:(default\/)?/, '')}
+                {t('ent.owner')}: {selected.owner.replace(/^group:(default\/)?/, '')}
               </Typography>
             )}
           </Box>
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              If {entity.metadata.title ?? entity.metadata.name} fails
+          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1 }}>
+            <Typography variant="subtitle1">
+              {t('dep.ifFails', { name: entity.metadata.title ?? entity.metadata.name })}
             </Typography>
             <Typography variant="body2">
-              {up.length ? `It stops or degrades: ${up.map(n => n.title).join(', ')}.` : 'Nothing in the catalog uses it.'}
+              {up.length ? `${t('dep.stops')}: ${up.map(n => n.title).join(', ')}.` : t('dep.nobody')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {down.filter(n => healthOf(n.name, apps).tone === 'bad' || healthOf(n.name, apps).tone === 'warn').length
-                ? `Not fine now among what it uses: ${down.filter(n => ['bad', 'warn'].includes(healthOf(n.name, apps).tone)).map(n => n.title).join(', ')}.`
-                : 'Everything it uses is fine now.'}
+                ? `${t('dep.notFine')}: ${down.filter(n => ['bad', 'warn'].includes(healthOf(n.name, apps).tone)).map(n => n.title).join(', ')}.`
+                : t('dep.allFine')}
             </Typography>
           </Box>
         </Box>

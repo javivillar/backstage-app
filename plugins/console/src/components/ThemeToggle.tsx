@@ -15,7 +15,7 @@ export const ThemeToggle = () => {
   const { t } = useI18n();
   const dark = useTheme().palette.mode === 'dark';
   const list = themes.getInstalledThemes();
-  const target = list.find(t => t.variant === (dark ? 'light' : 'dark'));
+  const target = list.find(th => th.variant === (dark ? 'light' : 'dark'));
   if (!target) return null;
   const label = dark ? t('shell.day') : t('shell.night');
   return (

@@ -47,8 +47,8 @@ describe('pages the console draws itself', () => {
     const names = screen.getAllByText(/^(master-0|worker-1)$/).map(e => e.textContent);
     expect(names).toEqual(['worker-1', 'master-0']);
     fireEvent.click(screen.getByRole('button', { name: 'What failed on worker-1' }));
-    expect(screen.getByText('Ensure /tmp is a separate partition')).toBeInTheDocument();
-    expect(screen.getByText(/Mount \/tmp separately/)).toBeInTheDocument();
+    expect(screen.getAllByText('Ensure /tmp is a separate partition').length).toBeGreaterThan(0); // also in "Fix first"
+    expect(screen.getAllByText(/Mount \/tmp separately/).length).toBeGreaterThan(0);
   });
 
   it('shows the image catalog and what needs attention', async () => {

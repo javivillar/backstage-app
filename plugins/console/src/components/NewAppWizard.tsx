@@ -105,7 +105,7 @@ const Btn = ({
 
 const s = (v: unknown) => (typeof v === 'string' ? v : '');
 const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
-const card = { border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.5, minWidth: 0, alignContent: 'start' } as const;
+const card = { border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1.5, minWidth: 0, alignContent: 'start' } as const;
 const overline = (t: string) => (
   <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>
     {t}
@@ -152,7 +152,7 @@ const ListField = ({ id, p, value, onChange, prefix, accent }: { id: string; p: 
             onChange([...value, '']);
             setFocusLast(true);
           }}
-          sx={{ textTransform: 'none', color: accent, px: 0.5 }}
+          sx={{ color: accent, px: 0.5 }}
         >
           + Add
         </Btn>
@@ -252,13 +252,13 @@ const TaskView = ({ id, accent, title }: { id: string; accent: string; title: st
             if (l.entityRef) {
               const r = parseEntityRef(l.entityRef);
               return (
-                <Btn key={l.title} to={`/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`} variant="contained" disableElevation sx={{ textTransform: 'none', bgcolor: accent }}>
+                <Btn key={l.title} to={`/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`} variant="contained" disableElevation sx={{ bgcolor: accent }}>
                   {l.title}
                 </Btn>
               );
             }
             return (
-              <Btn key={l.title} href={l.url} target="_blank" rel="noreferrer" variant="outlined" sx={{ textTransform: 'none' }}>
+              <Btn key={l.title} href={l.url} target="_blank" rel="noreferrer" variant="outlined" >
                 {l.title}
               </Btn>
             );
@@ -266,12 +266,12 @@ const TaskView = ({ id, accent, title }: { id: string; accent: string; title: st
         </Box>
       ) : null}
       <Box>
-        <Btn size="small" onClick={() => setShowLog(x => !x)} sx={{ textTransform: 'none' }}>
+        <Btn size="small" onClick={() => setShowLog(x => !x)} >
           {showLog ? 'Hide the log' : 'Show the log'}
         </Btn>
       </Box>
       {showLog && (
-        <Box component="pre" sx={{ m: 0, p: 1.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10px', fontSize: 12, maxHeight: 420, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+        <Box component="pre" sx={{ m: 0, p: 1.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '8px', fontSize: 12, maxHeight: 420, overflow: 'auto', whiteSpace: 'pre-wrap' }}>
           {events
             .filter(e => e.body.message)
             .map(e => e.body.message)
@@ -379,7 +379,7 @@ export const NewAppWizard = () => {
             {shown.map((l, i) => {
               const on = values[k] === l.value;
               return (
-                <Box key={l.value} component="button" type="button" aria-pressed={on} onClick={() => set(k, l.value)} sx={{ all: 'unset', cursor: 'pointer', border: 1, borderColor: on ? accent : 'divider', boxShadow: on ? `inset 0 0 0 1px ${accent}` : 'none', borderRadius: '10px', p: 1.25, display: 'grid', gap: 0.5, bgcolor: on ? 'action.selected' : 'background.paper', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+                <Box key={l.value} component="button" type="button" aria-pressed={on} onClick={() => set(k, l.value)} sx={{ all: 'unset', cursor: 'pointer', border: 1, borderColor: on ? accent : 'divider', boxShadow: on ? `inset 0 0 0 1px ${accent}` : 'none', borderRadius: '8px', p: 1.25, display: 'grid', gap: 0.5, bgcolor: on ? 'action.selected' : 'background.paper', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
                     <b style={{ fontSize: 17 }}>{l.value}</b>
                     {i === 0 && <Badge label="latest" bg={TONES.ok.bg} fg={TONES.ok.fg} />}
@@ -398,7 +398,7 @@ export const NewAppWizard = () => {
           </Box>
           {lines.length > shown.length || oldLines ? (
             <Box>
-              <Btn size="small" onClick={() => setOldLines(x => !x)} sx={{ textTransform: 'none', px: 0.5 }}>
+              <Btn size="small" onClick={() => setOldLines(x => !x)} sx={{ px: 0.5 }}>
                 {oldLines ? 'Hide older lines' : `Show older lines (${lines.length - shown.length})`}
               </Btn>
             </Box>
@@ -445,7 +445,7 @@ export const NewAppWizard = () => {
           <Typography sx={{ fontWeight: 500 }}>{label}</Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             {p.enum.map((o, i) => (
-              <Btn key={o} variant={values[k] === o ? 'contained' : 'outlined'} disableElevation aria-pressed={values[k] === o} onClick={() => set(k, o)} sx={{ textTransform: 'none', bgcolor: values[k] === o ? accent : undefined }}>
+              <Btn key={o} variant={values[k] === o ? 'contained' : 'outlined'} disableElevation aria-pressed={values[k] === o} onClick={() => set(k, o)} sx={{ bgcolor: values[k] === o ? accent : undefined }}>
                 {p.enumNames?.[i] ?? o}
               </Btn>
             ))}
@@ -488,7 +488,7 @@ export const NewAppWizard = () => {
             const on = blockOn(b);
             const desc = st.properties[b.toggle ?? b.list!]?.description;
             return (
-              <Box key={b.id} sx={{ border: 1, borderColor: on ? accent : 'divider', borderRadius: '12px', p: 1.5, display: 'grid', gap: 1, bgcolor: on ? 'action.hover' : 'background.paper' }}>
+              <Box key={b.id} sx={{ border: 1, borderColor: on ? accent : 'divider', borderRadius: '8px', p: 1.5, display: 'grid', gap: 1, bgcolor: on ? 'action.hover' : 'background.paper' }}>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <Box>
                     <Typography sx={{ fontWeight: 600 }}>{b.label}</Typography>
@@ -520,10 +520,10 @@ export const NewAppWizard = () => {
   const review = (
     <Box sx={{ display: 'grid', gap: 1.25 }}>
       {steps.map((st, i) => (
-        <Box key={st.title} sx={{ border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.25, display: 'grid', gap: 0.5 }}>
+        <Box key={st.title} sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.25, display: 'grid', gap: 0.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <b>{st.title}</b>
-            <Btn size="small" onClick={() => setStep(i)} sx={{ textTransform: 'none' }}>
+            <Btn size="small" onClick={() => setStep(i)} >
               Change
             </Btn>
           </Box>
@@ -552,7 +552,7 @@ export const NewAppWizard = () => {
   );
 
   const box = (label: ReactNode, sub?: string, strong?: boolean) => (
-    <Box sx={{ border: 1, borderColor: strong ? accent : 'divider', borderRadius: '10px', px: 1.25, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', bgcolor: 'background.default' }}>
+    <Box sx={{ border: 1, borderColor: strong ? accent : 'divider', borderRadius: '8px', px: 1.25, py: 0.75, display: 'flex', gap: 1, alignItems: 'center', bgcolor: 'background.default' }}>
       <Box sx={{ fontWeight: 600 }}>{label}</Box>
       {sub && <Box sx={{ ml: 'auto', fontFamily: 'monospace', fontSize: 11.5, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</Box>}
     </Box>
@@ -573,7 +573,7 @@ export const NewAppWizard = () => {
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
       <Box sx={{ display: 'flex', gap: 1.75, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Box sx={{ width: 46, height: 46, borderRadius: '12px', display: 'grid', placeItems: 'center', color: '#fff', bgcolor: accent, fontFamily: 'monospace', fontWeight: 700 }}>{look.logo}</Box>
+        <Box sx={{ width: 46, height: 46, borderRadius: '8px', display: 'grid', placeItems: 'center', color: '#fff', bgcolor: accent, fontFamily: 'monospace', fontWeight: 700 }}>{look.logo}</Box>
         <Box sx={{ minWidth: 0, flex: '1 1 400px' }}>
           <Typography variant="h4" component="h1" sx={{ fontWeight: 600, fontSize: 26 }}>
             {tpl.entity.metadata.title ?? template}
@@ -589,7 +589,7 @@ export const NewAppWizard = () => {
         </Box>
       </Box>
 
-      <Box role="list" aria-label="Steps" sx={{ display: 'flex', border: 1, borderColor: 'divider', borderRadius: '12px', bgcolor: 'background.paper', overflowX: 'auto' }}>
+      <Box role="list" aria-label="Steps" sx={{ display: 'flex', border: 1, borderColor: 'divider', borderRadius: '8px', bgcolor: 'background.paper', overflowX: 'auto' }}>
         {all.map((st, i) => (
           <Box
             role="listitem"
@@ -623,18 +623,18 @@ export const NewAppWizard = () => {
           {isReview ? review : stepBody(steps[step])}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
             {step > 0 ? (
-              <Btn variant="outlined" onClick={() => setStep(step - 1)} sx={{ textTransform: 'none' }}>
+              <Btn variant="outlined" onClick={() => setStep(step - 1)} >
                 Back
               </Btn>
             ) : (
               <span />
             )}
             {isReview ? (
-              <Btn variant="contained" disableElevation disabled={task.starting} onClick={create} sx={{ textTransform: 'none', bgcolor: accent }}>
+              <Btn variant="contained" disableElevation disabled={task.starting} onClick={create} sx={{ bgcolor: accent }}>
                 {task.starting ? 'Starting…' : 'Create'}
               </Btn>
             ) : (
-              <Btn variant="contained" disableElevation onClick={next} sx={{ textTransform: 'none', bgcolor: accent }}>
+              <Btn variant="contained" disableElevation onClick={next} sx={{ bgcolor: accent }}>
                 Next
               </Btn>
             )}
@@ -652,13 +652,13 @@ export const NewAppWizard = () => {
                 <>
                   {arrow('↓ /api/…')}
                   <Box sx={{ display: 'grid', gap: 0.75, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                    <Box sx={{ border: 1, borderColor: accent, borderRadius: '10px', p: 1, bgcolor: 'background.default' }}>
+                    <Box sx={{ border: 1, borderColor: accent, borderRadius: '8px', p: 1, bgcolor: 'background.default' }}>
                       <b>{entities}</b>
                       <Typography variant="caption" display="block" color="text.secondary">
                         Spring Boot · PostgreSQL {entities}
                       </Typography>
                     </Box>
-                    <Box sx={{ border: 1, borderColor: accent, borderRadius: '10px', p: 1, bgcolor: 'background.default' }}>
+                    <Box sx={{ border: 1, borderColor: accent, borderRadius: '8px', p: 1, bgcolor: 'background.default' }}>
                       <b>notifier</b>
                       <Typography variant="caption" display="block" color="text.secondary">
                         handles its events

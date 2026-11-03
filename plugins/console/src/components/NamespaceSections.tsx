@@ -1,6 +1,5 @@
 import { Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 import { type NamespaceLive, type NamespaceWorkloads, type PodLive, useNamespaceLive, useNamespaceWorkloads } from '../namespace';
@@ -8,22 +7,28 @@ import { Badge } from './Badge';
 import { bytes } from './ClusterOverviewPage';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
+import { useRq } from '../theme/consoleTheme';
+import { Id, Kpis as KpiStrip } from './ui';
 
-export const Card = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => (
-  <Paper variant="outlined" component="section" sx={{ borderRadius: 2, p: 2, display: 'grid', gap: 1 }}>
-    <Box>
-      <Typography variant="h6" component="h2" sx={{ fontSize: 17, fontWeight: 600 }}>
-        {title}
-      </Typography>
-      {sub && (
-        <Typography variant="body2" color="text.secondary">
-          {sub}
+/** A section of a page: bordered card, title, one muted line, its body. */
+export const Card = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => {
+  const t = useRq();
+  return (
+    <Box component="section" sx={{ border: `1px solid ${t.border}`, borderRadius: '8px', bgcolor: t.sheet, px: 2.25, pt: 1.75, pb: 2, display: 'grid', gap: 1.25, minWidth: 0 }}>
+      <Box sx={{ display: 'grid', gap: 0.25 }}>
+        <Typography variant="h5" component="h2">
+          {title}
         </Typography>
-      )}
+        {sub && (
+          <Typography variant="caption" color="text.secondary" component="div">
+            {sub}
+          </Typography>
+        )}
+      </Box>
+      {children}
     </Box>
-    {children}
-  </Paper>
-);
+  );
+};
 
 export const cores = (c?: number) => {
   if (c === undefined) return '—';
@@ -41,8 +46,8 @@ const Use = ({ used, request, limit, format }: { used?: number; request?: number
   return (
     <Box sx={{ minWidth: 150 }}>
       {ref ? (
-        <Box sx={{ position: 'relative', height: 8, borderRadius: 4, bgcolor: 'action.hover', overflow: 'hidden' }}>
-          <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(share, 1) * 100}%`, bgcolor: t.fg }} />
+        <Box sx={{ position: 'relative', height: 6, borderRadius: 3, bgcolor: 'action.selected', overflow: 'hidden' }}>
+          <Box sx={{ position: 'absolute', inset: 0, width: `${Math.min(share, 1) * 100}%`, bgcolor: t === TONES.info ? '#0c4595' : t.fg }} />
         </Box>
       ) : null}
       <Typography variant="caption" color="text.secondary">
@@ -65,22 +70,13 @@ export const Kpis = ({ live }: { live: NamespaceLive }) => {
   const restarts = pods.reduce((t, p) => t + p.restarts24h, 0);
   const oom = pods.filter(p => p.lastTermination === 'OOMKilled').length;
   const failedRuns = (live.jobs ?? []).filter(j => j.phase === 'Failed').length;
-  const kpi = (label: string, value: string, tone: keyof typeof TONES) => (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 600, color: tone === 'off' ? undefined : TONES[tone].fg }}>{value}</Typography>
-    </Paper>
-  );
-  return (
-    <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
-      {kpi('Pods ready', `${ready} / ${pods.length}`, ready === pods.length ? 'ok' : 'bad')}
-      {kpi('Restarts in 24 h', String(restarts), restarts ? 'warn' : 'off')}
-      {kpi('Last ended out of memory', String(oom), oom ? 'bad' : 'off')}
-      {kpi('Job runs failed', String(failedRuns), failedRuns ? 'warn' : 'off')}
-    </Box>
-  );
+  const items: Array<{ label: string; value: string; tone?: 'bad' | 'good' }> = [
+    { label: 'Pods ready', value: `${ready} / ${pods.length}`, tone: ready === pods.length ? undefined : 'bad' },
+    { label: 'Restarts in 24 h', value: String(restarts), tone: restarts ? 'bad' : undefined },
+    { label: 'Last ended out of memory', value: String(oom), tone: oom ? 'bad' : undefined },
+    { label: 'Job runs failed', value: String(failedRuns), tone: failedRuns ? 'bad' : undefined },
+  ];
+  return <KpiStrip items={items} />;
 };
 
 export const PodsSection = ({ live }: { live: NamespaceLive }) => (
@@ -91,7 +87,7 @@ export const PodsSection = ({ live }: { live: NamespaceLive }) => (
       <Table
         head={['Pod', 'State', 'Restarts 24 h', 'CPU', 'Memory', 'Node']}
         rows={live.pods.map(p => [
-          <b>{p.name}</b>,
+          <Id>{p.name}</Id>,
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
             {state(p)}
             {p.lastTermination && p.lastTermination !== 'Completed' && (
@@ -148,9 +144,7 @@ export const WorkloadsSection = ({ w }: { w: NamespaceWorkloads }) => (
           </Box>,
           <Box sx={{ display: 'grid', gap: 0.25 }}>
             {x.images.map(i => (
-              <Typography key={i} variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>
-                {i}
-              </Typography>
+              <Id key={i}>{i}</Id>
             ))}
           </Box>,
         ])}
@@ -177,7 +171,7 @@ export const NamespaceLiveSections = ({ namespace }: { namespace: string }) => {
   const live = useNamespaceLive(namespace);
   const wl = useNamespaceWorkloads(namespace);
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
+    <Box sx={{ display: 'grid', gap: 2.5 }}>
       {live.loading && !live.data && <Progress />}
       {live.error && !live.data && <WarningPanel title="The pods could not be read" message={live.error} />}
       {live.data && <Kpis live={live.data} />}

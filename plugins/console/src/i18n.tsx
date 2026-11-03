@@ -61,6 +61,8 @@ const SHELL: Messages = {
   'nav.scale': { en: 'Scale', es: 'Escalar' },
   'nav.storage': { en: 'Storage', es: 'Almacenamiento' },
   'nav.cisCluster': { en: 'CIS cluster', es: 'CIS del clúster' },
+  'nav.yourClusters': { en: 'Your clusters', es: 'Tus clústeres' },
+  'nav.allYouAdminister': { en: 'All you administer', es: 'Todos los que administras' },
   'nav.itsPortal': { en: 'Its portal', es: 'Su portal' },
   'nav.openPortal': { en: 'Open the portal', es: 'Abrir el portal' },
   'nav.portal': { en: 'Portal', es: 'Portal' },

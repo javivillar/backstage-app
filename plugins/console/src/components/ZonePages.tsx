@@ -1,6 +1,5 @@
 import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
@@ -11,6 +10,10 @@ import { Flow, type FlowLane, type FlowNode, TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
 import { ZoneVmRequests } from './ZoneVmRequests';
+import { useLocation } from 'react-router-dom';
+import { useRq } from '../theme/consoleTheme';
+import { useI18n } from '../i18n';
+import { Id, Kpis, TitleRow, choose } from './ui';
 
 /** OpenNebula says ACTIVE (VM state) or RUNNING (its LCM state) for a VM that runs. */
 export const vmRuns = (state: string) => state === 'ACTIVE' || state === 'RUNNING';
@@ -21,26 +24,47 @@ const vmTone = (state: string) => {
   return TONES.warn;
 };
 
-/** Frame of the zone pages: title, freshness, errors, the zone chosen (the one of this cluster). */
-const ZoneFrame = ({ title, children }: { title: string; children: (zone: Zone, view: ZoneView) => ReactNode }) => {
+const ZONE_TABS: Array<[string, string]> = [
+  ['nav.infrastructure', '/console/infrastructure'],
+  ['nav.vms', '/console/infrastructure/vms'],
+  ['nav.networks', '/console/infrastructure/networks'],
+  ['nav.securityGroups', '/console/infrastructure/security-groups'],
+];
+
+/** Frame of the zone pages: title row, the tabs of the zone, freshness, errors, the zone chosen (the one of this cluster). */
+const ZoneFrame = ({ title, children, finding, actions }: { title: string; children: (zone: Zone, view: ZoneView) => ReactNode; finding?: (zone: Zone, view: ZoneView) => ReactNode; actions?: ReactNode }) => {
   const cfg = useConsoleConfig();
+  const { t } = useI18n();
+  const rqT = useRq();
+  const { pathname } = useLocation();
   const { loading, data, error } = useZone();
   const zone = data?.zones.find(z => z.name === cfg.cluster.zone) ?? data?.zones[0];
   return (
     <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
       <Box>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          {title} {zone ? `of zone ${zone.name}` : ''}
-        </Typography>
-        <Typography color="text.secondary">
-          Read-only, as the OpenNebula host publishes it every 5 minutes{data?.generated ? ` · last ${new Date(data.generated).toLocaleString()}` : ''}.
-        </Typography>
+        <TitleRow
+          crumbs={[[t('nav.platform'), '/console/infrastructure/platform'], [zone ? `${t('shell.zone')} ${zone.name}` : t('shell.zone')]]}
+          title={`${title} ${zone ? `of zone ${zone.name}` : ''}`.trim()}
+          sub={`${t('zone.readOnly')}${data?.generated ? ` · ${t('zone.last', { time: new Date(data.generated).toLocaleString() })}` : ''}`}
+          finding={data && zone && finding ? finding(zone, data) : undefined}
+          actions={actions}
+        />
+        <Box component="nav" aria-label="Zone sections" sx={{ display: 'flex', gap: 0.5, borderBottom: `1px solid ${rqT.border}`, flexWrap: 'wrap', mt: -1 }}>
+          {ZONE_TABS.map(([key, to]) => {
+            const on = pathname.replace(/\/+$/, '') === to;
+            return (
+              <Link key={to} to={to} aria-current={on ? 'page' : undefined} style={{ padding: '8px 10px 10px', borderBottom: `2px solid ${on ? rqT.ink : 'transparent'}`, color: on ? rqT.ink : rqT.muted, fontWeight: on ? 500 : 400, textDecoration: 'none' }}>
+                {t(key)}
+              </Link>
+            );
+          })}
+        </Box>
       </Box>
       {loading && !data && <Progress />}
-      {error && <WarningPanel title="The zone could not be read" message={error} />}
-      {data && data.warnings.length > 0 && <WarningPanel severity="info" title="The host could not read everything" message={data.warnings.join(' · ')} />}
+      {error && <WarningPanel title={t('zone.unreadable')} message={error} />}
+      {data && data.warnings.length > 0 && <WarningPanel severity="info" title={t('zone.partial')} message={data.warnings.join(' · ')} />}
       {data && zone && children(zone, data)}
-      {data && !zone && <Typography color="text.secondary">The host publishes no zone in use.</Typography>}
+      {data && !zone && <Typography color="text.secondary">{t('zone.none')}</Typography>}
     </Box>
   );
 };
@@ -109,73 +133,80 @@ export function zoneLanes(zone: Zone, view: ZoneView): FlowLane[] {
   ];
 }
 
-export const ZoneOverviewPage = () => (
-  <ZoneFrame title="Infrastructure">
-    {(zone, view) => {
-      const vms = zoneVms(zone);
-      const active = vms.filter(v => vmRuns(v.state)).length;
-      const kpi = (label: string, value: string, tone?: keyof typeof TONES) => (
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          <Typography sx={{ fontSize: 26, fontWeight: 600, color: tone ? TONES[tone].fg : undefined }}>{value}</Typography>
-        </Paper>
-      );
-      const zoneDrift = view.drift.filter(d => d.zone === zone.name);
-      return (
-        <>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
-            {kpi('Programmes', String(zone.programs.length))}
-            {kpi('VMs running', `${active} / ${vms.length}`, active === vms.length ? 'ok' : 'warn')}
-            {kpi('Networks', String(zone.programs.reduce((t, p) => t + p.networks.length, 0) + (zone.transit ? 1 : 0)))}
-            {kpi('Differences with the design', String(zoneDrift.length), zoneDrift.length ? 'warn' : 'ok')}
-          </Box>
-          <Card title="Zone map" sub="From the host to the clusters of each programme. Orange: what differs from network.toml.">
-            <Flow label="Zone map" lanes={zoneLanes(zone, view)} />
-          </Card>
-          <Card title="Differences with the design" sub="network.toml (git) against what OpenNebula has.">
-            {zoneDrift.length === 0 ? (
-              <Typography color="text.secondary">None: OpenNebula has what the design says.</Typography>
-            ) : (
-              <Table head={['Programme', 'What', 'Name', 'Difference']} rows={zoneDrift.map(d => [d.program ?? 'zone', d.kind, <b>{d.name}</b>, d.detail])} />
-            )}
-          </Card>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Link to="/console/infrastructure/vms">Virtual machines</Link>
-            <Link to="/console/infrastructure/networks">Networks</Link>
-            <Link to="/console/infrastructure/security-groups">Security groups</Link>
-          </Box>
-        </>
-      );
-    }}
-  </ZoneFrame>
-);
+export const ZoneOverviewPage = () => {
+  const { t } = useI18n();
+  return (
+    <ZoneFrame
+      title="Infrastructure"
+      finding={(zone, view) => {
+        const d = view.drift.filter(x => x.zone === zone.name).length;
+        const free = view.host?.availableGiB;
+        return choose([[d, t('zone.finding.drift', { n: d })], [free !== undefined, t('zone.finding.free', { free: free ?? 0 })]], t('zone.finding.ok'));
+      }}
+    >
+      {(zone, view) => {
+        const vms = zoneVms(zone);
+        const active = vms.filter(v => vmRuns(v.state)).length;
+        const zoneDrift = view.drift.filter(d => d.zone === zone.name);
+        return (
+          <>
+            <Kpis
+              items={[
+                { label: t('zone.programmes'), value: zone.programs.length },
+                { label: t('zone.vmsRunning'), value: `${active} / ${vms.length}`, tone: active === vms.length ? undefined : 'bad' },
+                { label: t('nav.networks'), value: zone.programs.reduce((sum, p) => sum + p.networks.length, 0) + (zone.transit ? 1 : 0) },
+                { label: t('zone.diffs'), value: zoneDrift.length, tone: zoneDrift.length ? 'bad' : undefined },
+                ...(view.host ? [{ label: t('zone.hostFree'), value: `${view.host.availableGiB ?? '?'} GiB`, note: `${view.host.name} · ${view.host.cpus ?? '?'} CPU · ${view.host.memoryGiB ?? '?'} GiB` }] : []),
+              ]}
+            />
+            <Card title={t('zone.map')} sub={t('zone.mapSub')}>
+              <Flow label="Zone map" lanes={zoneLanes(zone, view)} />
+            </Card>
+            <Card title={t('zone.diffsTitle')} sub={t('zone.diffsSub')}>
+              {zoneDrift.length === 0 ? (
+                <Typography color="text.secondary">{t('zone.noDiffs')}</Typography>
+              ) : (
+                <Table head={[t('zone.programme'), t('zone.what'), t('zone.name'), t('zone.difference')]} rows={zoneDrift.map(d => [d.program ?? 'zone', d.kind, <Id>{d.name}</Id>, d.detail])} />
+              )}
+            </Card>
+          </>
+        );
+      }}
+    </ZoneFrame>
+  );
+};
 
 export const ZoneVmsPage = () => {
   const [text, setText] = useState('');
+  const { t } = useI18n();
   return (
-    <ZoneFrame title="Virtual machines">
+    <ZoneFrame title="Virtual machines" finding={zone => {
+      const waiting = zoneVms(zone).filter(v => !vmRuns(v.state)).length;
+      return waiting ? t('zone.finding.vms', { n: waiting }) : t('zone.finding.vmsOk');
+    }}>
       {zone => {
-        const t = text.trim().toLowerCase();
-        const vms = zoneVms(zone).filter(v => !t || `${v.name} ${v.program} ${v.role} ${v.ips.join(' ')}`.toLowerCase().includes(t));
+        const q = text.trim().toLowerCase();
+        // problems first: a VM that does not run comes before the ones that do
+        const vms = zoneVms(zone)
+          .filter(v => !q || `${v.name} ${v.program} ${v.role} ${v.ips.join(' ')}`.toLowerCase().includes(q))
+          .sort((a, b) => Number(vmRuns(a.state)) - Number(vmRuns(b.state)) || a.name.localeCompare(b.name));
         return (
           <>
           <ZoneVmRequests zone={zone} />
-          <Card title={`${vms.length} VMs`}>
-            <TextField size="small" label="Find a VM, programme or address" value={text} onChange={e => setText(e.target.value)} sx={{ maxWidth: 360 }} />
+          <Card title={t('zone.vmCount', { n: vms.length })}>
+            <TextField size="small" label={t('zone.findVm')} value={text} onChange={e => setText(e.target.value)} sx={{ maxWidth: 360 }} />
             <Table
-              head={['VM', 'Programme', 'Role', 'State', 'vCPU', 'Memory', 'Addresses', 'Host']}
+              head={['VM', t('zone.programme'), t('zone.role'), t('zone.state'), 'vCPU', t('cluster.memory'), t('zone.addresses'), 'Host']}
               rows={vms.map(v => [
                 <Link to={vmHref(v.name)}>
-                  <b>{v.name}</b>
+                  <Id>{v.name}</Id>
                 </Link>,
                 v.program,
                 v.role || '—',
                 <Badge label={v.state} {...vmTone(v.state)} />,
                 v.vcpu ?? '—',
                 v.memoryGb !== undefined ? `${v.memoryGb} GiB` : '—',
-                v.ips.join(', ') || '—',
+                v.ips.length ? <Id>{v.ips.join(', ')}</Id> : '—',
                 v.host ?? '—',
               ])}
             />
@@ -187,7 +218,9 @@ export const ZoneVmsPage = () => {
   );
 };
 
-export const ZoneNetworksPage = () => (
+export const ZoneNetworksPage = () => {
+  const { t } = useI18n();
+  return (
   <ZoneFrame title="Networks">
     {zone => {
       const rows = [
@@ -195,14 +228,14 @@ export const ZoneNetworksPage = () => (
         ...zone.programs.flatMap(p => p.networks.map(n => ({ program: p.name, n }))),
       ];
       return (
-        <Card title={`${rows.length} networks`} sub="VLANs of the zone; leases are the addresses OpenNebula has handed out.">
+        <Card title={t('zone.netCount', { n: rows.length })} sub={t('zone.netSub')}>
           <Table
-            head={['Network', 'Programme', 'Role', 'CIDR', 'VLAN', 'Leases', 'State']}
+            head={[t('zone.network'), t('zone.programme'), t('zone.role'), 'CIDR', 'VLAN', t('zone.leases'), t('zone.state')]}
             rows={rows.map(({ program, n }) => [
-              <b>{n.name}</b>,
+              <Id>{n.name}</Id>,
               program,
               n.role ?? 'transit',
-              n.cidr,
+              <Id>{n.cidr}</Id>,
               String(n.vlan ?? '—'),
               String(n.leases),
               networkState(n),
@@ -212,35 +245,42 @@ export const ZoneNetworksPage = () => (
       );
     }}
   </ZoneFrame>
-);
+  );
+};
 
-export const ZoneSecurityGroupsPage = () => (
-  <ZoneFrame title="Security groups">
-    {zone => (
-      <Box sx={{ display: 'grid', gap: 2 }}>
-        {zone.programs.flatMap(p =>
-          p.securityGroups.map(g => (
-            <Card
-              key={g.name}
-              title={g.name}
-              sub={
-                <>
-                  Programme {p.name} · {g.role ?? ''} network · rules from {g.source ?? 'OpenNebula'}{' '}
-                  {!g.exists && <Badge label="Not in OpenNebula" {...TONES.bad} />}
-                </>
-              }
-            >
-              <Table
-                head={['Rule', 'Compared with the design']}
-                rows={[
-                  ...g.rules.map(r => [r, g.extra.includes(r) ? <Badge label="Not in the design" {...TONES.warn} /> : <Badge label="As designed" {...TONES.ok} />]),
-                  ...g.missing.map(r => [r, <Badge label="Missing (the design has it)" {...TONES.bad} />]),
-                ]}
-              />
-            </Card>
-          )),
-        )}
-      </Box>
-    )}
-  </ZoneFrame>
-);
+export const ZoneSecurityGroupsPage = () => {
+  const { t } = useI18n();
+  return (
+    <ZoneFrame title="Security groups" finding={zone => {
+      const off = zone.programs.flatMap(p => p.securityGroups).filter(g => !g.exists || g.extra.length || g.missing.length).length;
+      return off ? t('sg.finding', { n: off }) : t('sg.findingOk');
+    }}>
+      {zone => (
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          {zone.programs.flatMap(p =>
+            p.securityGroups.map(g => (
+              <Card
+                key={g.name}
+                title={g.name}
+                sub={
+                  <>
+                    {t('sg.sub', { programme: p.name, role: g.role ?? '', source: g.source ?? 'OpenNebula' })}{' '}
+                    {!g.exists && <Badge label={t('sg.notInOne')} {...TONES.bad} />}
+                  </>
+                }
+              >
+                <Table
+                  head={[t('sg.rule'), t('sg.compared')]}
+                  rows={[
+                    ...g.rules.map(r => [<Id>{r}</Id>, g.extra.includes(r) ? <Badge label={t('sg.notInDesign')} {...TONES.warn} /> : <Badge label={t('sg.asDesigned')} {...TONES.ok} />]),
+                    ...g.missing.map(r => [<Id>{r}</Id>, <Badge label={t('sg.missing')} {...TONES.bad} />]),
+                  ]}
+                />
+              </Card>
+            )),
+          )}
+        </Box>
+      )}
+    </ZoneFrame>
+  );
+};

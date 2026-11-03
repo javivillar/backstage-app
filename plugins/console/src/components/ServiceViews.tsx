@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { Fragment, type ReactNode, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useActions } from '../actions';
 import { totals, useNamespaceChanges } from '../entityData';
 import { useClusterOverview } from '../overview';
@@ -17,13 +17,16 @@ import { TONES } from './Flow';
 import { Table } from './NetworkPage';
 import { type Attention, serviceAttention, type Tone, useService } from './ServiceData';
 import { rq } from './tokens';
+import { useI18n } from '../i18n';
+import { useRq } from '../theme/consoleTheme';
+import { Kpis, Pill, choose } from './ui';
 
 const spec = (e: Entity) => (e.spec ?? {}) as { owner?: string; system?: string; lifecycle?: string; type?: string };
 
 const Section = ({ title, sub, action, children }: { title: string; sub?: ReactNode; action?: ReactNode; children: ReactNode }) => (
-  <Paper variant="outlined" component="section" sx={{ borderRadius: '12px', p: 2, display: 'grid', gap: 1.25, alignContent: 'start' }}>
+  <Paper variant="outlined" component="section" sx={{ borderRadius: '8px', p: '14px 18px 16px', display: 'grid', gap: 1.25, alignContent: 'start', minWidth: 0 }}>
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-      <Typography variant="h6" component="h2" sx={{ fontSize: 16, fontWeight: 600 }}>
+      <Typography variant="h5" component="h2">
         {title}
       </Typography>
       {sub && (
@@ -108,38 +111,39 @@ const ActionsPanel = () => {
     }
   };
   return (
-    <Box sx={{ mx: '22px', mb: 1.75, border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.5, display: 'grid', gap: 1.25, bgcolor: 'action.hover' }}>
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, display: 'grid', gap: 1.25, bgcolor: 'action.hover' }}>
       <Typography variant="caption" color="text.secondary">
         Actions go through Argo CD. Allowed: {info?.groups.join(', ') ?? 'backstage-admin'}
         {info?.owners ? ', and the owner of this service on its own namespace' : ' (the owner of each service: not enabled yet)'}.
       </Typography>
       {info && !info.allowed && <Typography variant="body2">{info.configured ? 'You are not in those groups: the actions are shown but not available to you.' : 'Argo CD is not configured in this portal.'}</Typography>}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Button variant="text" disabled={!info?.allowed || !app} onClick={() => app && ask(`Sync ${app} with git now?`, () => actions.run('sync', { app }))} sx={{ textTransform: 'none', bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}>
+        <Button variant="outlined" size="small" disabled={!info?.allowed || !app} onClick={() => app && ask(`Sync ${app} with git now?`, () => actions.run('sync', { app }))} sx={{ bgcolor: 'background.paper' }}>
           Sync with git
         </Button>
         {(d.workloads?.workloads ?? []).map(w => (
           <Button
             key={`${w.kind}/${w.name}`}
-            variant="text"
+            variant="outlined"
+            size="small"
             disabled={!info?.allowed || !app || !d.namespace}
             onClick={() => app && d.namespace && ask(`Restart ${w.kind} ${w.name}? Kubernetes replaces its pods one by one.`, () => actions.run('restart', { app, namespace: d.namespace!, kind: w.kind, name: w.name }))}
-            sx={{ textTransform: 'none', bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}
+            sx={{ bgcolor: 'background.paper' }}
           >
             Restart {w.name}
           </Button>
         ))}
-        <Button variant="text" disabled sx={{ textTransform: 'none', border: '1px dashed', borderColor: 'divider' }} title="Through git: a change of its values, reviewed like any other">
+        <Button variant="outlined" size="small" disabled sx={{ borderStyle: 'dashed' }} title="Through git: a change of its values, reviewed like any other">
           Scale · Suspend (through git)
         </Button>
       </Box>
       {pending && (
         <Box role="alertdialog" aria-label="Confirm" sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', bgcolor: TONES.warn.bg, borderRadius: '8px', p: 1.25 }}>
           <Typography sx={{ flex: '1 1 260px' }}>{pending.text}</Typography>
-          <Button variant="contained" onClick={confirm} sx={{ textTransform: 'none' }}>
+          <Button variant="contained" size="small" onClick={confirm}>
             Confirm
           </Button>
-          <Button variant="text" onClick={() => setPending(undefined)} sx={{ textTransform: 'none' }}>
+          <Button variant="text" size="small" onClick={() => setPending(undefined)}>
             Cancel
           </Button>
         </Box>
@@ -157,72 +161,78 @@ const ActionsPanel = () => {
 export const ServiceHeader = () => {
   const d = useService();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { t: tr } = useI18n();
+  const t = useRq();
   const [open, setOpen] = useState(false);
   if (!d) return null;
   const e = d.entity;
   const s = spec(e);
   const kind = classify(e);
-  const initials = (e.metadata.title ?? e.metadata.name).replace(/[^A-Za-z0-9 -]/g, '').split(/[\s-]+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-  const pal = kind === 'business' ? rq.biz : rq.svc;
   const v = vitals(d);
   const stage = e.metadata.annotations?.['refresquito.io/stage'];
+  // the full header (description, owner, vital signs) only on the Overview; the other tabs keep name, state, actions
+  const here = pathname.replace(/\/+$/, '');
+  const base = d.base.replace(/\/+$/, '');
+  const full = here === base || !here.startsWith(`${base}/`);
+  const health = d.app?.health;
   return (
-    <Paper variant="outlined" component="section" aria-label={e.metadata.title ?? e.metadata.name} sx={{ borderRadius: '14px', overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start', p: '20px 22px 16px' }}>
-        <Box sx={{ width: 52, height: 52, borderRadius: '12px', bgcolor: pal.bg, color: pal.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>
-          {initials || '·'}
-        </Box>
-        <Box sx={{ flex: '1 1 320px', minWidth: 0, display: 'grid', gap: 0.75 }}>
+    <Box component="section" aria-label={e.metadata.title ?? e.metadata.name} sx={{ display: 'grid', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
+        <Box sx={{ flex: '1 1 360px', minWidth: 0, display: 'grid', gap: 0.75 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-            <Typography variant="h4" component="h1" sx={{ fontSize: 26, fontWeight: 600 }}>
+            <Typography variant="h4" component="h1" sx={{ overflowWrap: 'anywhere' }}>
               {e.metadata.title ?? e.metadata.name}
             </Typography>
-            {kind === 'business' && <Badge label="Business application" bg={rq.biz.bg} fg={rq.biz.fg} />}
-            {kind === 'service' && <Badge label="Refresquito service" bg={rq.svc.bg} fg={rq.svc.fg} />}
-            {stage && <Badge outlined label={stage} />}
-            {s.lifecycle && <Badge outlined label={s.lifecycle} />}
+            {health && <Pill tone={choose<'pos' | 'info' | 'neg'>([[health === 'Healthy', 'pos'], [health === 'Progressing', 'info']], 'neg')}>{health}</Pill>}
+            {kind === 'business' && <Pill tone="neu" plain>{tr('ent.business')}</Pill>}
+            {kind === 'service' && <Pill tone="neu" plain>{tr('ent.service')}</Pill>}
+            {stage && <Pill tone="neu" plain>{stage}</Pill>}
+            {s.lifecycle && <Pill tone="neu" plain>{s.lifecycle}</Pill>}
           </Box>
-          {e.metadata.description && (
-            <Typography color="text.secondary" sx={{ maxWidth: '75ch' }}>
+          {full && e.metadata.description && (
+            <Typography color="text.secondary" sx={{ maxWidth: '80ch' }}>
               {e.metadata.description}
             </Typography>
           )}
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 13, color: 'text.secondary' }}>
-            {s.owner && <span>Owner {s.owner.replace(/^group:(default\/)?/, '')}</span>}
-            {s.system && <span>System {s.system}</span>}
-            {d.namespace && (
-              <span>
-                Namespace <Link to={`/console/namespaces/${d.namespace}`}>{d.namespace}</Link>
-              </span>
-            )}
-            {d.ns?.segment && <span>Segment {d.ns.segment}</span>}
-            <ClassicLink path={entityPath(e)} />
-          </Box>
+          {full && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, color: 'text.secondary' }}>
+              {s.owner && <span>{tr('ent.owner')} {s.owner.replace(/^group:(default\/)?/, '')}</span>}
+              {s.system && <span>{tr('ent.system')} {s.system}</span>}
+              {d.namespace && (
+                <span>
+                  {tr('ent.namespace')} <Link to={`/console/namespaces/${d.namespace}`}>{d.namespace}</Link>
+                </span>
+              )}
+              {d.ns?.segment && <span>{tr('ent.segment')} {d.ns.segment}</span>}
+              <ClassicLink path={entityPath(e)} />
+            </Box>
+          )}
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-          <Button component="a" href={`/console/ops-assistant${s.system ? `?system=${encodeURIComponent(s.system)}` : ''}`} variant="text" sx={{ textTransform: 'none', border: '1px solid', borderColor: 'divider' }}>
-            Ask the ops assistant
+          <Button component="a" href={`/console/ops-assistant${s.system ? `?system=${encodeURIComponent(s.system)}` : ''}`} variant="outlined" size="small">
+            {tr('ent.askOps')}
           </Button>
-          <Button variant="text" onClick={() => setOpen(o => !o)} aria-expanded={open} sx={{ textTransform: 'none', border: '1px solid', borderColor: 'divider' }}>
-            Actions ▾
+          <Button variant="outlined" size="small" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+            {tr('ent.actions')} ▾
           </Button>
         </Box>
       </Box>
       {open && <ActionsPanel />}
-      {v.length > 0 && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', borderTop: 1, borderColor: 'divider' }}>
-          {v.map(x => (
+      {full && v.length > 0 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', border: `1px solid ${t.border}`, borderRadius: '8px', overflow: 'hidden' }}>
+          {v.map((x, i) => (
             <Box
               key={x.label}
               component="button"
               type="button"
               onClick={() => navigate(`${d.base}/${x.tab}`)}
-              sx={{ display: 'grid', gap: 0.5, justifyItems: 'start', textAlign: 'left', p: '12px 16px', border: 0, borderRight: 1, borderColor: 'divider', bgcolor: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+              sx={{ display: 'grid', gap: 0.25, justifyItems: 'start', textAlign: 'left', p: '12px 16px', border: 0, borderLeft: i ? `1px solid ${t.border}` : 0, bgcolor: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', transition: 'background-color .15s ease-out', '&:hover': { bgcolor: t.raised } }}
             >
               <Typography variant="caption" color="text.secondary">
                 {x.label}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 18, fontWeight: 600 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 16, lineHeight: '22px', fontWeight: 500 }}>
                 <Dot tone={x.tone} />
                 {x.value}
               </Box>
@@ -233,7 +243,7 @@ export const ServiceHeader = () => {
           ))}
         </Box>
       )}
-    </Paper>
+    </Box>
   );
 };
 
@@ -326,7 +336,7 @@ const AboutSection = ({ e, hosts }: { e: Entity; hosts: string[] }) => {
           {apiRefs.map(([kind, ref]) => {
             const n = ref.split('/').pop() ?? ref;
             return (
-              <Link key={kind + ref} to={`/console/entity/default/api/${n}`} title={kind === 'providesApi' ? 'it provides' : 'it consumes'} style={{ fontSize: 13, background: kind === 'providesApi' ? 'rgba(26,141,255,0.10)' : 'transparent', border: '1px solid rgba(26,141,255,0.35)', borderRadius: 6, padding: '2px 8px', textDecoration: 'none' }}>
+              <Link key={kind + ref} to={`/console/entity/default/api/${n}`} title={kind === 'providesApi' ? 'it provides' : 'it consumes'} style={{ fontSize: 13, background: kind === 'providesApi' ? 'action.selected' : 'transparent', border: '1px solid rgba(26,141,255,0.35)', borderRadius: 6, padding: '2px 8px', textDecoration: 'none' }}>
                 {kind === 'providesApi' ? '↑ ' : '↓ '}
                 {n}
               </Link>
@@ -358,6 +368,7 @@ export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
   const d = useService();
   const changes = useNamespaceChanges(d?.namespace);
   const ov = useClusterOverview();
+  const { t } = useI18n();
   if (!d) return null;
   const e = d.entity;
   const hosts = (d.network?.hosts ?? []).filter(h => h.namespace === d.namespace);
@@ -373,6 +384,7 @@ export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
   const volumes = (ov.data?.volumes ?? []).filter(v => v.namespace === d.namespace);
   const ann = e.metadata.annotations ?? {};
   const source = ann['backstage.io/source-location']?.replace(/^url:/, '');
+  const tr = t;
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
@@ -382,7 +394,7 @@ export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
     {slots.argo && <Box sx={{ minWidth: 0 }}>{slots.argo}</Box>}
     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'start' }}>
       <Box sx={{ display: 'grid', gap: 2 }}>
-        <Section title="How users reach it now" action={<Link to={`${d.base}/user-journey`}>Every step</Link>}>
+        <Section title={tr('ov.reach')} action={<Link to={`${d.base}/user-journey`}>{tr('ov.everyStep')}</Link>}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}>
             {chips.map(([label, tone], i) => (
               <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -399,26 +411,26 @@ export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
             ))}
           </Box>
         </Section>
-        <Section title="Needs attention">
+        <Section title={tr('ov.attention')}>
           <AttentionList items={serviceAttention(d)} base={d.base} />
         </Section>
-        <Section title="Latest changes" action={<Link to={`${d.base}/changes`}>History</Link>}>
+        <Section title={tr('ov.changes')} action={<Link to={`${d.base}/changes`}>{tr('ov.history')}</Link>}>
           {changes.changes?.length ? (
             changes.changes.slice(0, 3).map(c => (
               <Box key={c.image + c.at} sx={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 1.5, py: 0.75, borderTop: 1, borderColor: 'divider' }}>
                 <Typography variant="caption" color="text.secondary">
                   {new Date(c.at).toLocaleDateString()}
                 </Typography>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{c.image}</Typography>
+                <Typography sx={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{c.image}</Typography>
               </Box>
             ))
           ) : (
-            <Typography color="text.secondary">{changes.error ?? (changes.loading ? 'Reading…' : noChanges(changes.since))}</Typography>
+            <Typography color="text.secondary">{changes.error ?? (changes.loading ? tr('ov.reading') : noChanges(changes.since))}</Typography>
           )}
         </Section>
       </Box>
       <Box sx={{ display: 'grid', gap: 2 }}>
-        <Section title="Built on" sub="what it depends on, from the catalog, with the state of its Argo CD application" action={<Link to={`${d.base}/dependencies`}>Map</Link>}>
+        <Section title={tr('ov.builtOn')} sub={tr('ov.builtOnSub')} action={<Link to={`${d.base}/dependencies`}>{tr('ov.map')}</Link>}>
           {deps.length ? (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
               {deps.map(ref => {
@@ -436,20 +448,20 @@ export const ServiceOverview = ({ slots = {} }: { slots?: OverviewSlots }) => {
               })}
             </Box>
           ) : (
-            <Typography color="text.secondary">The catalog does not say what it depends on.</Typography>
+            <Typography color="text.secondary">{tr('ov.noDeps')}</Typography>
           )}
         </Section>
         {d.week && (
-          <Section title="Cost" sub="last 7 days · estimate with our prices" action={<Link to={`${d.base}/costs`}>Where it goes</Link>}>
-            <Typography sx={{ fontSize: 28, fontWeight: 600 }}>{d.money(d.week.total)}</Typography>
+          <Section title={tr('ov.cost')} sub={tr('ov.costSub')} action={<Link to={`${d.base}/costs`}>{tr('ov.whereGoes')}</Link>}>
+            <Typography sx={{ fontSize: 28, lineHeight: '34px', fontVariantNumeric: 'tabular-nums' }}>{d.money(d.week.total)}</Typography>
             {d.week.days.length > 1 && <DayBars days={d.week.days} />}
           </Section>
         )}
-        <Section title="Data and backups">
+        <Section title={tr('ov.data')}>
           {volumes.length ? (
             volumes.map(v => (
               <Box key={v.pvc} sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', py: 0.5 }}>
-                <Typography sx={{ flex: '1 1 160px', fontWeight: 600 }}>{v.pvc}</Typography>
+                <Typography sx={{ flex: '1 1 160px', fontWeight: 500 }}>{v.pvc}</Typography>
                 <Typography variant="body2" color="text.secondary">
                   {bytes(v.requestedBytes)}
                   {v.usedBytes !== undefined && v.capacityBytes ? ` · ${Math.round((v.usedBytes / v.capacityBytes) * 100)}% used` : ''}
@@ -528,56 +540,53 @@ export const ServiceChanges = () => {
 
 export const ServiceSecurity = () => {
   const d = useService();
+  const { t: tr } = useI18n();
   if (!d) return null;
   const t = totals(d.findings);
-  const box = (n: number, label: string, tone: Tone) => (
-    <Box sx={{ display: 'grid', gap: 0.25, p: 1.25, borderRadius: '10px', bgcolor: TONES[tone].bg, color: TONES[tone].fg }}>
-      <Typography sx={{ fontSize: 22, fontWeight: 600 }}>{n}</Typography>
-      <Typography variant="caption">{label}</Typography>
-    </Box>
-  );
   const hosts = (d.network?.hosts ?? []).filter(h => h.namespace === d.namespace);
+  const tls = hosts.every(h => h.tls);
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      {/* the summaries side by side, same height; the detail by image below, full width */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))', gap: 2, alignItems: 'stretch' }}>
-        <Section title="Vulnerabilities in its images" sub="scans of Wazuh, read through the SBOM">
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1 }}>
-            {box(t.critical, 'Critical', t.critical ? 'bad' : 'off')}
-            {box(t.high, 'High', t.high ? 'warn' : 'off')}
-            {box(t.medium, 'Medium', 'off')}
-            {box(t.low, 'Low', 'off')}
-          </Box>
+    <Box sx={{ display: 'grid', gap: 3 }}>
+      <Kpis
+        items={[
+          { label: tr('sec.critical'), value: t.critical, tone: t.critical ? 'bad' : undefined, note: tr('sec.kev', { n: t.kev }) },
+          { label: tr('sec.high'), value: t.high },
+          { label: tr('sec.medium'), value: t.medium },
+          { label: tr('sec.low'), value: t.low },
+        ]}
+      />
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) minmax(0, 1fr)' }, gap: 3, alignItems: 'stretch', mt: -3 }}>
+        <Section title={tr('sec.vulns')} sub={tr('sec.vulnsSub')}>
           <Typography variant="body2" color="text.secondary">
-            {t.kev} known exploited (KEV). Details and fixes: <Link to={`${d.base}/sbom`}>SBOM</Link> · <Link to={`${d.base}/quality`}>Quality & Security</Link>
+            {tr('sec.details')} <Link to={`${d.base}/sbom`}>SBOM</Link> · <Link to={`${d.base}/quality`}>{tr('sec.quality')}</Link>
           </Typography>
         </Section>
-        <Section title="Exposure and access">
+        <Section title={tr('sec.exposure')}>
           <Table
             head={['', '']}
             rows={[
-              ['Published host', hosts.length ? <Badge label={hosts.every(h => h.tls) ? 'TLS' : 'Some without TLS'} {...(hosts.every(h => h.tls) ? TONES.ok : TONES.warn)} /> : <Badge label="Internal" {...TONES.info} />],
-              ['Network isolation', d.ns ? <Badge label={d.ns.isolation} {...(d.ns.isolation === 'open' ? TONES.warn : TONES.ok)} /> : '—'],
-              ['Who can do what', <Link to={`${d.base}/access`}>Access (Keycloak)</Link>],
+              [tr('sec.host'), hosts.length ? <Pill tone={tls ? 'pos' : 'warn'}>{tls ? 'TLS' : tr('sec.someNoTls')}</Pill> : <Pill tone="info">{tr('sec.internal')}</Pill>],
+              [tr('sec.isolation'), d.ns ? <Pill tone={d.ns.isolation === 'open' ? 'warn' : 'pos'}>{d.ns.isolation}</Pill> : '—'],
+              [tr('sec.who'), <Link to={`${d.base}/access`}>{tr('sec.access')}</Link>],
             ]}
           />
         </Section>
       </Box>
-      <Section title="By image">
+      <Section title={tr('sec.byImage')}>
         {d.findings.length ? (
           <Table
-            head={['Image', 'Critical', 'High', 'Medium', 'Low', 'Scan']}
+            head={[tr('sec.image'), tr('sec.critical'), tr('sec.high'), tr('sec.medium'), tr('sec.low'), tr('sec.scan')]}
             rows={d.findings.map(f => [
-              <span title={f.image} style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{shortImage(f.image)}</span>,
+              <span title={f.image} style={{ fontFamily: '"IBM Plex Mono", ui-monospace, monospace', fontSize: 12, overflowWrap: 'anywhere' }}>{shortImage(f.image)}</span>,
               String(f.counts.CRITICAL ?? 0),
               String(f.counts.HIGH ?? 0),
               String(f.counts.MEDIUM ?? 0),
               String(f.counts.LOW ?? 0),
-              f.error ? <Badge label={f.error} {...TONES.off} /> : <Badge label="Scanned" {...TONES.ok} />,
+              f.error ? <Pill tone="neu">{f.error}</Pill> : <Pill tone="pos">{tr('sec.scanned')}</Pill>,
             ])}
           />
         ) : (
-          <Typography color="text.secondary">No image known for it.</Typography>
+          <Typography color="text.secondary">{tr('sec.noImage')}</Typography>
         )}
       </Section>
     </Box>
@@ -613,7 +622,7 @@ export const ServiceCosts = ({ extra, costs }: { extra?: ReactNode; costs?: Cost
   const dayMax = Math.max(...(w?.days ?? [0]), 0.0001);
   const forecast = w ? (w.total / 7) * 30 + (costs?.deployments?.cost ?? 0) + (costs?.ai?.cost ?? 0) : undefined;
   const kpi = (label: string, value: string, sub?: string) => (
-    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '10px', p: 1.5, bgcolor: 'background.paper' }}>
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, bgcolor: 'background.paper' }}>
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>

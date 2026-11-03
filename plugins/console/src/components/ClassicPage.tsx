@@ -1,19 +1,17 @@
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import type { ConsoleClassicPage } from '../pages';
+import { useI18n } from '../i18n';
 import { ClassicFrame } from './ClassicFrame';
 import { ClassicLink } from './ClassicLink';
+import { TitleRow } from './ui';
 
 /** /console/<id>/*: a classic page under the console header. */
 export const ClassicPage = ({ page }: { page: ConsoleClassicPage }) => {
+  const { t, has } = useI18n();
+  const title = has(`page.${page.id}`) ? t(`page.${page.id}`) : page.title;
   return (
-    <Box sx={{ display: 'grid', gap: 1 }}>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          {page.title}
-        </Typography>
-        <ClassicLink path={page.classicPath} />
-      </Box>
+    <Box>
+      <TitleRow title={title} sub={page.product} actions={<ClassicLink path={page.classicPath} />} />
       <ClassicFrame entity>{page.element}</ClassicFrame>
     </Box>
   );
