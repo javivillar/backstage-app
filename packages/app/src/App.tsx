@@ -1,6 +1,6 @@
 
 import { Navigate, Route } from 'react-router-dom';
-import { apiDocsPlugin } from '@backstage/plugin-api-docs';
+import { apiDocsPlugin, EntityApiDefinitionCard } from '@backstage/plugin-api-docs';
 import {
   CatalogEntityPage,
   CatalogIndexPage,
@@ -239,7 +239,7 @@ const routes = (
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={catalogGraphPage} />
     {/* the cloud-style console: off unless console.enabled (plugins/console); the classic pages above do not change */}
-    <Route path="/console/*" element={<ConsolePage entityContent={consoleEntityPage} pages={consolePages} />} />
+    <Route path="/console/*" element={<ConsolePage entityContent={consoleEntityPage} pages={consolePages} apiDefinition={<EntityApiDefinitionCard />} />} />
   </FlatRoutes>
 );
 

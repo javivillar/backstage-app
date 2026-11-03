@@ -44,7 +44,7 @@ function useEntityFromRoute() {
  * /console/entity/:namespace/:kind/:name/*: the classic entity page (tabs and cards, passed in by the app) under the
  * header of the console. Links to pages the console also shows stay inside the console.
  */
-export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
+export const ConsoleEntityPage = ({ content, apiDefinition }: { content?: ReactNode; apiDefinition?: ReactNode }) => {
   const cfg = useConsoleConfig();
   const { loading, entity, error, refresh } = useEntityFromRoute();
   const { t } = useI18n();
@@ -52,7 +52,7 @@ export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
     <Box sx={{ display: 'grid', gap: 1.5 }}>
       {loading && <Progress />}
       {/* an API, a group or a system: the console's own page (no classic cards) */}
-      {!loading && entity && hasNativePage(entity) && <NativeEntityPage entity={entity} />}
+      {!loading && entity && hasNativePage(entity) && <NativeEntityPage entity={entity} apiDefinition={apiDefinition} />}
       {entity && !hasNativePage(entity) && (
         <Crumbs items={[[t('nav.portal'), '/console'], [choose([[classify(entity) === 'business', t('cat.businessApps')], [classify(entity) === 'service', t('cat.services')]], entity.kind), '/console'], [entity.metadata.title ?? entity.metadata.name]]} />
       )}
