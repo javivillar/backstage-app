@@ -2,59 +2,50 @@ import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
 import Switch from '@mui/material/Switch';
-import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
 import { useConsoleConfig } from '../config';
 import { certificateDays, type ClusterNetwork, identityHost, ISOLATION_TEXT, isolationTone, tlsText, useClusterNetwork, whiskerHost } from '../network';
 import { Badge } from './Badge';
 import { Flow, type FlowLane, TONES } from './Flow';
-import { rq } from './tokens';
+import { useRq } from '../theme/consoleTheme';
+import { useI18n } from '../i18n';
+import { Card } from './NamespaceSections';
+import { Pill, TitleRow } from './ui';
 
-const Section = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => (
-  <Paper variant="outlined" component="section" sx={{ borderRadius: 2, p: 2, display: 'grid', gap: 1.5 }}>
-    <Box>
-      <Typography variant="h6" component="h2" sx={{ fontSize: 17, fontWeight: 600 }}>
-        {title}
-      </Typography>
-      {sub && (
-        <Typography variant="body2" color="text.secondary">
-          {sub}
-        </Typography>
-      )}
-    </Box>
-    {children}
-  </Paper>
-);
+const Section = ({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) => <Card title={title} sub={sub}>{children}</Card>;
 
-const cell = { px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider', textAlign: 'left' as const, verticalAlign: 'top' as const, fontSize: 14 };
-export const Table = ({ head, rows }: { head: string[]; rows: ReactNode[][] }) => (
-  <Box sx={{ overflowX: 'auto' }}>
-    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: Math.min(560, head.length * 120) }}>
-      <thead>
-        <tr>
-          {head.map(h => (
-            <Box component="th" key={h} sx={{ ...cell, fontWeight: 600, fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>
-              {h}
-            </Box>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i}>
-            {r.map((c, j) => (
-              <Box component="td" key={j} sx={cell}>
-                {c}
+/** A plain table of the console: 12 px muted headers, light rules between rows, its own horizontal scroll. */
+export const Table = ({ head, rows }: { head: string[]; rows: ReactNode[][] }) => {
+  const t = useRq();
+  const cell = { px: 1.5, py: 1.25, textAlign: 'left' as const, verticalAlign: 'top' as const };
+  return (
+    <Box sx={{ overflowX: 'auto' }}>
+      <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', minWidth: Math.min(560, head.length * 120), fontVariantNumeric: 'tabular-nums', '& tbody tr:hover td': { bgcolor: t.raised } }}>
+        <thead>
+          <tr>
+            {head.map(h => (
+              <Box component="th" key={h} sx={{ ...cell, py: 1, fontWeight: 500, fontSize: 12, lineHeight: '16px', color: 'text.secondary', whiteSpace: 'nowrap', borderBottom: `1px solid ${t.border}` }}>
+                {h}
               </Box>
             ))}
           </tr>
-        ))}
-      </tbody>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <Box component="td" key={j} sx={{ ...cell, borderTop: i ? `1px solid ${t.rule}` : 0 }}>
+                  {c}
+                </Box>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 export const tone = (t: keyof typeof TONES) => TONES[t];
 
@@ -111,39 +102,46 @@ export const NetworkPage = () => {
   const [tab, setTab] = useState<'map' | 'hosts' | 'isolation'>('map');
   const [system, setSystem] = useState(false);
   const whisker = data && whiskerHost(data);
+  const { t } = useI18n();
+  const rqT = useRq();
   const tabs: Array<[typeof tab, string]> = [
-    ['map', 'Map'],
-    ['hosts', 'Published hosts'],
-    ['isolation', 'Isolation'],
+    ['map', t('net.map')],
+    ['hosts', t('net.hosts')],
+    ['isolation', t('net.isolation')],
   ];
+  const apps = data ? data.namespaces.filter(x => !x.system) : [];
+  const open = apps.filter(x => x.isolation === 'open').length;
+  const passThrough = data ? data.segments.filter(x => !x.enforced).length : 0;
   return (
     <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-            Network of {cfg.cluster.id}
-          </Typography>
-          <Typography color="text.secondary">
-            {data ? `read from Kubernetes and Calico at ${new Date(data.generatedAt).toLocaleTimeString()}` : 'read from Kubernetes and Calico'}
-          </Typography>
-        </Box>
-        {whisker && (
-          <a href={`https://${whisker}`} target="_blank" rel="noreferrer" style={{ color: rq.primary, fontWeight: 500 }}>
-            Live flows in Calico Whisker
-          </a>
-        )}
-        <Button variant="text" onClick={reload} disabled={loading} sx={{ textTransform: 'none' }}>
-          Refresh
-        </Button>
-      </Box>
-      <Box component="nav" aria-label="Network views" sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
+      <TitleRow
+        crumbs={[[cfg.cluster.id, '/console/cluster'], [t('net.crumb')]]}
+        title={t('net.title', { cluster: cfg.cluster.id })}
+        pills={data && <Pill tone={open ? 'warn' : 'pos'}>{t('net.open', { n: open })}</Pill>}
+        sub={data ? t('net.readAt', { time: new Date(data.generatedAt).toLocaleTimeString() }) : t('net.read')}
+        finding={data && (passThrough ? t('net.finding.pass', { n: passThrough, open }) : t('net.finding.ok'))}
+        findingTone={passThrough || open ? 'warn' : 'pos'}
+        actions={
+          <>
+            <Button variant="text" onClick={reload} disabled={loading}>
+              {t('cluster.refresh')}
+            </Button>
+            {whisker && (
+              <Button variant="contained" href={`https://${whisker}`} target="_blank" rel="noreferrer">
+                Live flows in Calico Whisker
+              </Button>
+            )}
+          </>
+        }
+      />
+      <Box component="nav" aria-label="Network views" sx={{ display: 'flex', gap: 0.5, borderBottom: `1px solid ${rqT.border}`, flexWrap: 'wrap' }}>
         {tabs.map(([id, label]) => (
           <Button
             key={id}
             variant="text"
             onClick={() => setTab(id)}
             aria-current={tab === id ? 'page' : undefined}
-            sx={{ textTransform: 'none', borderRadius: 0, borderBottom: 2, borderColor: tab === id ? rq.primary : 'transparent', color: tab === id ? rq.primary : 'text.primary', fontWeight: tab === id ? 600 : 400 }}
+            sx={{ borderRadius: 0, borderBottom: 2, borderColor: tab === id ? rqT.ink : 'transparent', color: tab === id ? 'text.primary' : 'text.secondary', fontWeight: tab === id ? 500 : 400, '&:hover': { bgcolor: 'transparent', color: 'text.primary' } }}
           >
             {label}
           </Button>
@@ -162,7 +160,7 @@ export const NetworkPage = () => {
           <Table
             head={['Host', 'Namespace', 'Service', 'TLS']}
             rows={data.hosts.map(h => [
-              <a href={`https://${h.host}`} target="_blank" rel="noreferrer" style={{ color: rq.primary }}>
+              <a href={`https://${h.host}`} target="_blank" rel="noreferrer" style={{ color: rqT.data }}>
                 {h.host}
               </a>,
               h.namespace,

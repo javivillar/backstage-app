@@ -118,7 +118,8 @@ describe('ConsoleRouter', () => {
       </TestApiProvider>,
       { routeEntries: ['/console/cluster'] },
     );
-    expect(await screen.findByRole('note', { name: 'Layer: Kubernetes' })).toBeInTheDocument();
+    // the logo names the console of the layer, and switches between the three
+    expect(await screen.findByRole('button', { name: 'Switch console' })).toHaveTextContent('Cluster');
     expect(screen.getByRole('link', { name: 'Open the portal' })).toBeInTheDocument();
     // the menu of the cluster layer only
     expect(screen.queryByRole('link', { name: 'Virtual machines' })).not.toBeInTheDocument();

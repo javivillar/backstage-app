@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { classify, consoleEntityPath } from './classify';
 import { rq } from './tokens';
+import { useI18n } from '../i18n';
 
 const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels'];
 const KINDS = ['component', 'api', 'system', 'resource', 'group'];
@@ -32,6 +33,7 @@ export function findMatches(entities: Entity[], text: string, max = 8): Entity[]
 export const QuickFind = () => {
   const catalog = useApi(catalogApiRef);
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [entities, setEntities] = useState<Entity[] | undefined>();
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -52,12 +54,12 @@ export const QuickFind = () => {
     navigate(consoleEntityPath(e));
   };
   return (
-    <Box sx={{ position: 'relative', minWidth: { xs: '100%', sm: 260 }, flex: { xs: '1 1 100%', sm: '0 1 320px' } }}>
+    <Box sx={{ position: 'relative', width: '100%', maxWidth: 440 }}>
       <Box
         component="input"
         type="search"
-        aria-label="Find in the catalog"
-        placeholder="Find an application, service, API…"
+        aria-label={t('shell.findLabel')}
+        placeholder={t('shell.find')}
         value={text}
         onFocus={() => {
           load();
@@ -78,15 +80,17 @@ export const QuickFind = () => {
         sx={{
           width: '100%',
           boxSizing: 'border-box',
-          bgcolor: 'rgba(255,255,255,0.12)',
-          color: '#fff',
-          border: '1px solid rgba(255,255,255,0.3)',
-          borderRadius: '8px',
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          border: '1px solid',
+          borderColor: '#7d8895',
+          borderRadius: '6px',
           px: 1.5,
-          py: 0.75,
+          height: 36,
+          font: 'inherit',
           fontSize: 14,
-          '&::placeholder': { color: 'rgba(255,255,255,0.75)' },
-          '&:focus': { outline: '2px solid #FF9800', outlineOffset: 1 },
+          '&::placeholder': { color: 'text.secondary' },
+          '&:focus': { outline: 0, borderColor: '#0c4595', boxShadow: '0 0 0 1px #0c4595' },
         }}
       />
       {open && text.trim() && (
@@ -96,13 +100,13 @@ export const QuickFind = () => {
           aria-label="Matches"
           sx={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1300, m: 0, p: 0.5, listStyle: 'none', bgcolor: 'background.paper', color: 'text.primary', borderRadius: '8px', boxShadow: 6, border: 1, borderColor: 'divider' }}
         >
-          {!entities && <Box component="li" sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: 14 }}>Reading the catalog…</Box>}
-          {entities && matches.length === 0 && <Box component="li" sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: 14 }}>Nothing matches.</Box>}
+          {!entities && <Box component="li" sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: 14 }}>{t('shell.reading')}</Box>}
+          {entities && matches.length === 0 && <Box component="li" sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: 14 }}>{t('shell.nothing')}</Box>}
           {matches.map((e, i) => {
             const k = classify(e);
             let what = e.kind;
-            if (k === 'business') what = 'Business application';
-            else if (k === 'service') what = 'Refresquito service';
+            if (k === 'business') what = t('shell.business');
+            else if (k === 'service') what = t('shell.service');
             return (
               <Box component="li" key={stringifyEntityRef(e)} role="option" aria-selected={i === active}>
                 <Box

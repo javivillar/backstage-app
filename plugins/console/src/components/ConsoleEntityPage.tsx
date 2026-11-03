@@ -1,5 +1,5 @@
 import type { Entity } from '@backstage/catalog-model';
-import { Link, Progress } from '@backstage/core-components';
+import { Progress } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
 import { AsyncEntityProvider, catalogApiRef } from '@backstage/plugin-catalog-react';
 import Box from '@mui/material/Box';
@@ -11,6 +11,8 @@ import { ClassicFrame } from './ClassicFrame';
 import { ServiceDataProvider } from './ServiceData';
 import { ServiceHeader } from './ServiceViews';
 import { classify, entityPath } from './classify';
+import { useI18n } from '../i18n';
+import { Crumbs, choose } from './ui';
 
 type State = { loading: boolean; entity?: Entity; error?: Error };
 
@@ -44,18 +46,17 @@ function useEntityFromRoute() {
 export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
   const cfg = useConsoleConfig();
   const { loading, entity, error, refresh } = useEntityFromRoute();
+  const { t } = useI18n();
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
+    <Box sx={{ display: 'grid', gap: 1.5 }}>
       {loading && <Progress />}
       {entity && (
-        <Typography variant="body2" color="text.secondary">
-          <Link to="/console">Portal</Link> / {classify(entity) === 'business' ? 'Business applications' : entity.kind} / {entity.metadata.title ?? entity.metadata.name}
-        </Typography>
+        <Crumbs items={[[t('nav.portal'), '/console'], [choose([[classify(entity) === 'business', t('cat.businessApps')], [classify(entity) === 'service', t('cat.services')]], entity.kind), '/console'], [entity.metadata.title ?? entity.metadata.name]]} />
       )}
       {!content && entity && (
         <Typography color="text.secondary">
-          This portal does not pass the entity cards to the console:{' '}
-          <a href={classicUrl(cfg, entityPath(entity))}>open the classic page</a>.
+          {t('ent.noCards')}{' '}
+          <a href={classicUrl(cfg, entityPath(entity))}>{t('ent.openClassic')}</a>.
         </Typography>
       )}
       {content && !loading && entity && (

@@ -13,6 +13,8 @@ import { Flow, TONES } from './Flow';
 import { ReconcileCard, stepTone } from './InfraPages';
 import { Card } from './NamespaceSections';
 import { ConfirmBar, ResultNote, useChange } from './Requests';
+import { useI18n } from '../i18n';
+import { TitleRow, choose } from './ui';
 
 const ROLES = ['master', 'worker', 'storage'] as const;
 
@@ -48,19 +50,21 @@ export const ClusterScalePage = () => {
   const changed = workers !== now.worker || storage !== now.storage || masters !== now.master;
   const step = reconcileStep(view?.reconcile, target.zone, target.program);
   const title = params.zone ? `${target.zone}/${target.program}` : cfg.cluster.id;
+  const { t } = useI18n();
   const scale = () =>
     run(
       () => post('/infra/clusters/scale', { zone: zone!.name, program: prog!.name, workers, storage, ...(masters !== now.master ? { masters } : {}) }),
       () => `Committed: ${masters} masters, ${workers} workers and ${storage} storage nodes. The host scales the cluster within 5 minutes; new nodes join in about 10.`,
     );
   return (
-    <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1100 }}>
-      <Box>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-          Scale cluster {title}
-        </Typography>
-        <Typography color="text.secondary">Masters, workers and storage nodes of this OneKE cluster. The change is committed to main directly (no review) and the host applies it.</Typography>
-      </Box>
+    <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
+      <TitleRow
+        crumbs={params.zone ? [[t('nav.platform'), '/console/infrastructure/platform'], [t('nav.k8sClusters'), '/console/clusters'], [title]] : [[cfg.cluster.id, '/console/cluster'], [t('nav.scale')]]}
+        title={t('scale.title', { cluster: title })}
+        sub={t('scale.sub')}
+        finding={choose([[!cluster || typeof free !== 'number', undefined], [more > (free ?? 0), t('scale.noRoom', { need: Math.round(more / 1024), free: Math.round((free ?? 0) / 1024) })]], t('scale.room', { free: Math.round((free ?? 0) / 1024) }))}
+        findingTone={typeof free === 'number' && more > free ? 'neg' : 'pos'}
+      />
       {loading && !view && <Progress />}
       {error && <WarningPanel title="The cluster could not be read" message={error} />}
       {view && !cluster && <WarningPanel severity="info" title="No cluster published for this programme" message={`The host publishes no OneKE cluster for ${target.zone || '?'}/${target.program || '?'}.`} />}
@@ -90,7 +94,7 @@ export const ClusterScalePage = () => {
               <Typography variant="body2" color={typeof free === 'number' && more > free ? 'error' : 'text.secondary'} sx={{ alignSelf: 'center' }}>
                 New nodes need {Math.round(more / 1024)} GB · {typeof free === 'number' ? `${Math.round(free / 1024)} GB free` : 'free memory unknown'}
               </Typography>
-              <Button type="submit" variant="contained" disabled={busy || !infra.data?.allowed || !changed || storage < now.storage || masters < now.master || (typeof free === 'number' && more > free)} sx={{ textTransform: 'none', justifySelf: 'start' }}>
+              <Button type="submit" variant="contained" disabled={busy || !infra.data?.allowed || !changed || storage < now.storage || masters < now.master || (typeof free === 'number' && more > free)} sx={{ justifySelf: 'start' }}>
                 Scale
               </Button>
             </Box>

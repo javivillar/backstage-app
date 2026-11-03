@@ -13,20 +13,21 @@ import { Table } from './NetworkPage';
 import { ConfirmBar, RequestsTable, ResultNote, useChange } from './Requests';
 import { OpsActions } from './OpsActions';
 import { vmRuns } from './ZonePages';
+import { useRq } from '../theme/consoleTheme';
+import { useI18n } from '../i18n';
+import { Id, Kpis, TitleRow, choose } from './ui';
+import { ActionsMenu } from './ui-infra';
 
 
-const Frame = ({ title, sub, back, children }: { title: string; sub?: ReactNode; back: { to: string; label: string }; children: ReactNode }) => (
-  <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
-    <Box>
-      <Link to={back.to}>← {back.label}</Link>
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mt: 0.5 }}>
-        {title}
-      </Typography>
-      {sub && <Typography color="text.secondary" component="div">{sub}</Typography>}
+const Frame = ({ title, sub, back, children, pills, finding, findingTone, actions }: { title: string; sub?: ReactNode; back: { to: string; label: string }; children: ReactNode; pills?: ReactNode; finding?: ReactNode; findingTone?: 'pos' | 'warn' | 'neg'; actions?: ReactNode }) => {
+  const { t } = useI18n();
+  return (
+    <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
+      <TitleRow crumbs={[[t('nav.platform'), '/console/infrastructure/platform'], ...(back.to === '/console/infrastructure/platform' ? [] : [[back.label, back.to] as [string, string]]), [title]]} title={title.includes(' ') ? title : <Id>{title}</Id>} pills={pills} sub={sub} finding={finding} findingTone={findingTone} actions={actions} />
+      {children}
     </Box>
-    {children}
-  </Box>
-);
+  );
+};
 
 const Facts = ({ items }: { items: Array<[string, ReactNode]> }) => (
   <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: 1.5, m: 0 }}>
@@ -89,6 +90,14 @@ export const ProgrammePage = () => {
       )}
       {prog && (
         <>
+          <Kpis
+            items={[
+              { label: 'VMs', value: vms.length, note: `${vms.filter(v => vmRuns(v.state)).length} running` },
+              { label: 'Networks', value: prog.networks.length, note: prog.networks.map(n => n.role).filter(Boolean).join(' · ') },
+              { label: 'Security groups', value: prog.securityGroups.length },
+              { label: 'Kubernetes', value: prog.cluster ? '1 cluster' : 'none', note: prog.cluster ? `${prog.cluster.name} · ${prog.cluster.state}` : undefined },
+            ]}
+          />
           <Card title="Networks" sub="Created by the host from network.toml: the public network (its cluster VIP, published services) and the private one (nodes and VMs).">
             <Table
               head={['Network', 'Role', 'Subnet', 'VLAN', 'Leases', 'State']}
@@ -131,7 +140,7 @@ export const ProgrammePage = () => {
                   <b>{prog.cluster.name}</b> · {Object.entries(prog.cluster.roles ?? {}).map(([r, n]) => `${n} ${r}`).join(' · ')}
                   {prog.cluster.vip ? ` · VIP ${prog.cluster.vip}` : ''}
                 </Typography>
-                <Button component={Link} to={`/console/infrastructure/clusters/${zoneName}/${program}`} sx={{ textTransform: 'none' }}>
+                <Button component={Link} to={`/console/infrastructure/clusters/${zoneName}/${program}`}>
                   Scale
                 </Button>
                 <OpsActions target={{ zone: zoneName, program }} allowed={!!infra.data?.allowed} own={own} results={view?.reconcile?.actions} onDone={reload} />
@@ -157,7 +166,7 @@ export const ProgrammePage = () => {
           </Card>
           <Card title="Remove the segregation" sub="A pull request removes it from network.toml; once merged, the host destroys its networks, security groups, group and VDC. Only a programme without cluster and VMs, and never the one of this console.">
             <Box>
-              <Button variant="outlined" color="error" disabled={!removable || busy} onClick={() => setConfirm(true)} sx={{ textTransform: 'none' }}>
+              <Button variant="outlined" color="error" disabled={!removable || busy} onClick={() => setConfirm(true)}>
                 Remove {id}
               </Button>
             </Box>
@@ -206,26 +215,29 @@ const since = (iso?: string) => {
 };
 
 /** A usage tile: what it is, the figure now and, when known, how full it is. */
-const Meter = ({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) => (
-  <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 0.5, minWidth: 0 }}>
-    <Typography variant="caption" color="text.secondary">
-      {label}
-    </Typography>
-    <Typography sx={{ fontSize: 20, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-      {value}{' '}
-      {sub && (
-        <Typography component="span" variant="body2" color="text.secondary">
-          {sub}
-        </Typography>
-      )}
-    </Typography>
-    {pct !== undefined && (
-      <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'action.hover', overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, bgcolor: pct > 85 ? TONES.warn.fg : 'primary.main' }} />
+const Meter = ({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) => {
+  const rqT = useRq();
+  return (
+    <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', px: 2, py: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 0.5, minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <Box sx={{ fontSize: 22, lineHeight: '28px', fontVariantNumeric: 'tabular-nums' }}>
+        {value}{' '}
+        {sub && (
+          <Typography component="span" variant="body2" color="text.secondary">
+            {sub}
+          </Typography>
+        )}
       </Box>
-    )}
-  </Box>
-);
+      {pct !== undefined && (
+        <Box sx={{ height: 6, borderRadius: 3, bgcolor: rqT.rule, overflow: 'hidden' }}>
+          <Box sx={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, bgcolor: pct > 85 ? rqT.negative : rqT.data }} />
+        </Box>
+      )}
+    </Box>
+  );
+};
 
 /** How OpenNebula names the reason a VM left a host (HISTORY ACTION). */
 const HISTORY_ACTIONS: Record<string, string> = { '0': 'ran', '1': 'migrated', '2': 'live migrated', '6': 'stopped', '9': 'powered off', '11': 'rebooted', '20': 'powered off', '21': 'resumed', '23': 'rebooted' };
@@ -253,7 +265,7 @@ export const VmDetailPage = () => {
   const ip = vm?.ips[0] ?? (request?.state?.outputs?.ip ? String(request.state.outputs.ip) : '');
   const bastion = prog?.cluster?.vip;
   const fqdn = view?.domain && progName ? `${name}.${zoneName}.${progName}.${view.domain}` : '';
-  const sg = prog?.securityGroups.find(g => g.role === 'private') ?? prog?.securityGroups.find(g => (vm?.nics ?? []).some(n => n.securityGroups?.split(',').length));
+  const sg = prog?.securityGroups.find(g => g.role === 'private') ?? prog?.securityGroups.find(() => (vm?.nics ?? []).some(n => n.securityGroups?.split(',').length));
   const disk = vm?.disks?.[0];
   const mine = (req.data?.vms ?? []).filter(v => v.zone === zoneName && v.program === progName);
   const used = { vms: mine.length, cpu: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.cpu ?? 0), 0), mem: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.memory_mb ?? 0), 0) };
@@ -274,15 +286,31 @@ export const VmDetailPage = () => {
     <Frame
       title={name}
       back={programPath ? { to: programPath, label: `${zoneName}/${progName}` } : { to: '/console/infrastructure/vms', label: 'Virtual machines' }}
-      sub={
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+      pills={
+        <>
           {vm && <Badge label={pending ? 'Waiting for room' : vm.state} {...vmTone(pending ? 'PENDING' : vm.state)} />}
           {!vm && st && <Badge label={st.label} {...TONES[st.tone]} />}
           {(vm?.console || request) && <Badge label="console VM" {...TONES.info} />}
-          <span>
-            {[request ? `${request.image} · ${request.size}` : '', progName ? `programme ${zoneName}/${progName}` : '', vm ? `OpenNebula ID ${vm.id}` : ''].filter(Boolean).join(' · ')}
-          </span>
-        </Box>
+        </>
+      }
+      sub={[request ? `${request.image} · ${request.size}` : '', progName ? `programme ${zoneName}/${progName}` : '', vm ? `OpenNebula ID ${vm.id}` : ''].filter(Boolean).join(' · ')}
+      finding={choose<string | undefined>([[pending, 'Waiting for room in the hosts: it starts by itself when there is room.'], [st && st.tone === 'bad', st?.detail]], undefined)}
+      findingTone={pending ? 'warn' : 'neg'}
+      actions={
+        (vm || request) && (
+          <>
+            {request && (
+              <ActionsMenu>
+                <OpsActions target={{ zone: request.zone, program: request.program, vm: request.name }} allowed={!!req.data?.allowed} results={view?.reconcile?.actions} onDone={reload} />
+              </ActionsMenu>
+            )}
+            {ssh && (
+              <Button variant="contained" onClick={() => copy(ssh)}>
+                Copy SSH command
+              </Button>
+            )}
+          </>
+        )
       }
     >
       {(loading || req.loading) && !view && <Progress />}
@@ -290,16 +318,6 @@ export const VmDetailPage = () => {
       {view && !vm && !request && <WarningPanel severity="info" title="Not found" message={`There is no VM ${name} in the topology the host publishes (every 5 minutes).`} />}
       {(vm || request) && (
         <>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-            {ssh && (
-              <Button size="small" variant="outlined" onClick={() => copy(ssh)} sx={{ textTransform: 'none' }}>
-                Copy SSH command
-              </Button>
-            )}
-            {request && (
-              <OpsActions target={{ zone: request.zone, program: request.program, vm: request.name }} allowed={!!req.data?.allowed} results={view?.reconcile?.actions} onDone={reload} />
-            )}
-          </Box>
           <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))' }}>
             <Meter label={`CPU · ${vm?.vcpu ?? size?.cpu ?? '?'} vCPU${vm?.cpuReserved ? ` (${vm.cpuReserved} reserved)` : ''}`} value={vm?.cpuPct !== undefined ? `${vm.cpuPct} %` : '—'} sub="now" pct={vm?.cpuPct} />
             <Meter
@@ -327,11 +345,11 @@ export const VmDetailPage = () => {
               </Card>
               <Card title="How to reach it" sub={bastion ? 'No public address: through the VNF of the programme (its bastion), with your SSH key in OpenNebula.' : 'No public address and no cluster VNF in this programme: from the host, through the zone router.'}>
                 {ssh ? (
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1, p: 1, fontFamily: 'monospace', fontSize: 13, overflowX: 'auto' }}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', bgcolor: 'action.hover', borderRadius: '6px', p: 1, fontFamily: '"IBM Plex Mono", monospace', fontSize: 13, overflowX: 'auto' }}>
                     <Box component="span" sx={{ flex: 1, whiteSpace: 'nowrap' }}>
                       {ssh}
                     </Box>
-                    <Button size="small" onClick={() => copy(ssh)} sx={{ textTransform: 'none', flexShrink: 0 }}>
+                    <Button size="small" onClick={() => copy(ssh)} sx={{ flexShrink: 0 }}>
                       Copy
                     </Button>
                   </Box>
@@ -349,7 +367,7 @@ export const VmDetailPage = () => {
                     <Typography variant="body2" color="text.secondary">
                       What {sg.name} lets through:
                     </Typography>
-                    <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-line', fontFamily: 'monospace', fontSize: 12.5 }}>
+                    <Typography variant="body2" component="div" sx={{ whiteSpace: 'pre-line', fontFamily: '"IBM Plex Mono", monospace', fontSize: 12 }}>
                       {sg.rules.join('\n') || '—'}
                     </Typography>
                   </>
@@ -399,13 +417,13 @@ export const VmDetailPage = () => {
                     ]}
                   />
                   {st?.tone === 'bad' && st.detail && (
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: '"IBM Plex Mono", monospace', fontSize: 12, bgcolor: 'action.hover', p: 1.25, borderRadius: '6px' }}>
                       {st.detail}
                     </Typography>
                   )}
                   {req.data?.allowed && (
                     <Box>
-                      <Button variant="outlined" color="error" disabled={busy} onClick={() => setConfirm(true)} sx={{ textTransform: 'none' }}>
+                      <Button variant="outlined" color="error" disabled={busy} onClick={() => setConfirm(true)}>
                         Delete this VM
                       </Button>
                     </Box>

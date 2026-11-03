@@ -4,11 +4,11 @@ import { Fragment } from 'react';
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'info' | 'off';
 export const TONES: Record<Tone, { bg: string; fg: string }> = {
-  ok: { bg: '#E3F4E8', fg: '#1E6B34' },
-  warn: { bg: '#FFF0DD', fg: '#8A4300' },
-  bad: { bg: '#FDECEA', fg: '#B3261E' },
-  info: { bg: '#E5F0FC', fg: '#0B5CAD' },
-  off: { bg: '#EEF1F4', fg: '#5A6878' },
+  ok: { bg: '#dcfae5', fg: '#04250e' },
+  warn: { bg: '#fff6e0', fg: '#7a3a06' },
+  bad: { bg: '#ffedea', fg: '#831c1e' },
+  info: { bg: '#d6e3f3', fg: '#0c4595' },
+  off: { bg: '#e9edf1', fg: '#303841' },
 };
 
 export type FlowNode = {

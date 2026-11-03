@@ -2,7 +2,6 @@ import { Progress, WarningPanel } from '@backstage/core-components';
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useMemo, useState } from 'react';
@@ -11,6 +10,8 @@ import { ClassicLink } from './ClassicLink';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
+import { useI18n } from '../i18n';
+import { Id, Kpis, Pill, TitleRow, choose, type Tone } from './ui';
 
 /** GET /api/sbom/images: the curated images of Harbor (common, framework-*) a system may use. */
 type Tag = {
@@ -41,6 +42,8 @@ const findingsTone = (s: { critical: number; high: number }) => {
   if (s.critical) return TONES.bad;
   return s.high ? TONES.warn : TONES.ok;
 };
+/** The steps of the supply chain every image should carry: a missing one shows in red. */
+const CHAIN = ['provenance', 'sbom-cyclonedx', 'sbom-spdx', 'vex'];
 const stateTone = { approved: TONES.ok, deprecated: TONES.warn, retired: TONES.bad, unknown: TONES.off };
 
 /** Cluster layer › Images, in the console: what a system may run, its state, end of life, findings and supply chain. */
@@ -70,58 +73,61 @@ export const ImageCatalogPage = () => {
   const shown = rows
     .filter(r => filter === 'all' || (filter === 'problems' ? problem(r) : r.audience === filter))
     .filter(r => !t || `${r.repository}:${r.tag} ${r.title} ${r.category}`.toLowerCase().includes(t));
-  const kpi = (label: string, value: number, tone?: keyof typeof TONES) => (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: 26, fontWeight: 600, color: tone && value ? TONES[tone].fg : undefined }}>{value}</Typography>
-    </Paper>
-  );
+  const { t: tr } = useI18n();
   const filters: Array<[typeof filter, string]> = [
-    ['all', 'All'],
-    ['problems', 'Needs attention'],
-    ['apps', 'For applications'],
-    ['platform', 'Platform'],
+    ['all', tr('img.all')],
+    ['problems', tr('img.problems')],
+    ['apps', tr('img.apps')],
+    ['platform', tr('img.platform')],
   ];
+  const critical = rows.filter(r => (r.scan?.critical ?? 0) > 0).length;
+  const eolSoon = rows.filter(r => (eolDays(r.eol) ?? 999) < 90).length;
   return (
     <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-            Image catalog
-          </Typography>
-          <Typography color="text.secondary">The curated images of Harbor a system may use: scanned, signed, with their SBOM. Nothing is pulled from the internet at run time.</Typography>
-        </Box>
-        {state.data?.harbor && (
-          <a href={state.data.harbor} target="_blank" rel="noreferrer" style={{ fontWeight: 500 }}>
-            Open Harbor
-          </a>
-        )}
-        <ClassicLink path="/images">Details in the classic portal</ClassicLink>
-      </Box>
+      <TitleRow
+        crumbs={[[tr('cluster.crumb'), '/console/cluster'], [tr('page.images')]]}
+        title={tr('img.title')}
+        pills={state.data && <Pill plain>{tr('img.approvedN', { n: rows.filter(r => r.state === 'approved').length })}</Pill>}
+        sub={tr('img.sub')}
+        finding={state.data && (critical || eolSoon ? tr('img.finding', { c: critical, e: eolSoon }) : tr('img.findingOk'))}
+        findingTone={choose<Tone>([[critical, 'neg'], [eolSoon, 'warn']], 'pos')}
+        actions={
+          <>
+            <ClassicLink path="/images">{tr('cisn.classic')}</ClassicLink>
+            {state.data?.harbor && (
+              <Button variant="contained" href={state.data.harbor} target="_blank" rel="noreferrer">
+                {tr('img.harbor')}
+              </Button>
+            )}
+          </>
+        }
+      />
       {state.loading && <Progress />}
       {state.error && <WarningPanel title="The image catalog could not be read" message={state.error} />}
       {state.data?.errors?.length ? <WarningPanel severity="info" title="Part of the catalog could not be read" message={state.data.errors.join(' · ')} /> : null}
       {state.data && (
         <>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            {kpi('Approved', rows.filter(r => r.state === 'approved').length)}
-            {kpi('Deprecated or retired', rows.filter(r => r.state === 'deprecated' || r.state === 'retired').length, 'warn')}
-            {kpi('With critical findings', rows.filter(r => (r.scan?.critical ?? 0) > 0).length, 'bad')}
-            {kpi('End of life in < 90 days', rows.filter(r => (eolDays(r.eol) ?? 999) < 90).length, 'warn')}
-          </Box>
-          <Card title={`${shown.length} images`}>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-              <TextField size="small" label="Find an image" value={text} onChange={e => setText(e.target.value)} sx={{ minWidth: 240 }} />
-              {filters.map(([id, label]) => (
-                <Button key={id} variant="text" onClick={() => setFilter(id)} aria-pressed={filter === id} sx={{ textTransform: 'none', border: '1px solid', borderColor: filter === id ? 'primary.main' : 'divider' }}>
-                  {label}
-                </Button>
-              ))}
+          <Kpis
+            items={[
+              { label: tr('img.approved'), value: rows.filter(r => r.state === 'approved').length },
+              { label: tr('img.deprecated'), value: rows.filter(r => r.state === 'deprecated' || r.state === 'retired').length },
+              { label: tr('img.critical'), value: critical, tone: critical ? 'bad' : undefined },
+              { label: tr('img.eol'), value: eolSoon, tone: eolSoon ? 'bad' : undefined },
+            ]}
+          />
+          <Card title={tr('img.count', { n: shown.length })}>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TextField size="small" label={tr('img.find')} value={text} onChange={e => setText(e.target.value)} sx={{ minWidth: 240 }} />
+              <Box role="group" aria-label="Filter" sx={{ display: 'inline-flex', p: '2px', gap: '2px', borderRadius: '6px', bgcolor: 'action.hover', border: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
+                {filters.map(([id, label]) => (
+                  <Button key={id} size="small" variant="text" onClick={() => setFilter(id)} aria-pressed={filter === id} sx={{ px: 1.5, height: 28, color: filter === id ? 'text.primary' : 'text.secondary', bgcolor: filter === id ? 'background.paper' : 'transparent', boxShadow: filter === id ? 1 : 0 }}>
+                    {label}
+                  </Button>
+                ))}
+              </Box>
             </Box>
             <Table
-              head={['Image', 'Version', 'State', 'End of life', 'License', 'Findings', 'Supply chain']}
+              head={[tr('img.image'), tr('img.version'), tr('img.state'), tr('img.eolCol'), tr('img.license'), tr('img.findings'), tr('img.chain')]}
               rows={shown.map(r => {
                 const days = eolDays(r.eol);
                 let eolTone = TONES.off;
@@ -129,9 +135,9 @@ export const ImageCatalogPage = () => {
                 else if (days !== undefined && days < 90) eolTone = TONES.warn;
                 return [
                   <span>
-                    <b style={{ fontFamily: 'monospace', fontSize: 12, overflowWrap: 'anywhere' }}>
+                    <Id>
                       {r.repository}:{r.tag}
-                    </b>
+                    </Id>
                     <br />
                     <Typography component="span" variant="caption" color="text.secondary">
                       {r.category} · {r.audience}
@@ -149,10 +155,17 @@ export const ImageCatalogPage = () => {
                   r.eol ? <Badge label={r.eol} {...eolTone} /> : '—',
                   r.license || '—',
                   r.scan ? <Badge label={`${r.scan.critical} C · ${r.scan.high} H`} {...findingsTone(r.scan)} /> : '—',
-                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                    {r.sourceSignatureVerified && <Badge outlined label="signed" />}
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxWidth: 280 }}>
+                    {r.sourceSignatureVerified ? <Pill plain>signed</Pill> : <Pill tone="neg" plain>{tr('img.no', { what: 'signed' })}</Pill>}
                     {r.attestations.map(a => (
-                      <Badge key={a} outlined label={a} />
+                      <Pill key={a} plain>
+                        {a}
+                      </Pill>
+                    ))}
+                    {CHAIN.filter(c => !r.attestations.includes(c)).map(c => (
+                      <Pill key={c} tone="neg" plain>
+                        {tr('img.no', { what: c })}
+                      </Pill>
                     ))}
                   </Box>,
                 ];

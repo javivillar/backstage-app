@@ -12,8 +12,14 @@ import { type PropsWithChildren, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { classicUrl, useConsoleConfig } from '../config';
 import { type ConsoleClassicPage, classicPathForConsole, useConsolePages } from '../pages';
-import { type Layer, LAYER_HOME, LAYER_LOOK, layerOf } from '../layers';
-import { rq } from './tokens';
+import { type Layer, LAYER_HOME, layerOf } from '../layers';
+import { useRq } from '../theme/consoleTheme';
+import refresquitoIcon from '../assets/refresquito-icon.png';
+import IconButton from '@mui/material/IconButton';
+import MenuIcon from '@mui/icons-material/Menu';
+import ComputerIcon from '@mui/icons-material/Computer';
+import GridViewIcon from '@mui/icons-material/GridView';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 import { NAV_ICONS } from '../navIcons';
 import { usePortalLinks } from '../portalApps';
 import LaunchIcon from '@mui/icons-material/Launch';
@@ -22,8 +28,10 @@ import BadgeIcon from '@mui/icons-material/Badge';
 
 /** Icons of the applications of the Portal menu (console.portalApps[].icon). */
 const APP_ICONS: Record<string, typeof LaunchIcon> = { incidents: ReportProblemIcon, accreditation: BadgeIcon };
-import { Badge } from './Badge';
 import { QuickFind } from './QuickFind';
+import { ThemeToggle } from './ThemeToggle';
+import { LanguageSwitch } from './LanguageSwitch';
+import { useI18n } from '../i18n';
 
 const EMBED_KEY = 'rq-console-embedded';
 
@@ -49,91 +57,92 @@ export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] 
 
 type NavItem = { label: string; to: string; hint?: string; external?: boolean; icon?: string };
 
-const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => (
-  <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: 0.25, mb: 2 }}>
-    <Typography variant="overline" sx={{ px: 2, color: 'text.secondary', lineHeight: 2 }}>
-      {title}
-    </Typography>
-    {items.map(i => {
-      const on =
-        current === i.to ||
-        (!['/console', '/console/infrastructure', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
-        (i.to === '/console' && current.startsWith('/console/entity/'));
-      const Icon = (i.icon && APP_ICONS[i.icon]) || (i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')]);
-      const link = (
-        <Link
-          key={i.to}
-          to={i.to}
-          {...(i.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-          underline="none"
-          aria-current={on ? 'page' : undefined}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '7px 16px',
-            borderLeft: `3px solid ${on ? rq.blue : 'transparent'}`,
-            background: on ? 'rgba(26,141,255,0.10)' : 'transparent',
-            color: 'inherit',
-            fontWeight: on ? 600 : 400,
-          }}
-        >
-          {Icon && (
-            <Box component="span" aria-hidden sx={{ display: 'inline-flex', color: on ? rq.blue : 'text.secondary' }}>
-              <Icon fontSize="small" />
-            </Box>
-          )}
-          {i.label}
-        </Link>
-      );
-      return i.hint ? (
-        <Tooltip key={i.to} title={i.hint} placement="right" arrow>
-          {link}
-        </Tooltip>
-      ) : (
-        link
-      );
-    })}
-  </Box>
-);
+const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => {
+  const t = useRq();
+  return (
+    <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: '2px', mb: 2 }}>
+      <Typography component="h2" sx={{ px: 1.25, pb: 0.5, fontSize: 12, lineHeight: '16px', fontWeight: 500, color: 'text.secondary' }}>
+        {title}
+      </Typography>
+      {items.map(i => {
+        const on =
+          current === i.to ||
+          (!['/console', '/console/infrastructure', '/console/infrastructure/overview', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
+          (i.to === '/console' && current.startsWith('/console/entity/'));
+        const Icon = (i.icon && APP_ICONS[i.icon]) || (i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')]);
+        const link = (
+          <Link
+            key={i.to}
+            to={i.to}
+            {...(i.external ? { target: '_blank', rel: 'noreferrer' } : {})}
+            underline="none"
+            aria-current={on ? 'page' : undefined}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '7px 10px',
+              borderRadius: 6,
+              background: on ? t.active : 'transparent',
+              color: on ? t.ink : t.muted,
+              fontWeight: on ? 500 : 400,
+              fontSize: 14,
+              lineHeight: '20px',
+            }}
+          >
+            {Icon && (
+              <Box component="span" aria-hidden sx={{ display: 'inline-flex', color: on ? t.data : t.muted, '& svg': { fontSize: 18 } }}>
+                <Icon />
+              </Box>
+            )}
+            {i.label}
+          </Link>
+        );
+        return i.hint ? (
+          <Tooltip key={i.to} title={i.hint} placement="right" arrow>
+            {link}
+          </Tooltip>
+        ) : (
+          link
+        );
+      })}
+    </Box>
+  );
+};
 
-/** One step of the scope trail (Zone › Cluster › Portal): current one highlighted. */
-const Scope = ({ label, sub, on, onClick, menu }: { label: string; sub: string; on: boolean; onClick: (e: React.MouseEvent<HTMLElement>) => void; menu?: boolean }) => (
+/** One step of the scope trail (Zone / Cluster / Portal): the current layer is shaded. */
+const Scope = ({ label, sub, on, onClick, menu }: { label: string; sub?: string; on: boolean; onClick: (e: React.MouseEvent<HTMLElement>) => void; menu?: boolean }) => (
   <Button
     onClick={onClick}
     aria-current={on ? 'true' : undefined}
     aria-haspopup={menu ? 'menu' : undefined}
-    endIcon={menu ? <ExpandMore /> : undefined}
+    endIcon={menu ? <ExpandMore sx={{ fontSize: '16px !important' }} /> : undefined}
     variant="text"
     size="small"
-    sx={{
-      color: '#fff',
-      textTransform: 'none',
-      px: 1.25,
-      py: 0.5,
-      borderRadius: '8px',
-      border: '1px solid',
-      borderColor: on ? 'rgba(255,255,255,0.55)' : 'transparent',
-      bgcolor: on ? 'rgba(255,255,255,0.14)' : 'transparent',
-      display: 'flex',
-      gap: 0.75,
-      '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
-    }}
+    sx={{ color: 'text.secondary', px: 1, minWidth: 0, height: 32, gap: 0.5, bgcolor: on ? 'action.selected' : 'transparent', '& .MuiButton-endIcon': { ml: 0.25 } }}
   >
-    <span style={{ color: '#B9D3EA', fontSize: 12 }}>{sub}</span>
-    <span style={{ fontWeight: on ? 700 : 500 }}>{label}</span>
+    {sub && <span>{sub}</span>}
+    <Box component="span" sx={{ color: 'text.primary', fontWeight: 600 }}>
+      {label}
+    </Box>
   </Button>
 );
 
+const LAYER_KEY: Record<Layer, string> = { infra: 'shell.platform', cluster: 'shell.cluster', portal: 'shell.portal' };
+
 /**
- * The frame of the console: top bar with the scope trail (Zone › Cluster › Portal, the three administrators: IaaS,
- * cluster, portal of its services), a band that names the layer, and the menu of that layer only.
+ * The frame of the console: a top bar on the tinted frame (the logo switches between the three consoles, the scope
+ * trail Zone / Cluster / Portal picks where), the menu of the layer on the frame, and the page on a white sheet.
  */
 export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedded: boolean }>) => {
   const cfg = useConsoleConfig();
+  const t = useRq();
+  const { t: tr, has } = useI18n();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [consoles, setConsoles] = useState<HTMLElement | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   const current = pathname.replace(/\/+$/, '') || '/console';
   const own = cfg.cluster;
   // the global CSS of the classic portal restyles MUI buttons and chips; body.rq-console keeps the console out of it
@@ -141,146 +150,184 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     document.body.classList.add('rq-console');
     return () => document.body.classList.remove('rq-console');
   }, []);
+  useEffect(() => setNavOpen(false), [current]);
   const pages = useConsolePages();
   const portalLinks = usePortalLinks();
   const layer = layerOf(current, pages);
-  const look = LAYER_LOOK[layer];
-  const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: p.title, to: `/console/${p.id}`, hint: p.product }));
-  const zoneName = own.zone ? `Zone ${own.zone}` : 'Infrastructure';
+  const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: has(`page.${p.id}`) ? tr(`page.${p.id}`) : p.title, to: `/console/${p.id}`, hint: p.product }));
+  const zoneName = own.zone ? `${tr('shell.zone')} ${own.zone}` : tr('nav.infrastructure');
 
   const groups: Array<{ title: string; items: NavItem[] }> = [];
   if (layer === 'infra') {
     groups.push({
-      title: 'Platform',
+      title: tr('nav.platform'),
       items: [
-        { label: 'Zones and segregations', to: '/console/infrastructure/platform' },
-        { label: 'Marketplace', to: '/console/infrastructure/marketplace' },
+        { label: tr('nav.overview'), to: '/console/infrastructure/overview' },
+        { label: tr('nav.zonesSegregations'), to: '/console/infrastructure/platform' },
+        { label: tr('nav.k8sClusters'), to: '/console/clusters' },
+        { label: tr('nav.marketplace'), to: '/console/infrastructure/marketplace' },
       ],
     });
     groups.push({
       title: zoneName,
       items: [
-        { label: 'Overview', to: '/console/infrastructure' },
-        { label: 'Virtual machines', to: '/console/infrastructure/vms' },
-        { label: 'Networks', to: '/console/infrastructure/networks' },
-        { label: 'Security groups', to: '/console/infrastructure/security-groups' },
+        { label: tr('nav.infrastructure'), to: '/console/infrastructure' },
+        { label: tr('nav.vms'), to: '/console/infrastructure/vms' },
+        { label: tr('nav.networks'), to: '/console/infrastructure/networks' },
+        { label: tr('nav.securityGroups'), to: '/console/infrastructure/security-groups' },
       ],
     });
-    groups.push({ title: 'Kubernetes clusters', items: [{ label: `${own.id} (this one)`, to: '/console/cluster' }, { label: 'All clusters', to: '/console/clusters' }] });
   } else if (layer === 'cluster') {
     groups.push({
-      title: `Cluster ${own.id}`,
+      title: tr('nav.cluster', { cluster: own.id }),
       items: [
-        { label: 'Overview', to: '/console/cluster' },
-        { label: 'Scale', to: '/console/cluster/scale' },
-        { label: 'Network', to: '/console/network' },
-        { label: 'Applications', to: '/console/applications' },
-        { label: 'Storage', to: '/console/storage' },
+        { label: tr('nav.overview'), to: '/console/cluster' },
+        { label: tr('nav.applications'), to: '/console/applications' },
+        { label: tr('nav.network'), to: '/console/network' },
+        { label: tr('nav.scale'), to: '/console/cluster/scale' },
+        { label: tr('nav.storage'), to: '/console/storage' },
         ...navOf('cluster'),
-        { label: 'CIS Kubernetes cluster', to: '/console/cis-cluster' },
+        { label: tr('nav.cisCluster'), to: '/console/cis-cluster' },
       ],
     });
-    groups.push({ title: 'Its portal', items: [{ label: 'Open the portal', to: '/console' }] });
+    groups.push({ title: tr('nav.yourClusters'), items: [{ label: tr('nav.allYouAdminister'), to: '/console/your-clusters' }] });
+    groups.push({ title: zoneName, items: [{ label: tr('nav.infrastructure'), to: '/console/infrastructure' }] });
+    groups.push({ title: tr('nav.itsPortal'), items: [{ label: tr('nav.openPortal'), to: '/console' }] });
   } else {
-    groups.push({ title: 'Portal', items: [{ label: 'Catalogue', to: '/console', hint: 'Business applications and Refresquito services' }, ...navOf('portal')] });
+    groups.push({ title: tr('nav.portal'), items: [{ label: tr('nav.catalogue'), to: '/console', hint: tr('nav.catalogue.hint') }, ...navOf('portal')] });
     // the templates of a new application, opened in the console's own scaffolder (Portal › Create), not the classic one
     groups.push({
-      title: 'Development',
+      title: tr('nav.development'),
       items: [
-        { label: 'New Python application', to: '/console/development/python-framework-app', hint: 'Monolith: FastAPI + Angular (Python Framework)' },
-        { label: 'New Spring application', to: '/console/development/spring-framework-app', hint: 'Microservices: Spring Boot (Spring Framework)' },
+        { label: tr('nav.newPython'), to: '/console/development/python-framework-app', hint: tr('nav.newPython.hint') },
+        { label: tr('nav.newSpring'), to: '/console/development/spring-framework-app', hint: tr('nav.newSpring.hint') },
       ],
     });
     // the applications of the platform (Incidents, Accreditation) and the teams that resolve
     groups.push({
-      title: 'Support',
+      title: tr('nav.support'),
       items: [
         ...portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint, icon: l.icon })),
-        { label: 'Resolution groups', to: '/console/resolution-groups', hint: 'The teams that own and answer for each element' },
+        { label: tr('nav.resolutionGroups'), to: '/console/resolution-groups', hint: tr('nav.resolutionGroups.hint') },
       ],
     });
-    if (navOf('assistants').length) groups.push({ title: 'Assistants', items: navOf('assistants') });
+    if (navOf('assistants').length) groups.push({ title: tr('nav.assistants'), items: navOf('assistants') });
     if (navOf('managers').length)
       groups.push({
-        title: 'Manage',
-        items: [{ label: 'All services', to: '/console/manage' }, ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') }))],
+        title: tr('nav.manage'),
+        items: [{ label: tr('nav.allServices'), to: '/console/manage' }, ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') }))],
       });
   }
 
-  const band: Record<Layer, { text: string; next?: { label: string; to: string } }> = {
-    infra: { text: `${zoneName} · OpenNebula: hosts, VMs, networks, security groups and the Kubernetes clusters of its programmes; new segregations and clusters through pull requests.`, next: { label: `Enter cluster ${own.id}`, to: '/console/cluster' } },
-    cluster: { text: `Cluster ${own.id} · nodes (scale), network, applications, storage and hardening of this Kubernetes cluster.`, next: { label: 'Open its portal', to: '/console' } },
-    portal: { text: `Portal of ${own.id} · the business applications and Refresquito services that run in this cluster.` },
+  const CONSOLES: Array<{ layer: Layer; Icon: typeof ComputerIcon; what: string }> = [
+    { layer: 'infra', Icon: ComputerIcon, what: tr('shell.platform.what') },
+    { layer: 'cluster', Icon: GridViewIcon, what: tr('shell.cluster.what', { cluster: own.id }) },
+    { layer: 'portal', Icon: StorefrontIcon, what: tr('shell.portal.what') },
+  ];
+  const go = (to: string) => {
+    setMenu(null);
+    setConsoles(null);
+    navigate(to);
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+    <Box className="rq-console-root" sx={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: { xs: '1fr', md: '232px minmax(0, 1fr)' }, gridTemplateRows: 'auto 1fr', bgcolor: t.frame }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 1, gridColumn: { xs: '1', md: '1' } }}>
+        <Button
+          onClick={e => setConsoles(e.currentTarget)}
+          aria-haspopup="menu"
+          aria-label={tr('shell.switchConsole')}
+          endIcon={<ExpandMore sx={{ color: 'text.secondary' }} />}
+          sx={{ color: 'text.primary', px: 1, gap: 0.5, fontSize: 16, fontWeight: 600 }}
+        >
+          <Box component="img" src={refresquitoIcon} alt="" sx={{ width: 26, height: 26, borderRadius: '6px', mr: 0.75 }} />
+          Refresquito
+          <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary', fontSize: 14, ml: 0.5 }}>
+            {tr(LAYER_KEY[layer])}
+          </Box>
+        </Button>
+        <Box sx={{ ml: 'auto', display: { md: 'none' } }}>
+          <ThemeToggle />
+        </Box>
+        <IconButton aria-label={tr('shell.menu')} onClick={() => setNavOpen(o => !o)} aria-expanded={navOpen} sx={{ display: { md: 'none' } }}>
+          <MenuIcon />
+        </IconButton>
+      </Box>
+      <Menu anchorEl={consoles} open={!!consoles} onClose={() => setConsoles(null)} slotProps={{ paper: { sx: { minWidth: 300 } } }}>
+        {CONSOLES.map(c => (
+          <MenuItem key={c.layer} selected={layer === c.layer} onClick={() => go(LAYER_HOME[c.layer])} sx={{ gap: 1.25, py: 1, alignItems: 'flex-start' }}>
+            <Box component="span" sx={{ width: 28, height: 28, borderRadius: '6px', display: 'grid', placeItems: 'center', flex: 'none', bgcolor: layer === c.layer ? t.dataSoft : t.raised, color: layer === c.layer ? t.data : t.muted, '& svg': { fontSize: 18 } }}>
+              <c.Icon />
+            </Box>
+            <Box component="span" sx={{ display: 'grid' }}>
+              <span style={{ fontWeight: 500 }}>{tr(LAYER_KEY[c.layer])}</span>
+              <span style={{ fontSize: 12, color: t.muted }}>{c.what}</span>
+            </Box>
+          </MenuItem>
+        ))}
+      </Menu>
       {!embedded && (
-        <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, bgcolor: rq.navy, color: '#fff', flexWrap: 'wrap' }}>
-          <Link to="/console" underline="none" style={{ color: '#fff', fontWeight: 600, fontSize: 17 }}>
-            Refresquito Console
-          </Link>
-          <Badge label="beta" bg={rq.accent} fg="#14202E" />
-          <Box component="nav" aria-label="Scope" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            <Scope label={own.zone ?? 'zone'} sub="Zone" on={layer === 'infra'} onClick={() => navigate(LAYER_HOME.infra)} />
-            <Box component="span" aria-hidden sx={{ color: '#7FA6C9' }}>
-              ›
+        <Box component="header" sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1.5, pr: 2, py: 1, minWidth: 0 }}>
+          <Box component="nav" aria-label={tr('shell.scope')} sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 }}>
+            <Scope label={own.zone ?? 'zone'} sub={tr('shell.zone')} on={layer === 'infra'} onClick={() => navigate(LAYER_HOME.infra)} />
+            <Box component="span" aria-hidden sx={{ color: t.control, px: 0.25 }}>
+              /
             </Box>
-            <Scope label={own.id} sub="Cluster" on={layer === 'cluster'} menu onClick={e => setMenu(e.currentTarget)} />
-            <Box component="span" aria-hidden sx={{ color: '#7FA6C9' }}>
-              ›
+            <Scope label={own.id} sub={tr('shell.cluster')} on={layer === 'cluster'} menu onClick={e => setMenu(e.currentTarget)} />
+            <Box component="span" aria-hidden sx={{ color: t.control, px: 0.25 }}>
+              /
             </Box>
-            <Scope label="Portal" sub="" on={layer === 'portal'} onClick={() => navigate(LAYER_HOME.portal)} />
+            <Scope label={tr('shell.portal')} on={layer === 'portal'} onClick={() => navigate(LAYER_HOME.portal)} />
           </Box>
           <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
-            <ListSubheader>This cluster</ListSubheader>
-            <MenuItem selected={layer === 'cluster'} onClick={() => { setMenu(null); navigate(LAYER_HOME.cluster); }}>
-              {own.id} ({own.kind}) · cluster
+            <ListSubheader sx={{ lineHeight: '32px', fontSize: 12 }}>{tr('shell.thisCluster')}</ListSubheader>
+            <MenuItem selected={layer === 'cluster'} onClick={() => go(LAYER_HOME.cluster)}>
+              {own.id} ({own.kind}) · {tr('shell.cluster').toLowerCase()}
             </MenuItem>
-            <MenuItem onClick={() => { setMenu(null); navigate(LAYER_HOME.portal); }}>
-              {own.id} · its portal
-            </MenuItem>
-            {cfg.clusters.length > 0 && <ListSubheader>Other clusters</ListSubheader>}
+            <MenuItem onClick={() => go(LAYER_HOME.portal)}>{own.id} · {tr('shell.itsPortal')}</MenuItem>
+            {cfg.clusters.length > 0 && <ListSubheader sx={{ lineHeight: '32px', fontSize: 12 }}>{tr('shell.otherClusters')}</ListSubheader>}
             {cfg.clusters.map(c => (
-              <MenuItem key={c.id} onClick={() => { setMenu(null); navigate(`/console/clusters/${encodeURIComponent(c.id)}`); }}>
+              <MenuItem key={c.id} onClick={() => go(`/console/clusters/${encodeURIComponent(c.id)}`)}>
                 {c.id} ({c.kind})
               </MenuItem>
             ))}
-            <MenuItem onClick={() => { setMenu(null); navigate('/console/clusters'); }}>All clusters…</MenuItem>
+            <MenuItem onClick={() => go('/console/clusters')}>{tr('shell.allClusters')}</MenuItem>
           </Menu>
-          <Box sx={{ flex: 1 }} />
-          <QuickFind />
-          <Button href={classicUrl(cfg, classicPathFor(current, pages))} endIcon={<OpenInNew fontSize="small" />} size="small" sx={{ color: '#fff', textTransform: 'none' }}>
-            Classic view
+          <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
+            <QuickFind />
+          </Box>
+          <Button href={classicUrl(cfg, classicPathFor(current, pages))} endIcon={<OpenInNew sx={{ fontSize: '16px !important' }} />} size="small" variant="text" sx={{ color: 'text.secondary' }}>
+            {tr('shell.classic')}
           </Button>
+          <LanguageSwitch />
+          <ThemeToggle />
         </Box>
       )}
       <Box
-        role="note"
-        aria-label={`Layer: ${look.name}`}
-        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 0.75, bgcolor: look.bg, color: look.fg, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap', fontSize: 13 }}
+        component="aside"
+        aria-label={tr('shell.sections')}
+        sx={{ display: { xs: navOpen ? 'block' : 'none', md: 'block' }, px: 1.5, pt: 1, pb: 3, gridColumn: '1', gridRow: { md: '2' } }}
       >
-        <Box component="span" sx={{ fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', fontSize: 12 }}>
-          {look.name}
-        </Box>
-        <Box component="span" sx={{ flex: '1 1 300px' }}>
-          {band[layer].text}
-        </Box>
-        {band[layer].next && (
-          <Link to={band[layer].next!.to} style={{ color: look.fg, fontWeight: 600 }}>
-            {band[layer].next!.label} →
-          </Link>
-        )}
+        {groups.map(g => (
+          <NavGroup key={g.title} title={g.title} items={g.items} current={current} />
+        ))}
       </Box>
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-        <Box sx={{ width: { xs: '100%', md: 220 }, flexShrink: 0, borderRight: { md: 1 }, borderBottom: { xs: 1, md: 0 }, borderColor: 'divider', pt: 2, bgcolor: 'background.paper' }}>
-          {groups.map(g => (
-            <NavGroup key={g.title} title={g.title} items={g.items} current={current} />
-          ))}
-        </Box>
-        <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3 } }}>
-          {children}
-        </Box>
+      <Box
+        component="main"
+        sx={{
+          minWidth: 0,
+          gridColumn: { xs: '1', md: '2' },
+          gridRow: { md: '2' },
+          bgcolor: t.sheet,
+          borderRadius: { xs: '16px 16px 0 0', md: '16px 0 0 0' },
+          border: `1px solid ${t.border}`,
+          borderRight: 0,
+          borderBottom: 0,
+          px: { xs: 2, md: 3.5 },
+          py: { xs: 2, md: 3 },
+        }}
+      >
+        {children}
       </Box>
     </Box>
   );

@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n';
+import { TitleRow } from './ui';
 import { type Entity } from '@backstage/catalog-model';
 import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
@@ -30,6 +32,7 @@ type Drag = { kind: 'pan'; sx: number; sy: number; v: View } | { kind: 'node'; i
 
 /** Portal › Dependencies: the platform as the Refresquito glass (Stack) or as a free graph, from the catalog and Argo CD. */
 export const DependencyExplorer = () => {
+  const { t } = useI18n();
   const catalog = useApi(catalogApiRef);
   const ov = useClusterOverview();
   const theme = useTheme();
@@ -163,11 +166,11 @@ export const DependencyExplorer = () => {
   };
 
   if (entities.loading) return <Progress />;
-  if (entities.error) return <WarningPanel title="The catalog could not be read" message={entities.error} />;
+  if (entities.error) return <WarningPanel title={t('list.noCatalog')} message={entities.error} />;
 
-  const lv = (s: string, t: string) => {
+  const lv = (s: string, to: string) => {
     const a = byId.get(s);
-    const b = byId.get(t);
+    const b = byId.get(to);
     return !!a && !!b && visible(a) && visible(b);
   };
   const glassPath = (() => {
@@ -176,7 +179,7 @@ export const DependencyExplorer = () => {
   })();
   const out = selected ? graph.links.filter(l => l.source === selected.id) : [];
   const inc = selected ? graph.links.filter(l => l.target === selected.id) : [];
-  const btn = () => ({ textTransform: 'none', borderRadius: 999, minWidth: 0, px: 1.25, py: 0.25 }) as const;
+  const btn = () => ({ borderRadius: 999, minWidth: 0, px: 1.25, py: 0.25 }) as const;
   const item = (id: string, label: string) => {
     const m = byId.get(id);
     if (!m) return null;
@@ -199,22 +202,15 @@ export const DependencyExplorer = () => {
 
   return (
     <Box sx={{ display: 'grid', gap: 1.5 }}>
-      <Box>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600, fontSize: 28 }}>
-          Dependencies
-        </Typography>
-        <Typography color="text.secondary">
-          The platform as the Refresquito stack: business applications on top, the foundations below. From the catalog (depends on, APIs consumed) and Argo CD (state).
-        </Typography>
-      </Box>
+      <TitleRow crumbs={[[t('nav.portal'), '/console'], [t('page.dependencies')]]} title={t('page.dependencies')} sub={t('dx.sub')} />
       <Box sx={{ display: 'grid', gap: 1.75, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '230px minmax(0, 1fr)' }, alignItems: 'stretch' }}>
-        <Box component="aside" aria-label="Filters" sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1.25, alignContent: 'start' }}>
+        <Box component="aside" aria-label={t('dx.filters')} sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1.25, alignContent: 'start' }}>
           <Typography variant="overline" color="text.secondary">
-            Find
+            {t('dx.find')}
           </Typography>
-          <TextField size="small" placeholder="Application or service" value={q} onChange={e => setQ(e.target.value)} inputProps={{ 'aria-label': 'Search' }} />
+          <TextField size="small" placeholder={t('dx.findPh')} value={q} onChange={e => setQ(e.target.value)} inputProps={{ 'aria-label': t('list.search') }} />
           <Typography variant="overline" color="text.secondary">
-            What
+            {t('dx.what')}
           </Typography>
           <Box sx={{ display: 'grid', gap: 0.5 }}>
             {LAYERS.map(k => (
@@ -240,24 +236,24 @@ export const DependencyExplorer = () => {
             ))}
           </Box>
           <Typography variant="overline" color="text.secondary">
-            State
+            {t('dx.state')}
           </Typography>
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
             {(['all', 'ok', 'warn', 'bad'] as const).map(h => (
               <Button key={h} size="small" variant={health === h ? 'contained' : 'outlined'} disableElevation aria-pressed={health === h} onClick={() => setHealth(h)} sx={btn()}>
-                {{ all: 'All', ok: 'Healthy', warn: 'Degraded', bad: 'Failing' }[h]}
+                {{ all: t('cat.all'), ok: t('dx.healthy'), warn: t('dx.degraded'), bad: t('dx.failing') }[h]}
               </Button>
             ))}
           </Box>
           <Typography variant="overline" color="text.secondary">
-            Around the selected
+            {t('dx.around')}
           </Typography>
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'text.secondary' }}>
-              <span>Hops</span>
-              <span>{hops >= 4 ? 'all' : hops}</span>
+              <span>{t('dx.hops')}</span>
+              <span>{hops >= 4 ? t('dx.allHops') : hops}</span>
             </Box>
-            <input type="range" min={1} max={4} value={hops} onChange={e => setHops(Number(e.target.value))} aria-label="Hops around the selected node" style={{ width: '100%' }} />
+            <input type="range" min={1} max={4} value={hops} onChange={e => setHops(Number(e.target.value))} aria-label={t('dx.hopsLabel')} style={{ width: '100%' }} />
           </Box>
           <Box component="label" sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: 13.5 }}>
             <input type="checkbox" checked={down} onChange={e => setDown(e.target.checked)} /> Only what it uses (downstream)
@@ -273,44 +269,44 @@ export const DependencyExplorer = () => {
                 setHops(4);
                 setDown(false);
               }}
-              sx={{ textTransform: 'none' }}
+              
             >
               Reset filters
             </Button>
-            <Button size="small" variant="outlined" onClick={() => relayout()} sx={{ textTransform: 'none' }}>
+            <Button size="small" variant="outlined" onClick={() => relayout()} >
               Re-arrange
             </Button>
           </Box>
         </Box>
 
-        <Box component="section" aria-label="Dependency graph" sx={{ position: 'relative', border: 1, borderColor: 'divider', borderRadius: '12px', bgcolor: 'background.paper', overflow: 'hidden', height: { xs: '70vh', lg: 'calc(100vh - 230px)' }, minHeight: 560 }}>
-          <Box role="group" aria-label="View" sx={{ position: 'absolute', left: 10, top: 10, zIndex: 2, display: 'flex', gap: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10px', p: 0.4 }}>
+        <Box component="section" aria-label={t('dx.graph')} sx={{ position: 'relative', border: 1, borderColor: 'divider', borderRadius: '8px', bgcolor: 'background.paper', overflow: 'hidden', height: { xs: '70vh', lg: 'calc(100vh - 230px)' }, minHeight: 560 }}>
+          <Box role="group" aria-label={t('dx.view')} sx={{ position: 'absolute', left: 10, top: 10, zIndex: 2, display: 'flex', gap: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '8px', p: 0.4 }}>
             {(['graph', 'stack'] as const).map(m => (
-              <Button key={m} size="small" variant={mode === m ? 'contained' : 'text'} disableElevation aria-pressed={mode === m} onClick={() => setMode(m)} sx={{ textTransform: 'none', minWidth: 0, px: 1.5 }}>
-                {m === 'graph' ? 'Graph' : 'Stack'}
+              <Button key={m} size="small" variant={mode === m ? 'contained' : 'text'} disableElevation aria-pressed={mode === m} onClick={() => setMode(m)} sx={{ minWidth: 0, px: 1.5 }}>
+                {m === 'graph' ? t('dx.graphView') : t('dx.stack')}
               </Button>
             ))}
           </Box>
           <Box sx={{ position: 'absolute', right: 10, top: 10, zIndex: 2, display: 'grid', gap: 0.5 }}>
             {[
-              ['+', 'Zoom in', () => zoomBy(1.3)],
-              ['−', 'Zoom out', () => zoomBy(1 / 1.3)],
-              ['⤢', 'Fit', fit],
-            ].map(([t, l, f]) => (
+              ['+', t('dx.zoomIn'), () => zoomBy(1.3)],
+              ['−', t('dx.zoomOut'), () => zoomBy(1 / 1.3)],
+              ['⤢', t('dx.fit'), fit],
+            ].map(([glyph, l, f]) => (
               <Button key={l as string} aria-label={l as string} variant="outlined" onClick={f as () => void} sx={{ minWidth: 0, width: 32, height: 32, p: 0, bgcolor: 'background.paper', fontWeight: 600 }}>
-                {t as string}
+                {glyph as string}
               </Button>
             ))}
           </Box>
           {!showDetail && selected && (
-            <Button size="small" variant="outlined" onClick={() => setShowDetail(true)} sx={{ position: 'absolute', right: 54, top: 10, zIndex: 2, textTransform: 'none', bgcolor: 'background.paper' }}>
-              Show details
+            <Button size="small" variant="outlined" onClick={() => setShowDetail(true)} sx={{ position: 'absolute', right: 54, top: 10, zIndex: 2, bgcolor: 'background.paper' }}>
+              {t('dx.showDetail')}
             </Button>
           )}
           <svg
             ref={svgRef}
             role="img"
-            aria-label="Dependencies of the platform"
+            aria-label={t('dx.platform')}
             width="100%"
             height="100%"
             style={{ display: 'block', cursor: drag.current?.kind === 'pan' ? 'grabbing' : 'grab', touchAction: 'none' }}
@@ -430,29 +426,29 @@ export const DependencyExplorer = () => {
           {showDetail && selected && (
             <Box
               component="aside"
-              aria-label="Detail"
-              sx={{ position: 'absolute', right: 54, top: 54, width: 300, maxHeight: 'calc(100% - 80px)', overflow: 'auto', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.75, display: 'grid', gap: 1.25, boxShadow: '0 10px 30px rgba(0,0,0,.14)', zIndex: 3 }}
+              aria-label={t('dx.detail')}
+              sx={{ position: 'absolute', right: 54, top: 54, width: 300, maxHeight: 'calc(100% - 80px)', overflow: 'auto', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.75, display: 'grid', gap: 1.25, boxShadow: '0 10px 30px rgba(0,0,0,.14)', zIndex: 3 }}
             >
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
                 <Box component="span" sx={{ bgcolor: LAYER_INFO[selected.layer].colour, color: '#fff', borderRadius: 999, px: 1.1, fontSize: 12, fontWeight: 600 }}>
                   {LAYER_INFO[selected.layer].label}
                 </Box>
-                <Button size="small" onClick={() => setShowDetail(false)} sx={{ textTransform: 'none', minWidth: 0 }}>
+                <Button size="small" onClick={() => setShowDetail(false)} sx={{ minWidth: 0 }}>
                   Hide
                 </Button>
               </Box>
               <Typography sx={{ fontWeight: 600, fontSize: 18 }}>{selected.label}</Typography>
               <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '4px 12px', m: 0, fontSize: 14, '& dt': { color: 'text.secondary' }, '& dd': { m: 0, overflowWrap: 'anywhere' } }}>
-                <dt>State</dt>
+                <dt>{t('dx.state')}</dt>
                 <dd>
                   <Box component="span" sx={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', bgcolor: HEALTH[selected.health].colour, mr: 0.75 }} />
                   {selected.healthLabel}
                 </dd>
-                <dt>Kind</dt>
+                <dt>{t('dx.kind')}</dt>
                 <dd>{selected.product}</dd>
                 {selected.entity.spec?.owner && (
                   <>
-                    <dt>Owner</dt>
+                    <dt>{t('ent.owner')}</dt>
                     <dd>{String(selected.entity.spec.owner).replace(/^group:(default\/)?/, '')}</dd>
                   </>
                 )}
@@ -463,29 +459,29 @@ export const DependencyExplorer = () => {
                 </Typography>
               )}
               <Typography variant="overline" color="text.secondary">
-                Uses ({out.length})
+                {t('dx.uses', { n: out.length })}
               </Typography>
-              <Box sx={{ display: 'grid', gap: 0.25 }}>{out.length ? out.map(l => item(l.target, l.label)) : <Typography variant="body2" color="text.secondary">Nothing.</Typography>}</Box>
+              <Box sx={{ display: 'grid', gap: 0.25 }}>{out.length ? out.map(l => item(l.target, l.label)) : <Typography variant="body2" color="text.secondary">{t('dx.nothing')}</Typography>}</Box>
               <Typography variant="overline" color="text.secondary">
-                Used by ({inc.length})
+                {t('dx.usedBy', { n: inc.length })}
               </Typography>
-              <Box sx={{ display: 'grid', gap: 0.25 }}>{inc.length ? inc.map(l => item(l.source, l.label)) : <Typography variant="body2" color="text.secondary">Nobody.</Typography>}</Box>
+              <Box sx={{ display: 'grid', gap: 0.25 }}>{inc.length ? inc.map(l => item(l.source, l.label)) : <Typography variant="body2" color="text.secondary">{t('dx.nobody')}</Typography>}</Box>
               <Typography variant="overline" color="text.secondary">
-                If it fails
+                {t('dx.ifFails')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {inc.length ? `${inc.length} direct dependents stop or degrade: ${inc.map(l => byId.get(l.source)?.label).join(', ')}.` : 'Nothing depends on it.'}
+                {inc.length ? `${t('dx.stop', { n: inc.length })}: ${inc.map(l => byId.get(l.source)?.label).join(', ')}.` : t('dx.noneDepends')}
               </Typography>
               <Box>
-                <Button component={Link} to={consoleEntityPath(selected.entity)} variant="contained" disableElevation size="small" sx={{ textTransform: 'none' }}>
-                  Open its page
+                <Button component={Link} to={consoleEntityPath(selected.entity)} variant="contained" disableElevation size="small" >
+                  {t('dx.open')}
                 </Button>
               </Box>
             </Box>
           )}
           {!graph.nodes.length && (
             <Typography color="text.secondary" sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-              The catalog has no components yet.
+              {t('dx.empty')}
             </Typography>
           )}
         </Box>

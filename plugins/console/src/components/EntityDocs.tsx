@@ -96,7 +96,7 @@ export const EntityDocsContent = () => {
   const source = entity.metadata.annotations?.['backstage.io/techdocs-ref']?.replace(/^url:|^dir:/, '');
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '230px minmax(0, 1fr) 200px' }, alignItems: 'start' }}>
-      <Box component="nav" aria-label="Pages" sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.25, bgcolor: 'background.paper', display: 'grid', gap: 0.25, position: { lg: 'sticky' }, top: 12 }}>
+      <Box component="nav" aria-label="Pages" sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.25, bgcolor: 'background.paper', display: 'grid', gap: 0.25, position: { lg: 'sticky' }, top: 12 }}>
         <TextField size="small" placeholder="Find a page" value={q} onChange={e => setQ(e.target.value)} inputProps={{ 'aria-label': 'Find a page' }} sx={{ mb: 0.5 }} />
         {nav.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
@@ -109,13 +109,13 @@ export const EntityDocsContent = () => {
             component="button"
             type="button"
             onClick={() => setPath(n.path)}
-            sx={{ textAlign: 'left', border: 0, cursor: 'pointer', font: 'inherit', fontSize: 14, py: 0.5, px: 1, pl: 1 + n.depth * 1.5, borderRadius: '6px', bgcolor: n.path === path ? 'rgba(26,141,255,0.10)' : 'transparent', color: n.path === path ? 'primary.main' : 'text.primary', fontWeight: n.path === path ? 600 : 400 }}
+            sx={{ textAlign: 'left', border: 0, cursor: 'pointer', font: 'inherit', fontSize: 14, py: 0.5, px: 1, pl: 1 + n.depth * 1.5, borderRadius: '6px', bgcolor: n.path === path ? 'action.selected' : 'transparent', color: n.path === path ? 'primary.main' : 'text.primary', fontWeight: n.path === path ? 600 : 400 }}
           >
             {n.title}
           </Box>
         ))}
       </Box>
-      <Box component="article" sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', px: { xs: 2, md: 3.5 }, py: 2.5, bgcolor: 'background.paper', minWidth: 0 }}>
+      <Box component="article" sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', px: { xs: 2, md: 3.5 }, py: 2.5, bgcolor: 'background.paper', minWidth: 0 }}>
         {state.loading && <Progress />}
         {state.error && <WarningPanel severity="info" title="No docs" message={state.error} />}
         {state.page && (

@@ -15,6 +15,8 @@ import { Badge } from './Badge';
 import { healthOf } from './EntityDependencies';
 import { TONES } from './Flow';
 import { rq } from './tokens';
+import { TitleRow } from './ui';
+import { useI18n } from '../i18n';
 
 type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
@@ -375,7 +377,7 @@ function useManagerList(plugin?: string, path?: string) {
 const ServiceIcon = ({ id, size = 22 }: { id: string; size?: number }) => {
   const Icon = NAV_ICONS[`/console/${id}`];
   return (
-    <Box component="span" aria-hidden sx={{ width: size + 14, height: size + 14, borderRadius: '9px', display: 'inline-grid', placeItems: 'center', bgcolor: 'rgba(26,141,255,0.10)', color: rq.blue, flexShrink: 0 }}>
+    <Box component="span" aria-hidden sx={{ width: size + 14, height: size + 14, borderRadius: '8px', display: 'inline-grid', placeItems: 'center', bgcolor: 'action.selected', color: rq.blue, flexShrink: 0 }}>
       {Icon && <Icon sx={{ fontSize: size }} />}
     </Box>
   );
@@ -383,6 +385,7 @@ const ServiceIcon = ({ id, size = 22 }: { id: string; size?: number }) => {
 
 /** One tile of the hub: the first section counts, the state of its Argo CD application. */
 const Tile = ({ s }: { s: ManageService }) => {
+  const { t } = useI18n();
   const first = s.sections?.[0];
   const counts = useManagerList(first?.plugin, first?.path);
   const ov = useClusterOverview();
@@ -391,12 +394,12 @@ const Tile = ({ s }: { s: ManageService }) => {
     <Box
       component={Link}
       to={`/console/manage/${s.id}`}
-      sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, color: 'text.primary', textDecoration: 'none', '&:hover': { borderColor: rq.blue } }}
+      sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, alignContent: 'start', color: 'text.primary', textDecoration: 'none', transition: 'border-color .15s ease-out', '&:hover': { borderColor: 'text.secondary' } }}
     >
       <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'center' }}>
         <ServiceIcon id={s.id} />
         <Box>
-          <Typography sx={{ fontWeight: 600 }}>{s.label}</Typography>
+          <Typography sx={{ fontWeight: 500 }}>{s.label}</Typography>
           <Typography variant="caption" color="text.secondary">
             {s.product}
           </Typography>
@@ -406,7 +409,7 @@ const Tile = ({ s }: { s: ManageService }) => {
         {s.sub}
       </Typography>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Badge label={h.tone === 'off' ? 'state unknown' : h.label} {...TONES[h.tone]} />
+        <Badge label={h.tone === 'off' ? t('manage.unknown') : h.label} {...TONES[h.tone]} />
         {first && counts.items && (
           <Typography variant="body2">
             <b>{counts.items.length}</b> {first.label.toLowerCase()}
@@ -418,24 +421,30 @@ const Tile = ({ s }: { s: ManageService }) => {
 };
 
 /** Portal › Manage: every platform service of the cluster, by what it does. */
-export const ManageHubPage = () => (
-  <Box sx={{ display: 'grid', gap: 2.5, maxWidth: 1240 }}>
-    <Box>
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-        Manage
-      </Typography>
-      <Typography color="text.secondary">Every platform service of this cluster, what it holds and its state. Open one to manage it.</Typography>
-    </Box>
+export const ManageHubPage = () => {
+  const ov = useClusterOverview();
+  const { t } = useI18n();
+  // the services that need attention first (degraded, then unknown), then in the menu's order
+  const rank = (s: ManageService) => {
+    const tone = healthOf(s.app.replace(/-oneke$/, ''), ov.data?.apps ?? []).tone;
+    return ({ bad: 0, warn: 1 } as Record<string, number>)[tone] ?? 2;
+  };
+  const services = [...MANAGE_SERVICES].sort((a, b) => rank(a) - rank(b));
+  return (
+  <Box>
+    <TitleRow crumbs={[[t('nav.portal'), '/console'], [t('nav.manage')]]} title={t('nav.manage')} sub={t('manage.sub')} />
     <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))' }}>
-      {MANAGE_SERVICES.map(s => (
+      {services.map(s => (
         <Tile key={s.id} s={s} />
       ))}
     </Box>
   </Box>
-);
+  );
+};
 
 /** The table of one section with a search box, and the detail of the selected row beside it. */
 const SectionView = ({ section, product }: { section: Section; product: string }) => {
+  const { t } = useI18n();
   const st = useManagerList(section.plugin, section.path);
   const host = useHostOf();
   const urlOf = (r: Row) => section.open?.(r, host);
@@ -444,13 +453,13 @@ const SectionView = ({ section, product }: { section: Section; product: string }
   const rows = useMemo(() => (st.items ?? []).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())), [st.items, q]);
   const picked = rows[Math.min(sel, rows.length - 1)];
   if (st.loading) return <Progress />;
-  if (st.error) return <WarningPanel title={`${section.label} could not be read`} message={st.error} />;
+  if (st.error) return <WarningPanel title={t('manage.noRead', { what: section.label })} message={st.error} />;
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 320px' }, alignItems: 'start' }}>
-      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1, minWidth: 0 }}>
-        <TextField size="small" placeholder={`Search ${section.label.toLowerCase()}`} value={q} onChange={e => { setQ(e.target.value); setSel(0); }} inputProps={{ 'aria-label': `Search ${section.label}` }} />
+      <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1, minWidth: 0 }}>
+        <TextField size="small" placeholder={`${t('list.search')} · ${section.label.toLowerCase()}`} value={q} onChange={e => { setQ(e.target.value); setSel(0); }} inputProps={{ 'aria-label': `${t('list.search')} · ${section.label}` }} />
         <Box sx={{ overflowX: 'auto' }}>
-          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, '& th': { textAlign: 'left', fontWeight: 500, color: 'text.secondary', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', p: 1, borderBottom: 1, borderColor: 'divider' }, '& td': { p: 1, borderBottom: 1, borderColor: 'divider' } }}>
+          <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, '& th': { textAlign: 'left', fontWeight: 500, color: 'text.secondary', fontSize: 12, p: 1, borderBottom: 1, borderColor: 'divider' }, '& td': { p: 1, borderBottom: 1, borderColor: 'divider' } }}>
             <thead>
               <tr>
                 {section.columns.map(c => (
@@ -467,7 +476,7 @@ const SectionView = ({ section, product }: { section: Section; product: string }
                   tabIndex={0}
                   onClick={() => setSel(i)}
                   onKeyDown={e => e.key === 'Enter' && setSel(i)}
-                  sx={{ cursor: 'pointer', bgcolor: r === picked ? 'rgba(26,141,255,0.10)' : undefined, '&:hover td': { bgcolor: 'action.hover' } }}
+                  sx={{ cursor: 'pointer', bgcolor: r === picked ? 'action.selected' : undefined, '&:hover td': { bgcolor: 'action.hover' } }}
                 >
                   {section.columns.map((c, ci) => {
                     const v = c.render ? c.render(r) : String(r[c.key] ?? '—');
@@ -510,11 +519,11 @@ const SectionView = ({ section, product }: { section: Section; product: string }
         {rows.length === 0 && <Typography color="text.secondary">Nothing{q ? ' matches' : ''}.</Typography>}
       </Box>
       {picked && (
-        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '12px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, position: { lg: 'sticky' }, top: 12 }}>
+        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, position: { lg: 'sticky' }, top: 12 }}>
           <Typography sx={{ fontWeight: 600 }}>{section.title(picked)}</Typography>
           {urlOf(picked) && (
             <Box>
-              <Button size="small" variant="contained" disableElevation href={urlOf(picked)!} target="_blank" rel="noreferrer" endIcon={<OpenInNew fontSize="small" />} sx={{ textTransform: 'none' }}>
+              <Button size="small" variant="contained" disableElevation href={urlOf(picked)!} target="_blank" rel="noreferrer" endIcon={<OpenInNew fontSize="small" />} >
                 Open in {product}
               </Button>
             </Box>
@@ -567,12 +576,12 @@ export const ManageServicePage = () => {
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <Badge label={h.tone === 'off' ? 'state unknown' : h.label} {...TONES[h.tone]} />
           {s.home && (
-            <Button href={s.home(host)} target="_blank" rel="noreferrer" variant="outlined" endIcon={<OpenInNew fontSize="small" />} sx={{ textTransform: 'none' }}>
+            <Button href={s.home(host)} target="_blank" rel="noreferrer" variant="outlined" endIcon={<OpenInNew fontSize="small" />} >
               Open {s.product}
             </Button>
           )}
           {classic && sections.length > 0 && (
-            <Button component={Link} to={`/console/${classic.id}`} variant="outlined" sx={{ textTransform: 'none' }}>
+            <Button component={Link} to={`/console/${classic.id}`} variant="outlined" >
               Create and change (full manager)
             </Button>
           )}
@@ -587,7 +596,7 @@ export const ManageServicePage = () => {
                 role="tab"
                 aria-selected={tab === i}
                 onClick={() => setTab(i)}
-                sx={{ textTransform: 'none', borderRadius: 0, color: tab === i ? 'text.primary' : 'text.secondary', borderBottom: 2, borderColor: tab === i ? rq.blue : 'transparent', mb: '-1px' }}
+                sx={{ borderRadius: 0, color: tab === i ? 'text.primary' : 'text.secondary', borderBottom: 2, borderColor: tab === i ? rq.blue : 'transparent', mb: '-1px' }}
               >
                 {sec.label}
               </Button>
