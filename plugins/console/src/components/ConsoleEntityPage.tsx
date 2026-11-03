@@ -13,6 +13,7 @@ import { ServiceHeader } from './ServiceViews';
 import { classify, entityPath } from './classify';
 import { useI18n } from '../i18n';
 import { Crumbs, choose } from './ui';
+import { NativeEntityPage, hasNativePage } from './NativeEntityPages';
 
 type State = { loading: boolean; entity?: Entity; error?: Error };
 
@@ -50,16 +51,18 @@ export const ConsoleEntityPage = ({ content }: { content?: ReactNode }) => {
   return (
     <Box sx={{ display: 'grid', gap: 1.5 }}>
       {loading && <Progress />}
-      {entity && (
+      {/* an API, a group or a system: the console's own page (no classic cards) */}
+      {!loading && entity && hasNativePage(entity) && <NativeEntityPage entity={entity} />}
+      {entity && !hasNativePage(entity) && (
         <Crumbs items={[[t('nav.portal'), '/console'], [choose([[classify(entity) === 'business', t('cat.businessApps')], [classify(entity) === 'service', t('cat.services')]], entity.kind), '/console'], [entity.metadata.title ?? entity.metadata.name]]} />
       )}
-      {!content && entity && (
+      {!content && entity && !hasNativePage(entity) && (
         <Typography color="text.secondary">
           {t('ent.noCards')}{' '}
           <a href={classicUrl(cfg, entityPath(entity))}>{t('ent.openClassic')}</a>.
         </Typography>
       )}
-      {content && !loading && entity && (
+      {content && !loading && entity && !hasNativePage(entity) && (
         <ServiceDataProvider entity={entity}>
           <ServiceHeader />
           <ClassicFrame entity>

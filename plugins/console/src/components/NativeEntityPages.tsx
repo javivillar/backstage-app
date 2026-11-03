@@ -1,0 +1,382 @@
+import { type Entity, parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
+import { Link } from '@backstage/core-components';
+import { useApi } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import Box from '@mui/material/Box';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { classicUrl, useConsoleConfig } from '../config';
+import { useI18n } from '../i18n';
+import { MONO } from '../theme/consoleTheme';
+import { openApiOperations } from './EntityBuild';
+import { Method } from './ui-portal';
+import { classify, entityPath } from './classify';
+import { EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow } from './ui';
+
+/**
+ * The console's own pages for the kinds that are not applications or services: an API (overview and definition),
+ * a group (members and what it owns) and a system (its parts). Everything links inside the console.
+ */
+
+const NATIVE_KINDS = new Set(['api', 'group', 'system']);
+export const hasNativePage = (e: Entity) => NATIVE_KINDS.has(e.kind.toLowerCase());
+
+/** kind:ns/name → its page in the console. */
+export const consoleRefPath = (ref: string) => {
+  const r = parseEntityRef(ref);
+  return `/console/entity/${r.namespace}/${r.kind.toLowerCase()}/${r.name}`;
+};
+const refName = (ref?: string) => (ref ? parseEntityRef(ref, { defaultKind: 'group' }).name : undefined);
+const related = (e: Entity, type: string) => (e.relations ?? []).filter(r => r.type === type).map(r => r.targetRef);
+
+/** The entities of some refs, read once from the catalog. */
+function useEntities(refs: string[]): Entity[] | undefined {
+  const catalog = useApi(catalogApiRef);
+  const key = refs.join(',');
+  const [items, setItems] = useState<Entity[] | undefined>();
+  useEffect(() => {
+    let alive = true;
+    if (!refs.length) {
+      setItems([]);
+      return undefined;
+    }
+    catalog.getEntitiesByRefs({ entityRefs: refs }).then(
+      r => alive && setItems(r.items.filter((x): x is Entity => !!x)),
+      () => alive && setItems([]),
+    );
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog, key]);
+  return items;
+}
+
+const RefLink = ({ refStr, label }: { refStr: string; label?: string }) => <Link to={consoleRefPath(refStr)}>{label ?? parseEntityRef(refStr).name}</Link>;
+const titleOf = (e: Entity) => e.metadata.title ?? e.metadata.name;
+
+/** A table of catalog entities: name (console link), kind, type and lifecycle. */
+const EntityTable = ({ items }: { items: Entity[] }) => {
+  const { t } = useI18n();
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>{t('native.name')}</TableCell>
+          <TableCell>{t('native.kind')}</TableCell>
+          <TableCell>{t('native.type')}</TableCell>
+          <TableCell>{t('native.lifecycle')}</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {items.map(e => (
+          <TableRow key={stringifyEntityRef(e)} hover>
+            <TableCell>
+              <Link to={consoleRefPath(stringifyEntityRef(e))} style={{ fontWeight: 500 }}>
+                {titleOf(e)}
+              </Link>
+              {e.metadata.description && (
+                <Typography variant="caption" color="text.secondary" component="div" sx={{ maxWidth: 560 }}>
+                  {e.metadata.description}
+                </Typography>
+              )}
+            </TableCell>
+            <TableCell>{classify(e) === 'business' ? <Pill tone="pos" plain>{t('cat.businessApp')}</Pill> : e.kind}</TableCell>
+            <TableCell>{String(e.spec?.type ?? '—')}</TableCell>
+            <TableCell>{String(e.spec?.lifecycle ?? '—')}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+const ClassicNote = ({ entity }: { entity: Entity }) => {
+  const cfg = useConsoleConfig();
+  const { t } = useI18n();
+  return (
+    <a href={classicUrl(cfg, entityPath(entity))} style={{ fontSize: 12 }}>
+      {t('ent.openClassic')}
+    </a>
+  );
+};
+
+/* ---------------- API ---------------- */
+
+const OperationsTable = ({ ops }: { ops: ReturnType<typeof openApiOperations> }) => {
+  const { t } = useI18n();
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>{t('native.api.method')}</TableCell>
+          <TableCell>{t('native.api.path')}</TableCell>
+          <TableCell>{t('native.api.summary')}</TableCell>
+          <TableCell>{t('native.api.protection')}</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {ops.map(o => (
+          <TableRow key={`${o.method} ${o.path}`} hover>
+            <TableCell>
+              <Method method={o.method} />
+            </TableCell>
+            <TableCell>
+              <Id>{o.path}</Id>
+            </TableCell>
+            <TableCell>{o.summary ?? ''}</TableCell>
+            <TableCell>{o.open ? <Pill tone="warn">{t('native.api.noAuth')}</Pill> : <Pill tone="pos">{t('native.api.auth')}</Pill>}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+
+const ApiPage = ({ entity }: { entity: Entity }) => {
+  const { t } = useI18n();
+  const { pathname } = useLocation();
+  const base = consoleRefPath(stringifyEntityRef(entity));
+  const onDefinition = pathname.replace(/\/+$/, '').endsWith('/definition');
+  const definition = String(entity.spec?.definition ?? '');
+  const type = String(entity.spec?.type ?? '');
+  const ops = useMemo(() => (type === 'openapi' ? openApiOperations(definition) : []), [type, definition]);
+  const open = ops.filter(o => o.open).length;
+  const providers = related(entity, 'apiProvidedBy');
+  const consumers = related(entity, 'apiConsumedBy');
+  const users = useEntities(consumers);
+  const owner = refName(String(entity.spec?.owner ?? ''));
+  const system = entity.spec?.system ? String(entity.spec.system) : undefined;
+  let finding: string | undefined;
+  if (type === 'openapi') finding = open ? t('native.api.open', { n: open }) : t('native.api.allAuth');
+  return (
+    <>
+      <TitleRow
+        crumbs={[[t('nav.portal'), '/console'], ['APIs', '/console/apis'], [titleOf(entity)]]}
+        title={titleOf(entity)}
+        pills={
+          <>
+            <Pill tone="info" plain>
+              API · {type || '—'}
+            </Pill>
+            {entity.spec?.lifecycle && <Pill plain>{String(entity.spec.lifecycle)}</Pill>}
+          </>
+        }
+        sub={entity.metadata.description}
+        finding={finding}
+        findingTone={open ? 'warn' : 'pos'}
+        actions={<ClassicNote entity={entity} />}
+      />
+      <Box component="nav" aria-label={t('native.sections')} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        {[
+          [t('nav.overview'), base, !onDefinition],
+          [t('native.definition'), `${base}/definition`, onDefinition],
+        ].map(([label, to, on]) => (
+          <Link key={String(to)} to={String(to)} aria-current={on ? 'page' : undefined} style={{ padding: '8px 12px', color: 'inherit', fontWeight: on ? 600 : 400, borderBottom: on ? '2px solid currentColor' : '2px solid transparent', marginBottom: -1, textDecoration: 'none' }}>
+            {String(label)}
+          </Link>
+        ))}
+      </Box>
+      {!onDefinition && (
+        <>
+          <Kpis
+            items={[
+              { label: t('native.api.operations'), value: type === 'openapi' ? ops.length : '—' },
+              { label: t('native.api.withoutAuth'), value: type === 'openapi' ? open : '—', tone: open ? 'bad' : undefined },
+              { label: t('native.api.providedBy'), value: providers.length },
+              { label: t('native.api.consumedBy'), value: consumers.length },
+            ]}
+          />
+          <Row spans={[7, 5]}>
+            <Section title={t('native.about')}>
+              <Facts
+                items={[
+                  [t('native.owner'), owner ? <RefLink refStr={`group:default/${owner}`} label={owner} /> : '—'],
+                  [t('native.system'), system ? <RefLink refStr={`system:default/${system}`} label={system} /> : '—'],
+                  [t('native.type'), type || '—'],
+                  [t('native.lifecycle'), String(entity.spec?.lifecycle ?? '—')],
+                  [t('native.providedBy'), providers.length ? providers.map(r => <Box key={r} component="span" sx={{ mr: 1 }}><RefLink refStr={r} /></Box>) : '—'],
+                  [t('native.tags'), (entity.metadata.tags ?? []).length ? (entity.metadata.tags ?? []).map(tag => <Box key={tag} component="span" sx={{ mr: 0.75 }}><Pill plain>{tag}</Pill></Box>) : '—'],
+                ]}
+              />
+            </Section>
+            <Section title={t('native.api.whoUses')} meta={t('native.count', { n: consumers.length })} flush>
+              {users && users.length ? <EntityTable items={users} /> : <EmptyState title={t('native.api.noConsumers')} />}
+            </Section>
+          </Row>
+          {type === 'openapi' && ops.length > 0 && (
+            <Section title={t('native.api.operations')} meta={t('native.count', { n: ops.length })} flush>
+              <OperationsTable ops={ops.slice(0, 12)} />
+              {ops.length > 12 && (
+                <Box sx={{ px: 2.25, py: 1.25 }}>
+                  <Link to={`${base}/definition`}>{t('native.api.allOps', { n: ops.length })}</Link>
+                </Box>
+              )}
+            </Section>
+          )}
+        </>
+      )}
+      {onDefinition && (
+        <>
+          {type === 'openapi' && ops.length > 0 && (
+            <Section title={t('native.api.operations')} meta={t('native.count', { n: ops.length })} flush>
+              <OperationsTable ops={ops} />
+            </Section>
+          )}
+          <Section title={t('native.definition')} meta={type} flush>
+            {definition ? (
+              <Box component="pre" sx={{ m: 0, p: 2.25, fontFamily: MONO, fontSize: 12.5, lineHeight: '19px', maxHeight: 640, overflow: 'auto', bgcolor: 'action.hover' }}>
+                {definition}
+              </Box>
+            ) : (
+              <EmptyState title={t('native.api.noDefinition')} />
+            )}
+          </Section>
+        </>
+      )}
+    </>
+  );
+};
+
+/* ---------------- Group ---------------- */
+
+const GroupPage = ({ entity }: { entity: Entity }) => {
+  const { t } = useI18n();
+  const members = related(entity, 'hasMember');
+  const owned = useEntities(related(entity, 'ownerOf'));
+  const parent = related(entity, 'childOf')[0];
+  const children = related(entity, 'parentOf');
+  const byKind = useMemo(() => {
+    const m = new Map<string, Entity[]>();
+    for (const e of owned ?? []) {
+      const k = classify(e) === 'business' ? t('cat.businessApps') : `${e.kind}${e.spec?.type ? ` · ${String(e.spec.type)}` : ''}`;
+      m.set(k, [...(m.get(k) ?? []), e]);
+    }
+    return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
+  }, [owned, t]);
+  const profile = (entity.spec?.profile ?? {}) as { displayName?: string; email?: string };
+  return (
+    <>
+      <TitleRow
+        crumbs={[[t('nav.portal'), '/console'], [t('nav.resolutionGroups'), '/console/resolution-groups'], [entity.metadata.name]]}
+        title={profile.displayName ?? titleOf(entity)}
+        pills={<Pill plain>{t('native.group')}</Pill>}
+        sub={entity.metadata.description}
+        finding={members.length ? undefined : t('native.group.noMembers')}
+        actions={<ClassicNote entity={entity} />}
+      />
+      <Kpis
+        items={[
+          { label: t('native.group.members'), value: members.length, tone: members.length ? undefined : 'bad' },
+          { label: t('native.group.owns'), value: owned ? owned.length : '…' },
+          { label: t('native.group.kinds'), value: byKind.length },
+          { label: t('native.group.children'), value: children.length },
+        ]}
+      />
+      <Row spans={[5, 7]}>
+        <Section title={t('native.about')}>
+          <Facts
+            items={[
+              [t('native.group.ref'), <Id key="ref">{stringifyEntityRef(entity)}</Id>],
+              [t('native.group.parent'), parent ? <RefLink refStr={parent} /> : '—'],
+              [t('native.group.children'), children.length ? children.map(c => <Box key={c} component="span" sx={{ mr: 1 }}><RefLink refStr={c} /></Box>) : '—'],
+              [t('native.group.email'), profile.email ?? '—'],
+            ]}
+          />
+        </Section>
+        <Section title={t('native.group.members')} meta={t('native.count', { n: members.length })}>
+          {members.length ? (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+              {members.map(m => (
+                <Pill key={m} plain>
+                  {parseEntityRef(m).name}
+                </Pill>
+              ))}
+            </Box>
+          ) : (
+            <EmptyState title={t('native.group.noMembers')} />
+          )}
+        </Section>
+      </Row>
+      {byKind.map(([k, items]) => (
+        <Section key={k} title={k} meta={t('native.count', { n: items.length })} flush>
+          <EntityTable items={items} />
+        </Section>
+      ))}
+      {owned && !owned.length && (
+        <Section>
+          <EmptyState title={t('native.group.nothing')} />
+        </Section>
+      )}
+    </>
+  );
+};
+
+/* ---------------- System ---------------- */
+
+const SystemPage = ({ entity }: { entity: Entity }) => {
+  const { t } = useI18n();
+  const parts = useEntities(related(entity, 'hasPart'));
+  const owner = refName(String(entity.spec?.owner ?? ''));
+  const domain = entity.spec?.domain ? String(entity.spec.domain) : undefined;
+  const of = (kind: string) => (parts ?? []).filter(e => e.kind.toLowerCase() === kind);
+  const comps = of('component');
+  const biz = comps.filter(e => classify(e) === 'business');
+  return (
+    <>
+      <TitleRow
+        crumbs={[[t('nav.portal'), '/console'], [t('native.system'), '/console'], [titleOf(entity)]]}
+        title={titleOf(entity)}
+        pills={<Pill plain>{t('native.system')}</Pill>}
+        sub={entity.metadata.description}
+        actions={<ClassicNote entity={entity} />}
+      />
+      <Kpis
+        items={[
+          { label: t('native.system.components'), value: parts ? comps.length : '…', note: parts ? t('native.system.business', { n: biz.length }) : undefined },
+          { label: 'APIs', value: parts ? of('api').length : '…' },
+          { label: t('native.system.resources'), value: parts ? of('resource').length : '…' },
+        ]}
+      />
+      <Section title={t('native.about')}>
+        <Facts
+          items={[
+            [t('native.owner'), owner ? <RefLink refStr={`group:default/${owner}`} label={owner} /> : '—'],
+            [t('native.system.domain'), domain ? <RefLink refStr={`domain:default/${domain}`} label={domain} /> : '—'],
+            [t('page.costs'), <Link key="costs" to="/console/costs">{t('native.system.costs')}</Link>],
+          ]}
+        />
+      </Section>
+      {[
+        ['component', t('native.system.components')],
+        ['api', 'APIs'],
+        ['resource', t('native.system.resources')],
+      ].map(([kind, title]) =>
+        of(kind).length ? (
+          <Section key={kind} title={title} meta={t('native.count', { n: of(kind).length })} flush>
+            <EntityTable items={of(kind)} />
+          </Section>
+        ) : null,
+      )}
+    </>
+  );
+};
+
+/** The native page of an API, group or system. */
+export const NativeEntityPage = ({ entity }: { entity: Entity }) => {
+  switch (entity.kind.toLowerCase()) {
+    case 'api':
+      return <ApiPage entity={entity} />;
+    case 'group':
+      return <GroupPage entity={entity} />;
+    default:
+      return <SystemPage entity={entity} />;
+  }
+};

@@ -135,7 +135,9 @@ const imagesPage = <ImagesPage />;
 const ConsoleAssistant = ({ id }: { id: string }) => {
   const me = CONSOLE_ASSISTANTS.find(a => a.id === id)!;
   return (
+    // key: each assistant its own page and conversation (React would reuse the page of the previous one)
     <AssistantPage
+      key={id}
       profile={me.profile}
       variant="console"
       others={CONSOLE_ASSISTANTS.map(({ id: x, name, colour, Icon, profile }) => ({
