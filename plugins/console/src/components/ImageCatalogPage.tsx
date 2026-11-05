@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge } from './Badge';
 import { ClassicLink } from './ClassicLink';
 import { TONES } from './Flow';
@@ -44,6 +45,9 @@ const findingsTone = (s: { critical: number; high: number }) => {
 };
 /** The steps of the supply chain every image should carry: a missing one shows in red. */
 const CHAIN = ['provenance', 'sbom-cyclonedx', 'sbom-spdx', 'vex'];
+/** The template "Request a curated image" (backstage-templates harbor-request-image), in the console's Create page:
+ * it opens a pull request in opennebula (harbor/catalog.d) and the image arrives through the quarantine. */
+const REQUEST_IMAGE = '/console/create/templates/default/harbor-request-image';
 const stateTone = { approved: TONES.ok, deprecated: TONES.warn, retired: TONES.bad, unknown: TONES.off };
 
 /** Cluster layer › Images, in the console: what a system may run, its state, end of life, findings and supply chain. */
@@ -94,6 +98,9 @@ export const ImageCatalogPage = () => {
         actions={
           <>
             <ClassicLink path="/images">{tr('cisn.classic')}</ClassicLink>
+            <Button variant="outlined" component={Link} to={REQUEST_IMAGE}>
+              {tr('img.request')}
+            </Button>
             {state.data?.harbor && (
               <Button variant="contained" href={state.data.harbor} target="_blank" rel="noreferrer">
                 {tr('img.harbor')}
