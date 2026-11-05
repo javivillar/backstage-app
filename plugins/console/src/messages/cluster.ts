@@ -131,6 +131,7 @@ export const CLUSTER: Messages = {
   'img.approvedN': { en: '{n} approved', es: '{n} aprobadas' },
   'img.finding': { en: '{c} images carry a critical finding and {e} reach end of life within 90 days.', es: '{c} imágenes tienen un hallazgo crítico y {e} llegan al fin de vida en menos de 90 días.' },
   'img.findingOk': { en: 'No critical finding and nothing near its end of life.', es: 'Sin hallazgos críticos y nada cerca de su fin de vida.' },
+  'img.request': { en: 'Request an image', es: 'Solicitar una imagen' },
   'img.harbor': { en: 'Open Harbor', es: 'Abrir Harbor' },
   'img.approved': { en: 'Approved', es: 'Aprobadas' },
   'img.deprecated': { en: 'Deprecated or retired', es: 'Obsoletas o retiradas' },
