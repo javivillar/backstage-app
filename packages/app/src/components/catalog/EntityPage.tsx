@@ -3,9 +3,14 @@ import { cloneElement, type CSSProperties, type ReactElement, type ReactNode } f
 import Dashboard from '@mui/icons-material/Dashboard';
 import Lan from '@mui/icons-material/Lan';
 import MonitorHeart from '@mui/icons-material/MonitorHeart';
+import Subject from '@mui/icons-material/Subject';
+import Speed from '@mui/icons-material/Speed';
 import RouteIcon from '@mui/icons-material/Route';
 import {
   EntityLiveContent,
+  EntityLoggingContent,
+  EntityPerformanceContent,
+  hasGrafanaDashboard,
   EntityNetworkContent,
   EntityUserJourneyContent,
   ServiceChanges,
@@ -837,6 +842,12 @@ export const consoleEntityPage = entityPageWith(
   <>
     <EntityLayout.Route path="/live" title={tabLabel(<MonitorHeart />, 'Live')} if={hasNamespace}>
       <EntityLiveContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/logging" title={tabLabel(<Subject />, 'Logging')} if={hasGrafanaDashboard('logs')}>
+      <EntityLoggingContent />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/performance" title={tabLabel(<Speed />, 'Performance')} if={hasGrafanaDashboard('performance')}>
+      <EntityPerformanceContent />
     </EntityLayout.Route>
     <EntityLayout.Route path="/network" title={tabLabel(<Lan />, 'Network')} if={hasNamespace}>
       <EntityNetworkContent />
