@@ -67,7 +67,7 @@ const uniq = <T,>(xs: T[]): T[] => [...new Set(xs)];
 
 function structuredValues(s: StoreBrief, lawfulBasisAllowed: boolean) {
   const props: Array<{ propertyUrn: string; values: Array<Record<string, string | number>> }> = [
-    { propertyUrn: 'urn:li:structuredProperty:refresquito.data_classification', values: [{ string: s.classification }] },
+    { propertyUrn: 'urn:li:structuredProperty:refresquito.classification', values: [{ string: s.classification }] },
     { propertyUrn: 'urn:li:structuredProperty:refresquito.retention_days', values: [{ double: s.retentionDays }] },
   ];
   if (s.lawfulBasis && lawfulBasisAllowed) {

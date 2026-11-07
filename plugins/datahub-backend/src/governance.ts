@@ -8,7 +8,7 @@ import { AssetType } from './urn';
 // team (design §12.6). The defaults below are a proposal, and the threshold is
 // configurable (`datahub.governedThreshold`).
 
-export const SP_CLASSIFICATION = 'refresquito.data_classification';
+export const SP_CLASSIFICATION = 'refresquito.classification';
 export const SP_RETENTION = 'refresquito.retention_days';
 export const SP_LAWFUL_BASIS = 'refresquito.lawful_basis';
 export const SP_FRESHNESS = 'refresquito.freshness_sla_hours';
@@ -132,7 +132,7 @@ export function computeScore(s: Omit<Summary, 'score' | 'url'>, hasBusinessOwner
     checks.push(c('vocabulary', 'Glossary term or tag', s.tags.length + s.terms.length > 0, 'Link at least one glossary term or tag.'));
   }
   if (s.type === 'dataset') {
-    checks.push(c('classification', 'Data classification', !!s.classification, 'Set refresquito.data_classification (Public / Internal / Confidential / Restricted).'));
+    checks.push(c('classification', 'Data classification', !!s.classification, 'Set refresquito.classification (on the classification scale of the zone).'));
     checks.push(c('retention', 'Retention', s.retentionDays !== undefined, 'Set refresquito.retention_days.'));
     checks.push(c('lawful-basis', 'Lawful basis (GDPR)', !!s.lawfulBasis, 'Personal data needs refresquito.lawful_basis.', s.personalData));
     const cols = s.columns;
