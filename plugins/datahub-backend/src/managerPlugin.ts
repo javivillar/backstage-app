@@ -9,6 +9,8 @@ import { RawImpactResult, summarizeImpact } from './impact';
 import { loadVocabulary } from './vocabulary';
 import { isSoftDeleted } from './datahubRest';
 import { ASSET_TYPES, AssetType, assetTypeOf } from './urn';
+import { NotFound, loadDeclared, loadPro } from './application';
+import { githubToken } from './githubIssues';
 
 /**
  * Backend of the DataHub integration -- PHASE 1, READ ONLY
@@ -168,6 +170,25 @@ export const datahubManagerPlugin = createBackendPlugin({
             const value = await loadVocabulary(settings);
             vocabCache = { at: Date.now(), value };
             return value;
+          }),
+        );
+
+        // The Data tab of the console for one deployment of a business application: pro from DataHub (live),
+        // dev / pre from what the application declares in GitHub (DataHub catalogues only pro).
+        router.get(
+          '/application',
+          guarded('GET /application', async (req, _res, { settings }) => {
+            const q = (k: string) => (typeof req.query[k] === 'string' ? (req.query[k] as string) : undefined);
+            const product = q('product');
+            if (!product?.startsWith('urn:li:dataProduct:')) throw new HttpError('product must be a dataProduct URN', 400);
+            const stage = q('stage') ?? 'pro';
+            try {
+              if (stage === 'pro') return { stage, ...(await loadPro(settings, product)) };
+              return { stage, product: { urn: product }, ...(await loadDeclared(githubToken(config), q('repository'), q('deploymentFile'))) };
+            } catch (e) {
+              if (e instanceof NotFound) throw new HttpError(e.message, 404);
+              throw e;
+            }
           }),
         );
 

@@ -17,7 +17,7 @@ export const TAB_GROUPS: Array<{ label: string; paths: string[] }> = [
   { label: 'Overview', paths: ['/'] },
   { label: 'Operate', paths: ['/live', '/logging', '/performance', '/network', '/dependencies', '/user-journey', '/changes', '/incidents'] },
   { label: 'Build', paths: ['/ci-cd', '/api', '/docs'] },
-  { label: 'Secure', paths: ['/security', '/sbom', '/access'] },
+  { label: 'Secure', paths: ['/security', '/data', '/sbom', '/access'] },
   { label: 'Spend', paths: ['/costs'] },
 ];
 

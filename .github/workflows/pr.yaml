@@ -31,5 +31,10 @@ jobs:
           yarn --cwd plugins/continuity-backend test
           yarn --cwd packages/app test src/components/opsassistant src/components/cost
 
+      - name: Test the data view and the Grafana tabs of the console
+        run: |
+          yarn --cwd plugins/datahub-backend test src/application
+          yarn --cwd plugins/console test src/components/EntityData src/components/EntityGrafana
+
       - name: Build backend
         run: yarn build:backend
