@@ -34,18 +34,11 @@ function ActionsBar() {
   return (
     <Box sx={{ mb: 3 }}>
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* data products come from the application template (block datahub); New data product and Register asset are retired */}
         {caps?.canCreate && (
-          <>
-            <Button variant="contained" href={template('datahub-new-data-product')}>
-              New data product
-            </Button>
-            <Button variant="outlined" href={template('datahub-register-asset')}>
-              Add assets to a product
-            </Button>
-            <Button variant="outlined" href={template('datahub-deprecate-asset')}>
-              Deprecate an asset
-            </Button>
-          </>
+          <Button variant="outlined" href={template('datahub-deprecate-asset')}>
+            Deprecate an asset
+          </Button>
         )}
         <Button variant="outlined" href={template('datahub-check-impact')}>
           Check impact of a change
@@ -57,8 +50,8 @@ function ActionsBar() {
       {caps && !caps.canCreate && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
           {caps.writesEnabled
-            ? 'Creating data products needs the datahub-editor group. You can read, check impact and request vocabulary.'
-            : 'Creating data products is switched off. You can read, check impact and request vocabulary.'}
+            ? 'Deprecating assets needs the datahub-editor group. You can read, check impact and request vocabulary.'
+            : 'Writing to DataHub is switched off. You can read, check impact and request vocabulary.'}
         </Typography>
       )}
     </Box>
