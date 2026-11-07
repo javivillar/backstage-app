@@ -8,7 +8,12 @@ const STATUSES = ['draft', 'approved'];
 const TIERS = ['A', 'B', 'C'];
 const RECORD_KINDS = ['record', 'definitions', 'rebuildable', 'operational'];
 const ANCHOR_KINDS = ['ca', 'signing-key', 'realm-keys', 'passphrase'];
-const OFFLINE = ['yes', 'no', 'unknown', 'n/a'];
+/**
+ * Fields of chart continuity-oneke 0.1.0 that are facts of one zone and left git in 0.1.1: still read (a cluster
+ * with the old chart renders), ignored with a warning.
+ */
+const PER_ZONE_ANCHOR = ['offlineCopy', 'custodians', 'lastCeremony'];
+const PER_ZONE_EXPORT = ['status'];
 
 const str = (v: unknown): string | undefined => {
   if (typeof v === 'string') return v;
@@ -16,12 +21,6 @@ const str = (v: unknown): string | undefined => {
   return undefined;
 };
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-/** yes/no written for a YAML 1.1 reader may arrive as booleans. */
-const offlineOf = (v: unknown): string => {
-  if (v === true) return 'yes';
-  if (v === false) return 'no';
-  return str(v) ?? 'unknown';
-};
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 /**
@@ -45,6 +44,7 @@ export function parseProfile(text: string, file: string, warnings: string[] = []
   check('status', status, STATUSES);
   check('tier', tier, TIERS);
 
+  const ignored = new Set<string>();
   const records: ContinuityRecord[] = list(doc.records).map((r, i) => {
     const o = obj(r);
     const e = o.export === undefined ? undefined : obj(o.export);
@@ -53,12 +53,12 @@ export function parseProfile(text: string, file: string, warnings: string[] = []
       title: str(o.title),
       kind: str(o.kind) ?? 'record',
       retention: str(o.retention),
-      export: e && { method: str(e.method), format: str(e.format), schedule: str(e.schedule), status: str(e.status) },
+      export: e && { method: str(e.method), format: str(e.format), schedule: str(e.schedule), workflow: str(e.workflow) },
       worm: o.worm === true,
       notes: str(o.notes),
     };
     check(`records[${rec.id}].kind`, rec.kind, RECORD_KINDS);
-    check(`records[${rec.id}].export.status`, rec.export?.status, ['planned', 'active']);
+    PER_ZONE_EXPORT.filter(k => e && k in e).forEach(k => ignored.add(`records[].export.${k}`));
     return rec;
   });
 
@@ -69,14 +69,14 @@ export function parseProfile(text: string, file: string, warnings: string[] = []
       title: str(o.title),
       kind: str(o.kind) ?? 'ca',
       probe: str(o.probe),
-      offlineCopy: offlineOf(o.offlineCopy),
-      custodians: typeof o.custodians === 'number' ? o.custodians : undefined,
       notes: str(o.notes),
     };
     check(`trustAnchors[${anchor.id}].kind`, anchor.kind, ANCHOR_KINDS);
-    check(`trustAnchors[${anchor.id}].offlineCopy`, anchor.offlineCopy, OFFLINE);
+    PER_ZONE_ANCHOR.filter(k => k in o).forEach(k => ignored.add(`trustAnchors[].${k}`));
     return anchor;
   });
+
+  if (ignored.size) warnings.push(`${file}: ignored ${[...ignored].join(', ')} (facts of one zone, not in the profile since continuity-oneke 0.1.1)`);
 
   const exit = doc.exit === undefined ? undefined : obj(doc.exit);
   const upstream = exit && exit.upstream !== undefined ? obj(exit.upstream) : undefined;
@@ -87,6 +87,8 @@ export function parseProfile(text: string, file: string, warnings: string[] = []
     lifecycle,
     status,
     replacedBy: str(doc.replacedBy),
+    approvedBy: str(doc.approvedBy),
+    approvedAt: str(doc.approvedAt),
     managedIn: str(doc.managedIn),
     notes: str(doc.notes),
     records,

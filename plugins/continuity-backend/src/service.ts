@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { X509Certificate } from 'crypto';
 import { loadProfiles } from './profiles';
-import { buildSummary, flattenAnchors } from './status';
+import { buildSummary, computeProfile, flattenAnchors } from './status';
 import { isKeycloakProbe, liveOfCa, liveOfRealmKeys, parseBundle } from './trust';
 import type { ComputedProfile, FlatAnchor, LiveCert, Summary } from './types';
 
@@ -18,6 +18,8 @@ export type ContinuitySettings = {
 };
 
 type Fetch = typeof fetch;
+/** The names of the Components of this cluster's catalog (one per deployed application, plus cnoe-oneke). */
+export type InstalledLookup = () => Promise<ReadonlySet<string>>;
 type RealmKeys = { live?: LiveCert; error?: string; warning?: string };
 
 const KEYS_TTL = 5 * 60_000;
@@ -27,10 +29,41 @@ export class ContinuityService {
   private token?: { value: string; expiresAt: number };
   private keys?: { value: RealmKeys; at: number };
 
-  constructor(private readonly settings: ContinuitySettings, private readonly fetchFn: Fetch = fetch, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly settings: ContinuitySettings,
+    private readonly fetchFn: Fetch = fetch,
+    private readonly now: () => number = Date.now,
+    private readonly installed?: InstalledLookup,
+  ) {}
 
   async summary(): Promise<Summary> {
+    const r = await this.read();
+    return buildSummary(r.profiles, r.anchors, r.warnings, r.installed);
+  }
+
+  /** One profile, installed or not, with its trust anchors and what the platform says of them (live, liveError). */
+  async profile(service: string): Promise<(ComputedProfile & { trustAnchors: FlatAnchor[] }) | undefined> {
+    const r = await this.read();
+    const p = r.profiles.find(x => x.service === service);
+    if (!p) return undefined;
+    const anchors = r.anchors.filter(a => a.service === service);
+    return { ...computeProfile(p, anchors, { installed: !r.installed || r.installed.has(service) }), trustAnchors: anchors };
+  }
+
+  /** The Components of the catalog; when it cannot be read, everything counts as installed (and a warning). */
+  private async installedNames(warnings: string[]): Promise<ReadonlySet<string> | undefined> {
+    if (!this.installed) return undefined;
+    try {
+      return await this.installed();
+    } catch (e) {
+      warnings.push(`The catalog could not be read, every profile counts as installed: ${(e as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private async read() {
     const { profiles, warnings } = await loadProfiles(this.settings.profilesDir);
+    const installed = await this.installedNames(warnings);
     const certs = await this.platformCerts(warnings);
     const needsKeycloak = profiles.some(p => p.trustAnchors.some(isKeycloakProbe));
     const realm = needsKeycloak ? await this.realmKeys() : {};
@@ -46,14 +79,7 @@ export class ContinuityService {
       }
       return {};
     });
-    return buildSummary(profiles, anchors, warnings);
-  }
-
-  async profile(service: string): Promise<ComputedProfile | undefined> {
-    const s = await this.summary();
-    const p = s.profiles.find(x => x.service === service);
-    // its trust anchors with what the platform says of them (live, liveError)
-    return p && { ...p, trustAnchors: s.trustAnchors.filter(a => a.service === service) };
+    return { profiles, anchors, warnings, installed };
   }
 
   private async platformCerts(warnings: string[]): Promise<X509Certificate[] | undefined> {

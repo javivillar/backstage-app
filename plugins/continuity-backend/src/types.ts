@@ -1,4 +1,9 @@
 /**
+ * What is common and what is per zone: a profile (git, the same in every zone and programme) holds only what is
+ * common: the records, how they are exported, the trust anchors, the exit plan, the policy approval. Facts of one
+ * zone (export running, ceremony done, offline copy, custodians) never live in git; they are computed or recorded
+ * in this zone (phase L2: CronWorkflows; phase L3: ceremonies in this Backstage's database).
+ *
  * The continuity profile of a platform service (schema continuity.schema.json v1, one YAML file per service in the
  * ConfigMap continuity-profiles of the chart continuity-oneke): what it keeps, how it is exported, which keys make
  * it valid, and how to leave it.
@@ -8,13 +13,15 @@ export type Lifecycle = 'supported' | 'deprecated' | 'retired' | 'external';
 export type ProfileStatus = 'draft' | 'approved';
 export type RecordKind = 'record' | 'definitions' | 'rebuildable' | 'operational';
 export type AnchorKind = 'ca' | 'signing-key' | 'realm-keys' | 'passphrase';
-export type OfflineCopy = 'yes' | 'no' | 'unknown' | 'n/a';
+/** The ceremony of a trust anchor in this zone: not recorded until phase L3. */
+export type Ceremony = 'unrecorded';
 
 export type RecordExport = {
   method?: string;
   format?: string;
   schedule?: string;
-  status?: 'planned' | 'active' | string;
+  /** the WorkflowTemplate that runs it (phase L2) */
+  workflow?: string;
 };
 
 export type ContinuityRecord = {
@@ -32,8 +39,6 @@ export type TrustAnchor = {
   title?: string;
   kind: AnchorKind | string;
   probe?: string;
-  offlineCopy?: OfflineCopy | string;
-  custodians?: number;
   notes?: string;
 };
 
@@ -50,6 +55,8 @@ export type Profile = {
   lifecycle: Lifecycle | string;
   status: ProfileStatus | string;
   replacedBy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   managedIn?: string;
   notes?: string;
   records: ContinuityRecord[];
@@ -68,9 +75,16 @@ export type Level = 'critical' | 'warning';
  */
 export type Reason = { level: Level; key: string; title: string; detail: string; vars?: Record<string, string | number> };
 
-export type ComputedProfile = Profile & {
+/** A record with what this zone says of it. */
+export type ComputedRecord = ContinuityRecord & { exportActive: boolean };
+
+export type ComputedProfile = Omit<Profile, 'records'> & {
+  records: ComputedRecord[];
   /** the file it was read from (<service>.yaml) */
   file: string;
+  /** a Component of that name is in this cluster's catalog (always true for lifecycle external) */
+  installed: boolean;
+  external: boolean;
   recordsTotal: number;
   recordsWithoutActiveExport: number;
   state: 'ok' | Level;
@@ -79,13 +93,18 @@ export type ComputedProfile = Profile & {
   reasons: Reason[];
 };
 
-export type FlatAnchor = TrustAnchor & { service: string; live?: LiveCert; liveError?: string };
+export type FlatAnchor = TrustAnchor & { service: string; ceremony: Ceremony; live?: LiveCert; liveError?: string };
 
 /** service is empty for an item about several services (key drafts: vars.n, vars.services). */
 export type Attention = { level: Level; service: string; key: string; title: string; detail: string; vars?: Record<string, string | number> };
 
+export type NotInstalled = { service: string; title?: string; tier?: string };
+
 export type Summary = {
+  /** the profiles of what is installed in this cluster, and the externals */
   profiles: ComputedProfile[];
+  /** the profiles of services not installed in this programme (no state) */
+  notInstalled: NotInstalled[];
   trustAnchors: FlatAnchor[];
   attention: Attention[];
   counts: {
@@ -95,7 +114,8 @@ export type Summary = {
     recordsTotal: number;
     recordsWithoutActiveExport: number;
     trustAnchors: number;
-    anchorsWithoutOfflineCopy: number;
+    anchorsUnrecorded: number;
+    notInstalled: number;
     deprecated: number;
     external: number;
     retired: number;
