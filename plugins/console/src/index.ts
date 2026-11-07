@@ -4,6 +4,7 @@ export { catalogPathForConsole, consolePathForCatalog, isConsolePath } from './p
 export type { ConsoleClassicPage } from './pages';
 export { EntityNetworkContent, EntityUserJourneyContent } from './components/EntityNetwork';
 export { EntityLiveContent } from './components/EntityLive';
+export { EntityLoggingContent, EntityPerformanceContent, hasGrafanaDashboard } from './components/EntityGrafana';
 export { ServiceChanges, ServiceCosts, ServiceOverview, ServiceSecurity } from './components/ServiceViews';
 export type { CostsExtra } from './components/ServiceViews';
 export { ConsoleEntityLayout } from './components/ConsoleEntityLayout';

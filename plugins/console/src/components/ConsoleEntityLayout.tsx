@@ -15,7 +15,7 @@ type Tab = TabProps & { key: string };
 /** Which group of the tab bar each tab goes to, by its path; anything else goes under More. */
 export const TAB_GROUPS: Array<{ label: string; paths: string[] }> = [
   { label: 'Overview', paths: ['/'] },
-  { label: 'Operate', paths: ['/live', '/network', '/dependencies', '/user-journey', '/changes', '/incidents'] },
+  { label: 'Operate', paths: ['/live', '/logging', '/performance', '/network', '/dependencies', '/user-journey', '/changes', '/incidents'] },
   { label: 'Build', paths: ['/ci-cd', '/api', '/docs'] },
   { label: 'Secure', paths: ['/security', '/sbom', '/access'] },
   { label: 'Spend', paths: ['/costs'] },

@@ -12,6 +12,23 @@ export const ENTITY: Messages = {
   'ent.actions': { en: 'Actions', es: 'Acciones' },
   'ent.noCards': { en: 'This portal does not pass the entity cards to the console:', es: 'Este portal no pasa las tarjetas de la entidad a la consola:' },
   'ent.openClassic': { en: 'open the classic page', es: 'abre la página clásica' },
+  // Logging and Performance (Grafana dashboards of the deployment)
+  'graf.environment': { en: 'Environment', es: 'Entorno' },
+  'graf.fixed': { en: 'Fixed by this page: this deployment only', es: 'Lo fija esta página: solo este despliegue' },
+  'graf.folder': { en: 'Grafana folder', es: 'Carpeta de Grafana' },
+  'graf.level': { en: 'Level', es: 'Nivel' },
+  'graf.allLevels': { en: 'All levels', es: 'Todos los niveles' },
+  'graf.container': { en: 'Container', es: 'Contenedor' },
+  'graf.allContainers': { en: 'All containers', es: 'Todos los contenedores' },
+  'graf.search': { en: 'Search text in the lines', es: 'Buscar texto en las líneas' },
+  'graf.range': { en: 'Time range', es: 'Rango de tiempo' },
+  'graf.refresh': { en: 'Refresh', es: 'Refrescar' },
+  'graf.open': { en: 'Open in Grafana', es: 'Abrir en Grafana' },
+  'graf.none': { en: 'This deployment has no Grafana dashboard (block monitoring).', es: 'Este despliegue no tiene dashboard en Grafana (bloque monitoring).' },
+  'graf.hint': {
+    en: 'If the frame shows the Grafana login or a permission message: open it in Grafana once to sign in, or ask the owner of {app} to add you to grafana-{app}-viewers (or -editors).',
+    es: 'Si el recuadro enseña el login de Grafana o un aviso de permisos: ábrelo una vez en Grafana para iniciar sesión, o pide al propietario de {app} que te añada a grafana-{app}-viewers (o -editors).',
+  },
   // CI/CD
   'ci.pass': { en: 'Runs that pass (last 20)', es: 'Ejecuciones que pasan (últimas 20)' },
   'ci.duration': { en: 'Usual duration', es: 'Duración habitual' },
