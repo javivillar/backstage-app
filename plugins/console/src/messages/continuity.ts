@@ -34,6 +34,8 @@ export const CONTINUITY: Messages = {
   'cont.reason.deprecated': { en: '{service} deprecated', es: '{service} obsoleto' },
   'cont.reason.deprecated-replaced': { en: '{service} deprecated, replaced by {replacedBy}', es: '{service} obsoleto, sustituido por {replacedBy}' },
   'cont.reason.draft': { en: '{service}: profile not approved yet', es: '{service}: perfil aún no aprobado' },
+  'cont.reason.drafts': { en: '{n} profiles not approved yet (approved by continuity-officer)', es: '{n} perfiles sin aprobar (los aprueba continuity-officer)' },
+  'cont.reason.drafts.detail': { en: 'Services: {services}', es: 'Servicios: {services}' },
   'cont.reason.draft.detail': { en: 'Approved by the group continuity-officer', es: 'Lo aprueba el grupo continuity-officer' },
   'cont.reason.records': { en: 'Records: {records}', es: 'Registros: {records}' },
   // trust anchors

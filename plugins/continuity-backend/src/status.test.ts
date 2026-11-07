@@ -71,8 +71,8 @@ describe('buildSummary', () => {
     const s = buildSummary(profiles, anchors, ['w']);
     expect(s.attention.map(a => `${a.level} ${a.service} ${a.key}`)).toEqual([
       'critical harbor anchor-no-offline',
+      'warning  drafts',
       'warning bpm-oneke deprecated-replaced',
-      'warning harbor draft',
       'warning pki-oneke anchor-offline-unknown',
     ]);
     expect(s.trustAnchors.map(a => [a.service, a.id, a.liveError])).toEqual([
@@ -80,6 +80,8 @@ describe('buildSummary', () => {
       ['pki-oneke', 'root', 'no bundle'],
     ]);
     expect(s.counts).toMatchObject({ services: 3, approved: 2, draft: 1, recordsTotal: 1, recordsWithoutActiveExport: 0, trustAnchors: 2, anchorsWithoutOfflineCopy: 2, deprecated: 1, external: 1, critical: 1, warning: 2, ok: 0 });
+    expect(s.attention[1].vars).toEqual({ n: 1, services: 'harbor' });
+    expect(s.profiles.find(p => p.service === 'harbor')?.reasons.map(r => r.key)).toContain('draft');
     expect(s.warnings).toEqual(['w']);
   });
 });

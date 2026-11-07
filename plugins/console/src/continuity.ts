@@ -76,6 +76,7 @@ export function reasonText(r: Reason & { service?: string }, t: T, has: Has): st
 /** Its second line: the records it is about, the approver of a draft, or the backend's detail. */
 export function reasonDetail(r: Reason, t: T): string {
   if (r.key === 'draft') return t('cont.reason.draft.detail');
+  if (r.key === 'drafts' && r.vars?.services) return t('cont.reason.drafts.detail', { services: r.vars.services });
   if ((r.key === 'record-no-export' || r.key === 'external-no-export') && r.vars?.records) return t('cont.reason.records', { records: r.vars.records });
   return r.detail;
 }

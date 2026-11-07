@@ -36,7 +36,9 @@ page shows a warning. A file that is not a profile (no `service`) or a value out
     (`{level, key, title, detail, vars}`; the page translates `key`, `title` and `detail` are English).
   - `trustAnchors[]`: the anchors of every profile, each with `service` and `live` (`{notAfter, notBefore, subject,
     daysLeft}`) or `liveError`.
-  - `attention[]`: one entry per cause of a warning or critical state, critical first.
+  - `attention[]`: one entry per cause of a warning or critical state, critical first; the drafts are ONE entry
+    (`key: drafts`, empty `service`, `vars: {n, services}`) right after the critical ones, not one per service
+    (the `draft` reason stays on each profile).
 - `GET /api/continuity/profiles/:service`: one profile with its computed fields; its `trustAnchors` carry `live`.
   404 when there is none.
 

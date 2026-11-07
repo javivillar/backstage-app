@@ -14,6 +14,9 @@ describe('continuity page helpers', () => {
   it('explains the records of a reason and the approver of a draft', () => {
     expect(reasonDetail({ level: 'critical', key: 'external-no-export', title: '', detail: 'x', vars: { records: 'Repos' } }, es)).toBe('Registros: Repos');
     expect(reasonDetail({ level: 'warning', key: 'draft', title: '', detail: '' }, es)).toBe('Lo aprueba el grupo continuity-officer');
+    const drafts = { level: 'warning' as const, key: 'drafts', title: '', detail: '', vars: { n: 33, services: 'a, b' }, service: '' };
+    expect(reasonText(drafts, es, has)).toBe('33 perfiles sin aprobar (los aprueba continuity-officer)');
+    expect(reasonDetail(drafts, es)).toBe('Servicios: a, b');
   });
 
   it('labels enum values, keeping unknown ones', () => {

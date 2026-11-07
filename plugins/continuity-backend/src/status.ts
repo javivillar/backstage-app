@@ -66,9 +66,18 @@ export function flattenAnchors(profiles: Profile[], live: (service: string, id: 
 /** The whole summary of the page, from the profiles and the anchors as read. Pure. */
 export function buildSummary(profiles: Array<Profile & { file: string }>, anchors: FlatAnchor[], warnings: string[] = []): Summary {
   const computed = profiles.map(p => computeProfile(p, anchors));
-  const attention: Attention[] = computed
-    .flatMap(p => p.reasons.map(r => ({ level: r.level, service: p.service, key: r.key, title: r.title, detail: r.detail, vars: r.vars })))
+  // a draft stays a reason of its profile, but the list shows them as one item: per service they would bury the rest
+  const perService: Attention[] = computed
+    .flatMap(p => p.reasons.filter(r => r.key !== 'draft').map(r => ({ level: r.level, service: p.service, key: r.key, title: r.title, detail: r.detail, vars: r.vars })))
     .sort((a, b) => Number(b.level === 'critical') - Number(a.level === 'critical') || a.service.localeCompare(b.service));
+  const drafts = computed.filter(p => p.reasons.some(r => r.key === 'draft')).map(p => p.service);
+  const draftItem: Attention[] = drafts.length
+    ? [{ level: 'warning', service: '', key: 'drafts', title: `${drafts.length} profile(s) not approved yet`, detail: 'Approved by the group continuity-officer', vars: { n: drafts.length, services: drafts.join(', ') } }]
+    : [];
+  // after the critical ones, first of the warnings
+  const firstWarning = perService.findIndex(a => a.level !== 'critical');
+  const at = firstWarning < 0 ? perService.length : firstWarning;
+  const attention = [...perService.slice(0, at), ...draftItem, ...perService.slice(at)];
   const by = (f: (p: ComputedProfile) => boolean) => computed.filter(f).length;
   return {
     profiles: computed,

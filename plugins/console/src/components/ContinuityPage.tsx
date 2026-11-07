@@ -125,10 +125,13 @@ const Overview = ({ data, mount }: { data: ContinuitySummary; mount: Mount }) =>
             items={data.attention.map(a => ({
               tone: stateTone[a.level],
               label: t(`cont.level.${a.level}`),
-              what: (
+              // an item about several services (drafts) has no service to link to
+              what: a.service ? (
                 <Link to={`${mount.base}/${encodeURIComponent(a.service)}`} style={{ color: 'inherit' }}>
                   {reasonText(a, t, has)}
                 </Link>
+              ) : (
+                reasonText(a, t, has)
               ),
               why: reasonDetail(a, t) || undefined,
             }))}

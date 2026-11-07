@@ -81,6 +81,7 @@ export type ComputedProfile = Profile & {
 
 export type FlatAnchor = TrustAnchor & { service: string; live?: LiveCert; liveError?: string };
 
+/** service is empty for an item about several services (key drafts: vars.n, vars.services). */
 export type Attention = { level: Level; service: string; key: string; title: string; detail: string; vars?: Record<string, string | number> };
 
 export type Summary = {
