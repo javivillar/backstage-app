@@ -203,11 +203,12 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.newSpring'), to: '/console/development/spring-framework-app', hint: tr('nav.newSpring.hint') },
       ],
     });
-    // the applications of the platform (Incidents, Accreditation) and the teams that resolve
+    // the applications of the platform (Incidents, Accreditation), the dashboards of everything and the teams that resolve
     groups.push({
       title: tr('nav.support'),
       items: [
         ...portalLinks.map(l => ({ label: l.label, to: `/console/app/${l.application}`, hint: l.hint, icon: l.icon })),
+        { label: tr('nav.monitoring'), to: '/console/monitoring', hint: tr('nav.monitoring.hint') },
         { label: tr('nav.resolutionGroups'), to: '/console/resolution-groups', hint: tr('nav.resolutionGroups.hint') },
       ],
     });

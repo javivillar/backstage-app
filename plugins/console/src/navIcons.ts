@@ -29,6 +29,7 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LocalPoliceIcon from '@mui/icons-material/LocalPolice';
 import MapIcon from '@mui/icons-material/Map';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RouterIcon from '@mui/icons-material/Router';
@@ -70,6 +71,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/costs': PaymentsIcon,
   '/console/assistants': GroupsIcon,
   '/console/resolution-groups': Diversity3Icon,
+  '/console/monitoring': MonitorHeartIcon,
   '/console/development/python-framework-app': TerminalIcon,
   '/console/development/spring-framework-app': WidgetsIcon,
   '/console/ops-assistant': EngineeringIcon,
