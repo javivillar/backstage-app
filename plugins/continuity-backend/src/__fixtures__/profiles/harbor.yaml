@@ -1,0 +1,16 @@
+service: harbor
+title: Harbor
+tier: B
+lifecycle: external
+status: draft
+managedIn: javivillar/opennebula (harbor/)
+records:
+  - id: catalog
+    title: Image catalog
+    kind: definitions
+trustAnchors:
+  - id: cosign-key
+    title: Cosign signing key
+    kind: signing-key
+    offlineCopy: no
+    notes: "Only in the secret store"

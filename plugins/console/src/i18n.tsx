@@ -4,6 +4,7 @@ import { ZONE } from './messages/zone';
 import { CLUSTER } from './messages/cluster';
 import { PORTAL } from './messages/portal';
 import { ENTITY } from './messages/entity';
+import { CONTINUITY } from './messages/continuity';
 
 /**
  * The languages of the console: English and Spanish. Texts live in MESSAGES by key; a page calls t('key', {n: 3}).
@@ -88,6 +89,7 @@ const SHELL: Messages = {
   'page.costs': { en: 'Costs', es: 'Costes' },
   'page.cis-nodes': { en: 'CIS Kubernetes nodes', es: 'CIS de los nodos' },
   'page.images': { en: 'Images', es: 'Imágenes' },
+  'page.continuity': { en: 'Continuity', es: 'Continuidad' },
   'page.assistants': { en: 'The team', es: 'El equipo' },
   'page.ops-assistant': { en: 'Operations', es: 'Operaciones' },
   'page.sec-assistant': { en: 'Security', es: 'Seguridad' },
@@ -104,7 +106,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY };
 
 const KEY = 'rq-console-lang';
 

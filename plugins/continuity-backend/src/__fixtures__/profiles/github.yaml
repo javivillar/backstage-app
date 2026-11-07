@@ -1,0 +1,10 @@
+service: github
+title: GitHub
+tier: A
+lifecycle: external
+status: approved
+records:
+  - id: repos
+    title: Repositories, pull requests and reviews
+    kind: record
+    export: { method: gh mirror, status: planned }
