@@ -65,7 +65,7 @@ import { CONSOLE_ASSISTANTS } from './components/opsassistant/consoleAssistants'
 import { ConsoleAssistantsTeam } from './components/opsassistant/ConsoleAssistantsTeam';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
-import { ConsolePage, type ConsoleClassicPage } from '@internal/plugin-console';
+import { ConsolePage, ContinuityClassicPage, type ConsoleClassicPage } from '@internal/plugin-console';
 
 const app = createApp({
   apis,
@@ -130,6 +130,8 @@ const costsPage = <CostsPage />;
 const topologyPage = <TopologyPage />;
 const cisNodesPage = <NodesCompliancePage />;
 const imagesPage = <ImagesPage />;
+// the Continuity portal (plugins/console ContinuityPage over plugins/continuity-backend): read only
+const continuityPage = <ContinuityClassicPage />;
 
 /** An assistant inside the console: its workspace, with the conversations of the whole team beside it. */
 const ConsoleAssistant = ({ id }: { id: string }) => {
@@ -161,6 +163,7 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: <CostsPage variant="console" /> },
   { id: 'cis-nodes', title: 'CIS Kubernetes nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
+  { id: 'continuity', title: 'Continuity', layer: 'cluster', classicPath: '/continuity', nested: true, element: continuityPage },
   { id: 'assistants', title: 'The team', product: 'The assistants: who does what, and how they hand over', layer: 'assistants', classicPath: '/ops-assistant', consoleOnly: true, element: <ConsoleAssistantsTeam /> },
   { id: 'ops-assistant', title: 'Operations', product: 'Operations assistant: what happens in the cluster and why', layer: 'assistants', classicPath: '/ops-assistant', element: <ConsoleAssistant id="ops-assistant" /> },
   { id: 'sec-assistant', title: 'Security', product: 'Security assistant: vulnerabilities, exposure and risk', layer: 'assistants', classicPath: '/sec-assistant', element: <ConsoleAssistant id="sec-assistant" /> },
@@ -206,6 +209,7 @@ const routes = (
     <Route path="/topology" element={topologyPage} />
     <Route path="/cis-nodes" element={cisNodesPage} />
     <Route path="/images" element={imagesPage} />
+    <Route path="/continuity" element={continuityPage} />
     <Route path="/costs" element={costsPage} />
     <Route path="/ops-assistant" element={<OpsAssistantPage />} />
     <Route path="/sec-assistant" element={<SecAssistantPage />} />

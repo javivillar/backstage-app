@@ -25,9 +25,10 @@ jobs:
       - name: Lint
         run: yarn lint:all
 
-      - name: Test the assistants
+      - name: Test the assistants and the continuity portal
         run: |
           yarn --cwd plugins/ops-assistant-backend test
+          yarn --cwd plugins/continuity-backend test
           yarn --cwd packages/app test src/components/opsassistant src/components/cost
 
       - name: Build backend

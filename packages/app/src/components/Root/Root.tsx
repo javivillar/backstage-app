@@ -27,6 +27,7 @@ import ArchitectureIcon from '@mui/icons-material/Architecture';
 import CodeIcon from '@mui/icons-material/Code';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import EuroIcon from '@mui/icons-material/Euro';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import { LogoFull, LogoIcon } from '../logos';
 import {
   Settings as SidebarSettings,
@@ -157,6 +158,7 @@ const ClassicRoot = ({ children }: PropsWithChildren<{}>) => (
           <SidebarItem icon={VerifiedUserIcon} to="tech-insights" text="Quality & Security" />
           <SidebarItem icon={FactCheckIcon} to="cis-nodes" text="CIS Nodes" />
           <SidebarItem icon={Inventory2Icon} to="images" text="Images" />
+          <SidebarItem icon={HistoryEduIcon} to="continuity" text="Continuity" />
           <SidebarItem icon={EuroIcon} to="costs" text="Costs" />
           <SidebarItem icon={MapIcon} to="tech-radar" text="Tech Radar" />
           <GraphSidebarItem />

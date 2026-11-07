@@ -24,6 +24,7 @@ import {
 } from '@internal/backstage-plugin-activepieces-backend';
 import { datahubManagerPlugin, datahubScaffolderModule } from '@internal/backstage-plugin-datahub-backend';
 import { catalogModuleImageCatalog, sbomPlugin, techInsightsModuleSupplyChain } from '@internal/backstage-plugin-sbom-backend';
+import { continuityPlugin } from '@internal/backstage-plugin-continuity-backend';
 import {
   alfrescoManagerPlugin,
   alfrescoScaffolderModule,
@@ -214,6 +215,11 @@ backend.add(sbomPlugin);
 // Image catalog (page /images): the images of Harbor a system may use, as Resource entities of type container-image
 // (plugins/sbom-backend/src/imageCatalogEntities.ts); inert unless sbom.imageCatalog.harborUrl is set.
 backend.add(catalogModuleImageCatalog);
+
+// Continuity portal (page /continuity): the digital continuity profile of each platform service (records, exports,
+// trust anchors, exit plan), files of the chart continuity-oneke mounted as a ConfigMap. Read only; 503 unless
+// continuity.profilesDir is set. Live expiry of the platform CA (continuity.trustDir) and the Keycloak realm keys.
+backend.add(continuityPlugin);
 
 // Operations assistant (page /ops-assistant): a model with the READ-ONLY tools of the MCP server opsassistant-oneke
 // (Kubernetes, Argo CD, logs, metrics, docs). The model is pluggable (plugins/ops-assistant-backend/src/model/:

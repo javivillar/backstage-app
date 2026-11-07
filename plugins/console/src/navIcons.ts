@@ -15,6 +15,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import GradeIcon from '@mui/icons-material/Grade';
 import GridViewIcon from '@mui/icons-material/GridView';
 import GroupsIcon from '@mui/icons-material/Groups';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import Diversity3Icon from '@mui/icons-material/Diversity3';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import WidgetsIcon from '@mui/icons-material/Widgets';
@@ -59,6 +60,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/cis-nodes': VerifiedUserIcon,
   '/console/cis-cluster': VerifiedIcon,
   '/console/images': LayersIcon,
+  '/console/continuity': HistoryEduIcon,
   '/console': MenuBookIcon,
   '/console/create': AddCircleIcon,
   '/console/apis': ApiIcon,

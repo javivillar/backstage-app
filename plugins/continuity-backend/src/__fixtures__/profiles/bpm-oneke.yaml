@@ -1,0 +1,9 @@
+service: bpm-oneke
+title: Camunda
+tier: C
+lifecycle: deprecated
+status: approved
+replacedBy: operaton-oneke
+records:
+  - id: history
+    kind: rebuildable

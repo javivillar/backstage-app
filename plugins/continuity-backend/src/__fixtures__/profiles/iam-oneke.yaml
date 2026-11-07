@@ -1,0 +1,24 @@
+service: iam-oneke
+title: Keycloak
+tier: A
+lifecycle: supported
+status: draft
+records:
+  - id: events
+    title: Login and admin events
+    kind: record
+    retention: 5 years (proposal)
+    export: { method: "Event listener to SeaweedFS", format: "JSONL + hash chain", schedule: every 12 h, status: planned }
+    worm: true
+    notes: "Keycloak keeps events 30 days only"
+  - id: realm
+    title: Realm definition
+    kind: definitions
+    export: { method: realm export, format: JSON, status: active }
+trustAnchors:
+  - id: realm-keys
+    title: Realm signing keys
+    kind: realm-keys
+    probe: "keycloak:realm-keys"
+    offlineCopy: unknown
+exit: { alternative: "Any OIDC provider", exportFormat: "Realm JSON", upstream: { project: Keycloak, license: Apache-2.0 } }

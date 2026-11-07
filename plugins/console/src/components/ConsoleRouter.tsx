@@ -15,6 +15,7 @@ import { StoragePage } from './StoragePage';
 import { NamespacePage } from './NamespacePage';
 import { CisNodesPage } from './CisNodesPage';
 import { ImageCatalogPage } from './ImageCatalogPage';
+import { ContinuityPage, ContinuityServicePage } from './ContinuityPage';
 import { ZoneNetworksPage, ZoneOverviewPage, ZoneSecurityGroupsPage, ZoneVmsPage } from './ZonePages';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { MarketplacePage, PlatformOverviewPage, PlatformPage } from './InfraPages';
@@ -32,7 +33,7 @@ import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
 
 /** Pages of the classic list (App) that the console has its own version of. */
-const NATIVE = new Set(['cis-nodes', 'images', 'docs', 'apis', 'quality', 'dependencies']);
+const NATIVE = new Set(['cis-nodes', 'images', 'continuity', 'docs', 'apis', 'quality', 'dependencies']);
 
 const Message = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <Box sx={{ maxWidth: 560, mx: 'auto', mt: 12, px: 2, display: 'grid', gap: 1.5 }}>
@@ -88,6 +89,8 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
+        <Route path="/continuity" element={<ContinuityPage />} />
+        <Route path="/continuity/:service" element={<ContinuityServicePage />} />
         {pages.filter(p => !NATIVE.has(p.id)).map(p => (
           <Route key={p.id} path={p.nested ? `/${p.id}/*` : `/${p.id}`} element={<ClassicPage key={p.id} page={p} />} />
         ))}

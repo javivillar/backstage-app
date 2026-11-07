@@ -21,6 +21,7 @@ conflicting inside plugin logic.
 | `scaffolder-backend-module-gitlab` | backend | GitLab scaffolder actions (roadie-derived) |
 | `terraform` | frontend | Terraform state/plan viewer tab |
 | `terraform-backend` | backend | Terraform backend (S3 state, plan/apply) powering the `terraform` frontend plugin |
+| `continuity-backend` | backend | The Continuity portal (`/continuity`, console page `/console/continuity`): reads the continuity profiles of the platform services (ConfigMap of the chart `continuity-oneke`, `continuity.profilesDir`), computes the state of each one and what needs attention, and the live expiry of the platform CA (`continuity.trustDir`) and Keycloak realm keys. Read only. The page lives in the `console` plugin (`ContinuityPage`). Refresquito-specific. |
 
 `keycloak`/`keycloak-backend` were extracted from `packages/app`/`packages/backend` on
 2026-09-03 (pure move, no behavior change) — see each package's own README for details.
