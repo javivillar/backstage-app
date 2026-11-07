@@ -87,7 +87,8 @@ describe('ConsoleRouter', () => {
     );
     expect(await screen.findByText('cards of petstore')).toBeInTheDocument();
     expect(screen.getByText('Business application')).toBeInTheDocument();
-    expect(screen.getByText('Open in the classic portal')).toHaveAttribute('href', '/catalog/default/component/petstore');
+    // the classic view of the entity: the header link only (the entity header has no link of its own)
+    expect(screen.getByText('Classic view').closest('a')).toHaveAttribute('href', '/catalog/default/component/petstore');
   });
 
   it('shows classic pages in the console menu and under its header', async () => {
