@@ -11,6 +11,8 @@ import {
   EntityLoggingContent,
   EntityPerformanceContent,
   hasGrafanaDashboard,
+  EntityDataContent,
+  hasDataProduct,
   EntityNetworkContent,
   EntityUserJourneyContent,
   ServiceChanges,
@@ -891,6 +893,9 @@ export const consoleEntityPage = entityPageWith(
     </EntityLayout.Route>
     <EntityLayout.Route path="/security" title={tabLabel(<GppMaybe />, 'Security')} if={hasNamespace}>
       <ServiceSecurity />
+    </EntityLayout.Route>
+    <EntityLayout.Route path="/data" title={tabLabel(<Storage />, 'Data')} if={hasDataProduct}>
+      <EntityDataContent />
     </EntityLayout.Route>
     <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
       <ConsoleCosts />
