@@ -28,7 +28,6 @@ import { Attention, EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow, t
 
 const stateTone: Record<State, Tone> = { ok: 'pos', warning: 'warn', critical: 'neg' };
 const lifecycleTone: Record<string, Tone> = { supported: 'neu', deprecated: 'warn', retired: 'neg', external: 'info' };
-const offlineTone: Record<string, Tone> = { yes: 'pos', no: 'neg', unknown: 'warn', 'n/a': 'neu' };
 
 /** GET /api/continuity/summary, once per page. */
 function useSummary() {
@@ -68,7 +67,7 @@ const StatePill = ({ state }: { state: State }) => {
 const AnchorsTable = ({ anchors, mount, showService = true }: { anchors: TrustAnchor[]; mount: Mount; showService?: boolean }) => {
   const { t, has } = useI18n();
   if (!anchors.length) return <EmptyState title={t('cont.noAnchors')} />;
-  const head = [t('cont.col.key'), ...(showService ? [t('cont.col.service')] : []), t('cont.col.expiry'), t('cont.col.daysLeft'), t('cont.col.offline'), t('cont.col.custodians'), t('cont.col.notes')];
+  const head = [t('cont.col.key'), ...(showService ? [t('cont.col.service')] : []), t('cont.col.expiry'), t('cont.col.daysLeft'), t('cont.col.zoneState'), t('cont.col.notes')];
   return (
     <Table
       head={head}
@@ -91,8 +90,8 @@ const AnchorsTable = ({ anchors, mount, showService = true }: { anchors: TrustAn
             )}
           </span>,
           days === undefined ? '—' : <Pill tone={choose<Tone>([[days < 0, 'neg'], [days < 90, 'warn']], 'neu')} plain>{String(days)}</Pill>,
-          <Pill tone={offlineTone[a.offlineCopy ?? 'unknown'] ?? 'neu'}>{label('offline', a.offlineCopy ?? 'unknown', t, has)}</Pill>,
-          a.custodians === undefined ? '—' : String(a.custodians),
+          // the ceremony (key generated, offline copy, custodians) is a fact of this zone, recorded here later
+          <Pill tone={a.ceremony === 'unrecorded' ? 'warn' : 'neu'}>{label('ceremony', a.ceremony, t, has)}</Pill>,
           a.notes || '—',
         ];
       })}
@@ -113,9 +112,9 @@ const Overview = ({ data, mount }: { data: ContinuitySummary; mount: Mount }) =>
     <>
       <Kpis
         items={[
-          { label: t('cont.kpi.profiles'), value: `${c.approved ?? 0} / ${c.services ?? 0}` },
+          { label: t('cont.kpi.profiles'), value: `${c.approved ?? 0} / ${c.services ?? 0}`, note: t('cont.kpi.profilesNote') },
           { label: t('cont.kpi.noExport'), value: c.recordsWithoutActiveExport ?? 0, note: t('cont.kpi.ofRecords', { n: c.recordsTotal ?? 0 }), tone: c.recordsWithoutActiveExport ? 'bad' : undefined },
-          { label: t('cont.kpi.noOffline'), value: c.anchorsWithoutOfflineCopy ?? 0, note: t('cont.kpi.ofAnchors', { n: c.trustAnchors ?? 0 }), tone: c.anchorsWithoutOfflineCopy ? 'bad' : undefined },
+          { label: t('cont.kpi.unrecorded'), value: c.anchorsUnrecorded ?? 0, note: t('cont.kpi.ofAnchors', { n: c.trustAnchors ?? 0 }), tone: c.anchorsUnrecorded ? 'bad' : undefined },
           { label: t('cont.kpi.deprecated'), value: `${c.deprecated ?? 0} / ${c.external ?? 0}` },
         ]}
       />
@@ -190,9 +189,50 @@ const Overview = ({ data, mount }: { data: ContinuitySummary; mount: Mount }) =>
           <EmptyState title={t('cont.noServices')} />
         )}
       </Section>
+      {data.notInstalled?.length ? (
+        // what the platform has a profile for but this programme does not run: no state, collapsed
+        <Box component="details" sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', px: 2.25, py: 1.5, mb: 3, '& > summary': { cursor: 'pointer', fontWeight: 500 } }}>
+          <summary>{t('cont.notInstalled', { n: data.notInstalled.length })}</summary>
+          <Table
+            head={[t('cont.col.service'), t('cont.col.tier')]}
+            rows={data.notInstalled.map(p => [
+              <span>
+                <Link to={`${mount.base}/${encodeURIComponent(p.service)}`}>{p.title || p.service}</Link>
+                <Typography component="div" variant="caption" color="text.secondary">
+                  <Id>{p.service}</Id>
+                </Typography>
+              </span>,
+              label('tier', p.tier, t, has),
+            ])}
+          />
+        </Box>
+      ) : null}
     </>
   );
 };
+
+/** A profile that is not in the summary (not installed here): GET /api/continuity/profiles/:service. */
+function useProfile(service: string | undefined, skip: boolean) {
+  const discovery = useApi(discoveryApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const [state, setState] = useState<{ loading: boolean; data?: ContinuityProfile & { trustAnchors: TrustAnchor[] } }>({ loading: false });
+  useEffect(() => {
+    if (!service || skip) return undefined;
+    let alive = true;
+    setState({ loading: true });
+    (async () => {
+      const r = await fetch(`${await discovery.getBaseUrl('continuity')}/profiles/${encodeURIComponent(service)}`);
+      return r.ok ? ((await r.json()) as ContinuityProfile & { trustAnchors: TrustAnchor[] }) : undefined;
+    })().then(
+      data => alive && setState({ loading: false, data }),
+      () => alive && setState({ loading: false }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [discovery, fetch, service, skip]);
+  return state;
+}
 
 /** Whether the catalog has a component named like the service (then the detail links to it). */
 function useCatalogEntity(name: string) {
@@ -231,7 +271,8 @@ const Detail = ({ p, anchors, mount }: { p: ContinuityProfile; anchors: TrustAnc
             items={[
               [t('cont.col.tier'), label('tier', p.tier, t, has)],
               [t('cont.col.lifecycle'), <Pill tone={lifecycleTone[p.lifecycle] ?? 'neu'}>{label('lifecycle', p.lifecycle, t, has)}</Pill>],
-              [t('cont.col.profile'), label('status', p.status, t, has)],
+              [t('cont.col.profile'), [label('status', p.status, t, has), p.approvedBy && p.approvedAt ? t('cont.approvedByAt', { by: p.approvedBy, at: p.approvedAt }) : ''].filter(Boolean).join(' ')],
+              ...(!p.installed ? ([['', <Pill tone="info">{t('cont.notInstalled.one')}</Pill>]] as Array<[string, ReactNode]>) : []),
               ...(p.replacedBy ? ([[t('cont.replacedBy'), <Link to={`${mount.base}/${encodeURIComponent(p.replacedBy)}`}>{p.replacedBy}</Link>]] as Array<[string, ReactNode]>) : []),
               ...(p.managedIn ? ([[t('cont.managedIn'), p.managedIn]] as Array<[string, ReactNode]>) : []),
               [
@@ -250,7 +291,6 @@ const Detail = ({ p, anchors, mount }: { p: ContinuityProfile; anchors: TrustAnc
           <Table
             head={[t('cont.col.information'), t('cont.col.kind'), t('cont.col.retention'), t('cont.col.export'), t('cont.col.worm')]}
             rows={p.records.map(r => {
-              const status = r.export?.status;
               return [
                 <span>
                   {r.title || r.id}
@@ -263,8 +303,8 @@ const Detail = ({ p, anchors, mount }: { p: ContinuityProfile; anchors: TrustAnc
                 label('kind', r.kind, t, has),
                 r.retention || '—',
                 <span>
-                  <Pill tone={choose<Tone>([[status === 'active', 'pos'], [r.kind === 'record', 'warn']], 'neu')} plain>
-                    {status ? label('export', status, t, has) : t('cont.export.none')}
+                  <Pill tone={choose<Tone>([[r.exportActive, 'pos'], [r.kind === 'record', 'warn']], 'neu')} plain>
+                    {choose([[r.exportActive, t('cont.export.active')], [r.export, t('cont.export.inactive')]], t('cont.export.none'))}
                   </Pill>
                   {exportLine(r) && (
                     <Typography component="div" variant="caption" color="text.secondary">
@@ -313,7 +353,11 @@ export const ContinuityPage = ({ service, mount = CONSOLE }: { service?: string;
   const { t } = useI18n();
   const state = useSummary();
   const data = state.data;
-  const profile = service ? data?.profiles.find(p => p.service === service) : undefined;
+  const inSummary = service ? data?.profiles.find(p => p.service === service) : undefined;
+  // a service not installed here is not in the summary: its profile is read apart
+  const elsewhere = useProfile(service, !data || !!inSummary || !data.notInstalled?.some(x => x.service === service));
+  const profile = inSummary ?? elsewhere.data;
+  const anchors = inSummary ? (data?.trustAnchors ?? []).filter(a => a.service === inSummary.service) : elsewhere.data?.trustAnchors ?? [];
   const critical = data?.attention.filter(a => a.level === 'critical').length ?? 0;
   const warning = (data?.attention.length ?? 0) - critical;
   const crumbs: Array<[string, string?]> = service ? [[t('cont.crumb'), mount.base], [service]] : [[t('cont.crumb')]];
@@ -340,12 +384,12 @@ export const ContinuityPage = ({ service, mount = CONSOLE }: { service?: string;
           </>
         }
       />
-      {state.loading && <Progress />}
+      {(state.loading || elsewhere.loading) && <Progress />}
       {state.error && <WarningPanel title={t('cont.unreadable')} message={state.error} />}
       {data?.warnings?.length ? <WarningPanel severity="info" title={t('cont.warnings')} message={data.warnings.join(' · ')} /> : null}
       {data && !service && <Overview data={data} mount={mount} />}
-      {data && service && !profile && <EmptyState title={t('cont.notFound', { service })} tone="neg" />}
-      {data && profile && <Detail p={profile} anchors={data.trustAnchors.filter(a => a.service === profile.service)} mount={mount} />}
+      {data && service && !profile && !elsewhere.loading && <EmptyState title={t('cont.notFound', { service })} tone="neg" />}
+      {data && profile && <Detail p={profile} anchors={anchors} mount={mount} />}
     </Box>
   );
 };

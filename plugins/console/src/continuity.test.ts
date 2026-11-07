@@ -17,6 +17,9 @@ describe('continuity page helpers', () => {
     const drafts = { level: 'warning' as const, key: 'drafts', title: '', detail: '', vars: { n: 33, services: 'a, b' }, service: '' };
     expect(reasonText(drafts, es, has)).toBe('33 perfiles sin aprobar (los aprueba continuity-officer)');
     expect(reasonDetail(drafts, es)).toBe('Servicios: a, b');
+    expect(reasonText({ level: 'warning', key: 'ceremonies-unrecorded', title: '', detail: '', vars: { n: 4 }, service: '' }, es, has)).toBe('4 raíces de confianza sin ceremonia registrada en esta zona');
+    expect(reasonText({ level: 'warning', key: 'exports-missing', title: '', detail: '', vars: { n: 7, services: 'x' }, service: '' }, es, has)).toBe('7 servicios con registros sin export activo en esta zona');
+    expect(label('ceremony', 'unrecorded', es, has)).toBe('Sin registrar en esta zona');
   });
 
   it('labels enum values, keeping unknown ones', () => {
@@ -27,7 +30,7 @@ describe('continuity page helpers', () => {
 
   it('links the profile file, writes the export line and the expiry day', () => {
     expect(profileFileUrl({ file: 'harbor.yaml', service: 'harbor' })).toBe('https://github.com/javivillar/refresquito-services/blob/main/charts/continuity-oneke/files/profiles/harbor.yaml');
-    expect(exportLine({ id: 'r', kind: 'record', export: { format: 'JSONL', schedule: 'daily' } })).toBe('JSONL · daily');
+    expect(exportLine({ id: 'r', kind: 'record', export: { format: 'JSONL', schedule: 'daily', workflow: 'continuity-export-x' } })).toBe('JSONL · daily · continuity-export-x');
     expect(expiryDay({ live: { notAfter: '2036-11-04T08:06:22.000Z', notBefore: '', subject: '', daysLeft: 1 } })).toBe('2036-11-04');
     expect(expiryDay({})).toBe('—');
     expect([atRisk({ state: 'ok' }), atRisk({ state: 'warning' })]).toEqual([false, true]);

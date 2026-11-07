@@ -3,25 +3,24 @@ title: Platform PKI (step-ca)
 tier: A
 lifecycle: supported
 status: approved
+approvedBy: continuity-officer
+approvedAt: "2026-11-07"
 records:
   - id: issued
     title: Issued certificates log
     kind: record
     retention: 10 years
-    export: { method: step-ca db dump, format: JSONL + hash chain, schedule: daily, status: active }
+    export: { method: step-ca db dump, format: JSONL + hash chain, schedule: daily, workflow: continuity-export-step-ca }
     worm: true
 trustAnchors:
   - id: platform-root-ca
     title: Platform root CA (step-ca)
     kind: ca
     probe: "configmap:pki-oneke/step-ca-certs/root_ca.crt"
-    offlineCopy: yes
-    custodians: 2
   - id: platform-intermediate-ca
     title: Platform intermediate CA
     kind: ca
     probe: "configmap:pki-oneke/step-ca-certs/intermediate_ca.crt"
-    offlineCopy: n/a
 exit:
   alternative: Any X.509 CA
   exportFormat: PEM

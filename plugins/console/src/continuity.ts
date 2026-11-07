@@ -11,7 +11,9 @@ export type ContinuityRecord = {
   title?: string;
   kind: string;
   retention?: string;
-  export?: { method?: string; format?: string; schedule?: string; status?: string };
+  export?: { method?: string; format?: string; schedule?: string; workflow?: string };
+  /** this zone runs its export (always false until phase L2) */
+  exportActive?: boolean;
   worm?: boolean;
   notes?: string;
 };
@@ -21,10 +23,10 @@ export type TrustAnchor = {
   title?: string;
   kind: string;
   probe?: string;
-  offlineCopy?: string;
-  custodians?: number;
   notes?: string;
   service: string;
+  /** the ceremony of the anchor in this zone: not recorded until phase L3 */
+  ceremony: 'unrecorded' | string;
   live?: LiveCert;
   liveError?: string;
 };
@@ -36,12 +38,16 @@ export type ContinuityProfile = {
   lifecycle: string;
   status: string;
   replacedBy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   managedIn?: string;
   notes?: string;
   records: ContinuityRecord[];
-  trustAnchors: Array<Omit<TrustAnchor, 'service'>>;
+  trustAnchors: Array<Omit<TrustAnchor, 'service' | 'ceremony'>>;
   exit?: { alternative?: string; exportFormat?: string; upstream?: { project?: string; license?: string } };
   file: string;
+  installed: boolean;
+  external: boolean;
   recordsTotal: number;
   recordsWithoutActiveExport: number;
   state: State;
@@ -50,7 +56,10 @@ export type ContinuityProfile = {
 };
 export type Attention = Reason & { service: string };
 export type ContinuitySummary = {
+  /** what is installed in this cluster, and the externals */
   profiles: ContinuityProfile[];
+  /** profiles of services not installed in this programme */
+  notInstalled: Array<{ service: string; title?: string; tier?: string }>;
   trustAnchors: TrustAnchor[];
   attention: Attention[];
   counts: Record<string, number>;
@@ -76,7 +85,8 @@ export function reasonText(r: Reason & { service?: string }, t: T, has: Has): st
 /** Its second line: the records it is about, the approver of a draft, or the backend's detail. */
 export function reasonDetail(r: Reason, t: T): string {
   if (r.key === 'draft') return t('cont.reason.draft.detail');
-  if (r.key === 'drafts' && r.vars?.services) return t('cont.reason.drafts.detail', { services: r.vars.services });
+  if ((r.key === 'drafts' || r.key === 'exports-missing') && r.vars?.services) return t('cont.reason.drafts.detail', { services: r.vars.services });
+  if (r.key === 'ceremonies-unrecorded') return t('cont.reason.ceremonies-unrecorded.detail');
   if ((r.key === 'record-no-export' || r.key === 'external-no-export') && r.vars?.records) return t('cont.reason.records', { records: r.vars.records });
   return r.detail;
 }
@@ -89,7 +99,7 @@ export const label = (group: string, value: string | undefined, t: T, has: Has) 
 };
 
 /** The export of a record in one line: format · method · schedule. */
-export const exportLine = (r: ContinuityRecord) => [r.export?.format, r.export?.method, r.export?.schedule].filter(Boolean).join(' · ');
+export const exportLine = (r: ContinuityRecord) => [r.export?.format, r.export?.method, r.export?.schedule, r.export?.workflow].filter(Boolean).join(' · ');
 
 /** The day of a live certificate (YYYY-MM-DD), "—" when not read. */
 export const expiryDay = (a: Pick<TrustAnchor, 'live'>) => a.live?.notAfter.slice(0, 10) ?? '—';

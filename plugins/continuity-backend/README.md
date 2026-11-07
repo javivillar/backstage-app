@@ -27,32 +27,56 @@ Without `continuity.profilesDir`, or with a directory that cannot be read, every
 page shows a warning. A file that is not a profile (no `service`) or a value outside the schema is reported in
 `warnings`, not as an error. Hidden entries of the ConfigMap volume (`..data`) are skipped.
 
+## What is common and what is per zone
+
+The platform is installed in many zones and programmes from the same git repository, so a profile in git holds
+only what is common to every zone: the records and how they are exported (`method`, `format`, `schedule`,
+`workflow`), the trust anchors (`id`, `title`, `kind`, `probe`, `notes`), the exit plan and the platform-wide policy
+approval (`status`, `approvedBy`, `approvedAt`, by pull request). Facts of one zone never live in git, or they would
+show in every zone and leak between them:
+
+| Fact of the zone | Today (L1) | Later |
+| --- | --- | --- |
+| The export of a record runs | `exportActive: false` (`isExportActive`) | L2: a CronWorkflow of this zone runs `export.workflow` |
+| Ceremony of a trust anchor (key generated, offline copy, custodians) | `ceremony: 'unrecorded'` (`ceremonyOf`) | L3: recorded from the portal in this zone's Backstage database |
+| What is installed | the Components of this cluster's catalog | |
+
+Profiles of continuity-oneke 0.1.0 still render: `trustAnchors[].offlineCopy`, `custodians`, `lastCeremony` and
+`records[].export.status` are ignored, with one warning per file.
+
+**Only what is installed counts.** A profile is installed when this cluster's catalog has a Component with
+`metadata.name` equal to its `service` (one per deployed application, plus cnoe-oneke; read with the plugin's own
+service credentials); `lifecycle: external` is always present (`external: true`). If the catalog cannot be read,
+everything counts as installed and a warning says so. The KPIs, the attention list and the trust anchors take only
+the installed profiles and the externals; the others are listed in `notInstalled` without state.
+
 ## API (signed-in users)
 
-- `GET /api/continuity/summary`: `{profiles, trustAnchors, attention, counts, warnings}`.
-  - `profiles[]`: each profile as written plus `file`, `recordsTotal` (records of kind `record`),
-    `recordsWithoutActiveExport` (kind `record` with no export or export status other than `active`), `state`
-    (`ok` | `warning` | `critical`), `stateReason` (the key of its most severe reason) and `reasons[]`
-    (`{level, key, title, detail, vars}`; the page translates `key`, `title` and `detail` are English).
-  - `trustAnchors[]`: the anchors of every profile, each with `service` and `live` (`{notAfter, notBefore, subject,
-    daysLeft}`) or `liveError`.
-  - `attention[]`: one entry per cause of a warning or critical state, critical first; the drafts are ONE entry
-    (`key: drafts`, empty `service`, `vars: {n, services}`) right after the critical ones, not one per service
-    (the `draft` reason stays on each profile).
-- `GET /api/continuity/profiles/:service`: one profile with its computed fields; its `trustAnchors` carry `live`.
-  404 when there is none.
+- `GET /api/continuity/summary`: `{profiles, notInstalled, trustAnchors, attention, counts, warnings}`.
+  - `profiles[]` (installed + externals): each profile as written plus `file`, `installed`, `external`,
+    `records[].exportActive`, `recordsTotal` (records of kind `record`), `recordsWithoutActiveExport`, `state`
+    (`ok` | `warning` | `critical`), `stateReason` and `reasons[]` (`{level, key, title, detail, vars}`; the page
+    translates `key`; `title` and `detail` are English).
+  - `notInstalled[]`: `{service, title, tier}`.
+  - `trustAnchors[]`: the anchors of the installed profiles, each with `service`, `ceremony` and `live`
+    (`{notAfter, notBefore, subject, daysLeft}`) or `liveError`.
+  - `attention[]`: the critical items per service, then one aggregated item each (empty `service`) for `drafts`
+    (`vars {n, services}`), `ceremonies-unrecorded` (`vars {n}`) and, when more than 5 services have them,
+    `exports-missing` (`vars {n, services}`), then the other warnings per service.
+- `GET /api/continuity/profiles/:service`: one profile (installed or not) with its computed fields; its
+  `trustAnchors` carry `ceremony` and `live`. 404 when there is none.
 
 ## State rules (`src/status.ts`, pure)
 
 | Level | Key | When |
 | --- | --- | --- |
-| critical | `external-no-export` | lifecycle `external` and a record without an active export (knowledge only outside the zone) |
-| critical | `anchor-no-offline` | a trust anchor with `offlineCopy: no` |
-| warning | `record-no-export` | a record without an active export |
+| critical | `external-no-export` | lifecycle `external` and a record without an active export in this zone (knowledge and evidence only outside the zone) |
+| warning | `record-no-export` | a record without an active export in this zone (every record, in L1) |
 | warning | `deprecated` / `deprecated-replaced` | lifecycle `deprecated` (with `replacedBy`) |
 | warning | `draft` | status `draft` (not yet approved by the group `continuity-officer`) |
-| warning | `anchor-offline-unknown` | a trust anchor with `offlineCopy: unknown` |
 | warning | `cert-expiring` | a live certificate with less than 90 days left |
+
+The unrecorded ceremonies are not a reason of a profile; they show only as the aggregated attention item.
 
 ## Live trust anchors
 
@@ -68,4 +92,4 @@ Certificates are parsed with Node's `crypto.X509Certificate`; YAML with `yaml`.
 ## Tests
 
 `yarn workspace @internal/backstage-plugin-continuity-backend test --watchAll=false` (fixtures in `src/__fixtures__`:
-sample profiles, a test root + intermediate CA, a Keycloak-style key certificate).
+sample profiles, two of them in the 0.1.0 format, a test root + intermediate CA, a Keycloak-style key certificate).

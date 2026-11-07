@@ -7,4 +7,4 @@ records:
   - id: repos
     title: Repositories, pull requests and reviews
     kind: record
-    export: { method: gh mirror, status: planned }
+    export: { method: gh mirror, workflow: continuity-export-github }

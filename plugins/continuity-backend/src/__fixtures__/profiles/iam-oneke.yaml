@@ -1,3 +1,4 @@
+# format of continuity-oneke 0.1.0 (offlineCopy, export.status): still read, those fields ignored
 service: iam-oneke
 title: Keycloak
 tier: A

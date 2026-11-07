@@ -1,4 +1,5 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { Request, Response, Router } from 'express';
 import { continuitySettings } from './config';
 import { ProfilesUnavailableError } from './profiles';
@@ -14,7 +15,8 @@ import { ContinuityService } from './service';
  *                                          platform CA bundle or Keycloak says it), what needs attention, counts
  *   GET /api/continuity/profiles/:service  one profile with its state and its trust anchors
  *
- * Config: continuity.profilesDir (required, else 503), continuity.trustDir (optional), keycloakAdmin.* (optional).
+ * Only what is installed in this cluster counts (a Component of the catalog named like the profile's service, or
+ * lifecycle external); the rest is listed apart. Config: continuity.profilesDir (required, else 503), continuity.trustDir (optional), keycloakAdmin.* (optional).
  */
 export const continuityPlugin = createBackendPlugin({
   pluginId: 'continuity',
@@ -25,10 +27,20 @@ export const continuityPlugin = createBackendPlugin({
         httpAuth: coreServices.httpAuth,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
+        auth: coreServices.auth,
+        catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, config, logger }) {
+      async init({ httpRouter, httpAuth, config, logger, auth, catalog }) {
         const settings = continuitySettings(config, logger);
-        const service = settings && new ContinuityService(settings);
+        // what is installed in this cluster: the Components of its catalog, read with the plugin's own credentials
+        const installed = async () => {
+          const { items } = await catalog.getEntities(
+            { filter: { kind: 'component' }, fields: ['metadata.name'] },
+            { credentials: await auth.getOwnServiceCredentials() },
+          );
+          return new Set(items.map(e => e.metadata.name));
+        };
+        const service = settings && new ContinuityService(settings, fetch, Date.now, installed);
 
         const signedIn = async (req: Request, res: Response) => {
           try {

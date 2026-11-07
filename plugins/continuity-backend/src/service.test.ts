@@ -28,9 +28,10 @@ describe('ContinuityService', () => {
     expect(live).toEqual({ 'cosign-key': '', 'realm-keys': '2036-11-04', 'platform-root-ca': '2036-11-04', 'platform-intermediate-ca': '2031-11-06' });
     expect(calls).toEqual(['https://kc.example/realms/cnoe/protocol/openid-connect/token', 'https://kc.example/admin/realms/cnoe/keys']);
     // the intermediate expires in 36 days: pki-oneke warns
-    expect(s.profiles.find(p => p.service === 'pki-oneke')).toMatchObject({ state: 'warning', stateReason: 'cert-expiring' });
+    expect(s.profiles.find(p => p.service === 'pki-oneke')?.reasons.map(r => r.key)).toEqual(['record-no-export', 'cert-expiring']);
     expect(s.attention[0]).toMatchObject({ level: 'critical', service: 'github', key: 'external-no-export' });
-    expect(s.warnings).toEqual(['broken.yaml: no service']);
+    expect(s.trustAnchors.every(a => a.ceremony === 'unrecorded')).toBe(true);
+    expect(s.warnings).toContain('broken.yaml: no service');
   });
 
   it('turns a 403 of Keycloak into a warning, and a missing bundle into liveError', async () => {
@@ -39,6 +40,25 @@ describe('ContinuityService', () => {
     expect(s.warnings).toContain('Keycloak realm keys: the service account backstage-admin lacks view-realm (403)');
     expect(s.trustAnchors.find(a => a.id === 'realm-keys')?.liveError).toMatch(/view-realm/);
     expect(s.trustAnchors.find(a => a.id === 'platform-root-ca')?.liveError).toMatch(/platform-ca.pem/);
+  });
+
+  it('keeps to what the catalog says is installed, the externals always', async () => {
+    const installed = async () => new Set(['iam-oneke', 'cnoe-oneke']);
+    const svc = new ContinuityService({ profilesDir: path.join(FIX, 'profiles') }, fakeFetch(200).fn, NOW, installed);
+    const s = await svc.summary();
+    expect(s.profiles.map(p => p.service)).toEqual(['github', 'harbor', 'iam-oneke']);
+    expect(s.notInstalled.map(p => p.service)).toEqual(['bpm-oneke', 'pki-oneke']);
+    expect(s.trustAnchors.map(a => a.id)).toEqual(['cosign-key', 'realm-keys']);
+    expect((await svc.profile('pki-oneke'))?.installed).toBe(false);
+  });
+
+  it('counts everything as installed when the catalog cannot be read', async () => {
+    const failing = async (): Promise<ReadonlySet<string>> => {
+      throw new Error('catalog down');
+    };
+    const s = await new ContinuityService({ profilesDir: path.join(FIX, 'profiles') }, fakeFetch(200).fn, NOW, failing).summary();
+    expect(s.notInstalled).toEqual([]);
+    expect(s.warnings).toContain('The catalog could not be read, every profile counts as installed: catalog down');
   });
 
   it('gives one profile with its live trust anchors', async () => {
