@@ -161,6 +161,8 @@ const Checks = ({ items }: { items: Array<{ ok: boolean; text: ReactNode }> }) =
   );
 };
 
+const resultTone = (result?: string): Tone => choose<Tone>([[result === 'SUCCESS', 'pos'], [!!result, 'neg']], 'neu');
+
 function ProData({ v }: { v: ProView }) {
   const { t } = useI18n();
   const g = v.governance ?? {};
@@ -270,7 +272,6 @@ function ProData({ v }: { v: ProView }) {
   );
 }
 
-const resultTone = (result?: string): Tone => choose<Tone>([[result === 'SUCCESS', 'pos'], [!!result, 'neg']], 'neu');
 
 function Continuity({ classification, retention }: { classification?: string; retention?: string | number }) {
   const { t } = useI18n();
