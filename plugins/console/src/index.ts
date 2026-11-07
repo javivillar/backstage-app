@@ -1,6 +1,7 @@
 export { consolePlugin, ConsolePage } from './plugin';
 export { ConsoleSidebarItem } from './components/ConsoleSidebarItem';
 export { catalogPathForConsole, consolePathForCatalog, isConsolePath } from './paths';
+export { ConsoleHomeRedirect, StayInConsole } from './components/StayInConsole';
 export type { ConsoleClassicPage } from './pages';
 export { EntityNetworkContent, EntityUserJourneyContent } from './components/EntityNetwork';
 export { EntityLiveContent } from './components/EntityLive';
@@ -12,7 +13,6 @@ export { ConsoleEntityLayout } from './components/ConsoleEntityLayout';
 export { EntityDependenciesContent } from './components/EntityDependencies';
 export { EntityApiContent, EntityCicdContent } from './components/EntityBuild';
 export { EntityDocsContent } from './components/EntityDocs';
-export { ClassicTabNote } from './components/ClassicTabNote';
 export { TechInsightsChecks } from './components/TechInsightsChecks';
 export { EntityKubernetesContent, EntityTopologyContent } from './components/EntityKubernetes';
 export { ContinuityClassicPage } from './components/ContinuityPage';

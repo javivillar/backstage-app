@@ -1,4 +1,4 @@
-import { classicPathForConsole, consolePathForClassic, type ConsoleClassicPage } from './pages';
+import { classicPathForConsole, consolePathForClassic, stayInConsole, type ConsoleClassicPage } from './pages';
 import { classicPathFor } from './components/ConsoleShell';
 
 const pages: ConsoleClassicPage[] = [
@@ -14,6 +14,7 @@ describe('classic pages in the console', () => {
     expect(consolePathForClassic('/costs/other', pages)).toBeUndefined();
     expect(consolePathForClassic('/catalog/default/component/petstore', pages)).toBe('/console/entity/default/component/petstore');
     expect(consolePathForClassic('/docs', pages)).toBeUndefined();
+    expect(consolePathForClassic('/docs/default/component/petstore/guide/', pages)).toBe('/console/entity/default/component/petstore/docs');
   });
 
   it('maps console paths back to the classic portal', () => {
@@ -21,5 +22,18 @@ describe('classic pages in the console', () => {
     expect(classicPathForConsole('/console/costs', pages)).toBe('/costs');
     expect(classicPathFor('/console/costs', pages)).toBe('/costs');
     expect(classicPathFor('/console/clusters', pages)).toBe('/home');
+  });
+
+  it('keeps a navigation of a framed classic page inside the console', () => {
+    const tpl = '/create/templates/default/keycloak-create-group';
+    expect(stayInConsole('/console/keycloak', tpl, pages)).toBe(`/console${tpl}`);
+    expect(stayInConsole('/console/create', '/create/tasks/abc', pages)).toBe('/console/create/tasks/abc');
+    // from the classic portal: stays classic
+    expect(stayInConsole('/keycloak-manager', tpl, pages)).toBeUndefined();
+    expect(stayInConsole('/', '/create', pages)).toBeUndefined();
+    // already in the console, or a classic page the console does not show
+    expect(stayInConsole('/console/costs', '/console/create', pages)).toBeUndefined();
+    expect(stayInConsole('/console/costs', '/topology', pages)).toBeUndefined();
+    expect(stayInConsole('/console/create', '/home', pages)).toBeUndefined();
   });
 });

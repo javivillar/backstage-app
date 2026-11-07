@@ -10,6 +10,14 @@ export function consolePathForCatalog(path: string): string | undefined {
   return m ? `/console/entity/${m[1]}/${m[2]}/${m[3]}${m[4] ?? ''}` : undefined;
 }
 
+const CLASSIC_DOCS = /^\/docs\/([^/]+)\/([^/]+)\/([^/?#]+)(\/[^?#]*)?$/;
+
+/** /docs/<ns>/<kind>/<name>[/page] (the TechDocs reader) → the Docs tab of that entity in the console (at its first page). */
+export function consolePathForDocs(path: string): string | undefined {
+  const m = CLASSIC_DOCS.exec(path);
+  return m ? `/console/entity/${m[1]}/${m[2]}/${m[3]}/docs` : undefined;
+}
+
 /** /console/entity/<ns>/<kind>/<name>[/tab] → the classic page of that entity, or undefined. */
 export function catalogPathForConsole(path: string): string | undefined {
   const m = CONSOLE_ENTITY.exec(path);

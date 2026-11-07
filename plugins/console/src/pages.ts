@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext } from 'react';
-import { catalogPathForConsole, consolePathForCatalog } from './paths';
+import { catalogPathForConsole, consolePathForCatalog, consolePathForDocs, isConsolePath } from './paths';
 
 /** A classic page shown inside the console (the app passes the same element it mounts in the classic routes). */
 export type ConsoleClassicPage = {
@@ -26,7 +26,7 @@ const strip = (p: string) => p.replace(/\/+$/, '') || '/';
 
 /** A path of the classic portal → the same thing inside the console, or undefined when the console does not show it. */
 export function consolePathForClassic(path: string, pages: ConsoleClassicPage[]): string | undefined {
-  const entity = consolePathForCatalog(path);
+  const entity = consolePathForCatalog(path) ?? consolePathForDocs(path);
   if (entity) return entity;
   const p = strip(path);
   for (const pg of pages.filter(x => !x.consoleOnly)) {
@@ -47,4 +47,14 @@ export function classicPathForConsole(path: string, pages: ConsoleClassicPage[])
     if (p.startsWith(`${base}/`)) return pg.nested ? pg.classicPath + p.slice(base.length) : pg.classicPath;
   }
   return undefined;
+}
+
+/**
+ * After a navigation from `from` to `to`: the console path to go to instead, when a classic page shown in the console
+ * navigated out of it (navigate('/create/...')). Undefined when it was not inside the console, stays inside it, or the
+ * console has no such page.
+ */
+export function stayInConsole(from: string, to: string, pages: ConsoleClassicPage[]): string | undefined {
+  if (!isConsolePath(from) || isConsolePath(to)) return undefined;
+  return consolePathForClassic(to, pages);
 }
