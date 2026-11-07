@@ -206,7 +206,7 @@ function ProData({ v }: { v: ProView }) {
       <Section title={t('data.inventory')} meta={t('data.inventoryMeta')} flush>
         <Table
           head={[t('data.service'), t('data.asset'), t('data.kind'), t('data.classification'), '']}
-          rows={v.inventory.map(i => [i.platform, <Id>{i.name}</Id>, `${i.kind}${i.detail ? ` · ${i.detail}` : ''}`, i.classification ? <Pill>{i.classification}</Pill> : '—', <a href={i.url} target="_blank" rel="noopener">{t('data.open')}</a>])}
+          rows={v.inventory.map(i => [i.platform, <Id key="n">{i.name}</Id>, `${i.kind}${i.detail ? ` · ${i.detail}` : ''}`, i.classification ? <Pill key="c">{i.classification}</Pill> : '—', <a key="o" href={i.url} target="_blank" rel="noopener">{t('data.open')}</a>])}
         />
       </Section>
       <Row spans={[7, 5]}>
@@ -224,10 +224,10 @@ function ProData({ v }: { v: ProView }) {
               <Table
                 head={[t('data.column'), t('data.type'), t('data.terms'), t('data.description'), t('data.distinct'), t('data.nulls')]}
                 rows={current.columns.map(c => [
-                  <Id>{c.name}</Id>,
+                  <Id key="n">{c.name}</Id>,
                   c.type,
                   c.terms.length ? c.terms.map(x => <Pill key={x} tone={x.startsWith('PersonalData.') ? 'warn' : 'neu'}>{x}</Pill>) : '—',
-                  c.description ?? <Pill tone="warn">{t('data.missing')}</Pill>,
+                  c.description ?? <Pill key="d" tone="warn">{t('data.missing')}</Pill>,
                   c.distinct ?? '—',
                   c.nulls ?? '—',
                 ])}
@@ -241,7 +241,7 @@ function ProData({ v }: { v: ProView }) {
           {v.contracts.length ? (
             <Table
               head={[t('data.check'), t('data.result'), t('data.when')]}
-              rows={v.contracts.map(c => [c.description, <Pill tone={resultTone(c.result)}>{c.result ?? t('data.notRun')}</Pill>, fmtTime(c.at)])}
+              rows={v.contracts.map(c => [c.description, <Pill key="r" tone={resultTone(c.result)}>{c.result ?? t('data.notRun')}</Pill>, fmtTime(c.at)])}
             />
           ) : (
             <EmptyState title={t('data.noContracts')} />
@@ -291,7 +291,7 @@ function PersonalTable({ personal }: { personal: Personal[] }) {
   const { t } = useI18n();
   return (
     <Section title={t('data.gdpr')} meta={t('data.gdprMeta')} flush>
-      <Table head={[t('data.kind'), t('data.columns'), t('data.examples')]} rows={personal.map(p => [p.kind, p.count, <Id>{p.examples.join(', ')}</Id>])} />
+      <Table head={[t('data.kind'), t('data.columns'), t('data.examples')]} rows={personal.map(p => [p.kind, p.count, <Id key="e">{p.examples.join(', ')}</Id>])} />
     </Section>
   );
 }
@@ -390,9 +390,9 @@ function DeclaredData({ v }: { v: DeclaredView }) {
         <Table
           head={[t('data.service'), t('data.asset'), t('data.terms'), t('data.columns'), t('data.contracts')]}
           rows={[
-            ...v.tables.map(x => ['PostgreSQL', <Id>{x.name}</Id>, x.terms.join(', ') || '—', x.columns, x.contract ? <Pill tone="pos">{t('data.yes')}</Pill> : '—']),
-            ...v.sites.map(x => ['Alfresco', <Id>{x}</Id>, '—', '—', '—']),
-            ...v.processes.map(x => [t('data.processes'), <Id>{x}</Id>, '—', '—', '—']),
+            ...v.tables.map(x => ['PostgreSQL', <Id key="n">{x.name}</Id>, x.terms.join(', ') || '—', x.columns, x.contract ? <Pill key="c" tone="pos">{t('data.yes')}</Pill> : '—']),
+            ...v.sites.map(x => ['Alfresco', <Id key="n">{x}</Id>, '—', '—', '—']),
+            ...v.processes.map(x => [t('data.processes'), <Id key="n">{x}</Id>, '—', '—', '—']),
           ]}
         />
       </Section>
