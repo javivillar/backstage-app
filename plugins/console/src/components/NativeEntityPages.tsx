@@ -19,13 +19,16 @@ import { classify } from './classify';
 import { type Instance, businessServiceView, isBusinessService } from './businessService';
 import { ClassicFrame } from './ClassicFrame';
 import { EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow } from './ui';
+import { BusinessProcessPage } from './businessMap/BusinessProcessPage';
+import { hasBusinessImpact, ImpactView } from './businessMap/ImpactTab';
 
 /**
  * The console's own pages for the kinds that are not applications or services: an API (overview and definition),
- * a group (members and what it owns) and a system (its parts). Everything links inside the console.
+ * a group (members and what it owns), a system (its parts; a business service also its impact on the business) and
+ * a business process (businessMap/BusinessProcessPage). Everything links inside the console.
  */
 
-const NATIVE_KINDS = new Set(['api', 'group', 'system']);
+const NATIVE_KINDS = new Set(['api', 'group', 'system', 'businessprocess']);
 export const hasNativePage = (e: Entity) => NATIVE_KINDS.has(e.kind.toLowerCase());
 
 /** kind:ns/name → its page in the console. */
@@ -383,6 +386,11 @@ const InstanceTable = ({ instances }: { instances: Instance[] }) => {
 
 const SystemPage = ({ entity }: { entity: Entity }) => {
   const { t } = useI18n();
+  const { pathname } = useLocation();
+  const ref = stringifyEntityRef(entity);
+  const base = consoleRefPath(ref);
+  const impact = hasBusinessImpact(entity);
+  const onImpact = impact && pathname.replace(/\/+$/, '').endsWith('/impact');
   const parts = useEntities(related(entity, 'hasPart'));
   const owner = refName(String(entity.spec?.owner ?? ''));
   const domain = entity.spec?.domain ? String(entity.spec.domain) : undefined;
@@ -401,51 +409,68 @@ const SystemPage = ({ entity }: { entity: Entity }) => {
         pills={<Pill plain tone={business ? 'pos' : undefined}>{business ? t('native.bs.pill') : t('native.system')}</Pill>}
         sub={entity.metadata.description}
       />
-      <Kpis
-        items={
-          business
-            ? [
-                { label: t('native.bs.application'), value: parts ? view.applications.length : '…' },
-                { label: t('native.bs.instances'), value: parts ? view.instances.length : '…', note: view.instances.map(i => i.stage).join(' · ') || undefined },
-                { label: t('native.bs.blocks'), value: parts ? view.instances.reduce((n, i) => n + i.blocks.length, 0) : '…' },
-                { label: 'APIs', value: parts ? of('api').length : '…' },
-              ]
-            : [
-                { label: t('native.system.components'), value: parts ? comps.length : '…', note: parts ? t('native.system.business', { n: biz.length }) : undefined },
-                { label: 'APIs', value: parts ? of('api').length : '…' },
-                { label: t('native.system.resources'), value: parts ? of('resource').length : '…' },
-              ]
-        }
-      />
-      <Section title={t('native.about')}>
-        <Facts
-          items={[
-            [t('native.owner'), owner ? <RefLink refStr={`group:default/${owner}`} label={owner} /> : '—'],
-            [t('native.system.domain'), domain ? <RefLink refStr={`domain:default/${domain}`} label={domain} /> : '—'],
-            [t('page.costs'), <Link key="costs" to="/console/costs">{t('native.system.costs')}</Link>],
-          ]}
-        />
-      </Section>
-      {business && parts && (
-        <>
-          <Section title={t('native.bs.application')} meta={t('native.count', { n: view.applications.length })} flush>
-            {view.applications.length ? <EntityTable items={view.applications} /> : <EmptyState title={t('native.bs.noApplication')} />}
-          </Section>
-          <Section title={t('native.bs.instances')} meta={t('native.count', { n: view.instances.length })} flush>
-            {view.instances.length ? <InstanceTable instances={view.instances} /> : <EmptyState title={t('native.bs.noInstances')} />}
-          </Section>
-        </>
+      {impact && (
+        <Box component="nav" aria-label={t('native.sections')} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          {[
+            [t('nav.overview'), base, !onImpact],
+            [t('bmi.tab'), `${base}/impact`, onImpact],
+          ].map(([label, to, on]) => (
+            <Link key={String(to)} to={String(to)} aria-current={on ? 'page' : undefined} style={{ padding: '8px 12px', color: 'inherit', fontWeight: on ? 600 : 400, borderBottom: on ? '2px solid currentColor' : '2px solid transparent', marginBottom: -1, textDecoration: 'none' }}>
+              {String(label)}
+            </Link>
+          ))}
+        </Box>
       )}
-      {[
-        ['component', t('native.system.components')],
-        ['api', 'APIs'],
-        ['resource', t('native.system.resources')],
-      ].map(([kind, title]) =>
-        rest(kind).length ? (
-          <Section key={kind} title={title} meta={t('native.count', { n: rest(kind).length })} flush>
-            <EntityTable items={rest(kind)} />
+      {onImpact && <ImpactView entityRef={ref} />}
+      {!onImpact && (
+        <>
+          <Kpis
+            items={
+              business
+                ? [
+                    { label: t('native.bs.application'), value: parts ? view.applications.length : '…' },
+                    { label: t('native.bs.instances'), value: parts ? view.instances.length : '…', note: view.instances.map(i => i.stage).join(' · ') || undefined },
+                    { label: t('native.bs.blocks'), value: parts ? view.instances.reduce((n, i) => n + i.blocks.length, 0) : '…' },
+                    { label: 'APIs', value: parts ? of('api').length : '…' },
+                  ]
+                : [
+                    { label: t('native.system.components'), value: parts ? comps.length : '…', note: parts ? t('native.system.business', { n: biz.length }) : undefined },
+                    { label: 'APIs', value: parts ? of('api').length : '…' },
+                    { label: t('native.system.resources'), value: parts ? of('resource').length : '…' },
+                  ]
+            }
+          />
+          <Section title={t('native.about')}>
+            <Facts
+              items={[
+                [t('native.owner'), owner ? <RefLink refStr={`group:default/${owner}`} label={owner} /> : '—'],
+                [t('native.system.domain'), domain ? <RefLink refStr={`domain:default/${domain}`} label={domain} /> : '—'],
+                [t('page.costs'), <Link key="costs" to="/console/costs">{t('native.system.costs')}</Link>],
+              ]}
+            />
           </Section>
-        ) : null,
+          {business && parts && (
+            <>
+              <Section title={t('native.bs.application')} meta={t('native.count', { n: view.applications.length })} flush>
+                {view.applications.length ? <EntityTable items={view.applications} /> : <EmptyState title={t('native.bs.noApplication')} />}
+              </Section>
+              <Section title={t('native.bs.instances')} meta={t('native.count', { n: view.instances.length })} flush>
+                {view.instances.length ? <InstanceTable instances={view.instances} /> : <EmptyState title={t('native.bs.noInstances')} />}
+              </Section>
+            </>
+          )}
+          {[
+            ['component', t('native.system.components')],
+            ['api', 'APIs'],
+            ['resource', t('native.system.resources')],
+          ].map(([kind, title]) =>
+            rest(kind).length ? (
+              <Section key={kind} title={title} meta={t('native.count', { n: rest(kind).length })} flush>
+                <EntityTable items={rest(kind)} />
+              </Section>
+            ) : null,
+          )}
+        </>
       )}
     </>
   );
@@ -458,6 +483,8 @@ export const NativeEntityPage = ({ entity, apiDefinition }: { entity: Entity; ap
       return <ApiPage entity={entity} apiDefinition={apiDefinition} />;
     case 'group':
       return <GroupPage entity={entity} />;
+    case 'businessprocess':
+      return <BusinessProcessPage entity={entity} />;
     default:
       return <SystemPage entity={entity} />;
   }

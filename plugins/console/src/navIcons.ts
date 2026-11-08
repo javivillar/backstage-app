@@ -33,6 +33,7 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RouterIcon from '@mui/icons-material/Router';
+import SchemaIcon from '@mui/icons-material/Schema';
 import ShieldIcon from '@mui/icons-material/Shield';
 import StorageIcon from '@mui/icons-material/Storage';
 import StorefrontIcon from '@mui/icons-material/Storefront';
@@ -72,6 +73,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/assistants': GroupsIcon,
   '/console/resolution-groups': Diversity3Icon,
   '/console/monitoring': MonitorHeartIcon,
+  '/console/business-map': SchemaIcon,
   '/console/development/python-framework-app': TerminalIcon,
   '/console/development/spring-framework-app': WidgetsIcon,
   '/console/ops-assistant': EngineeringIcon,

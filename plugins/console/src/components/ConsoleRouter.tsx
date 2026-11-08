@@ -29,6 +29,10 @@ import { ConsoleTheme } from '../theme/consoleTheme';
 import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
+import { BusinessMapPage } from './businessMap/BusinessMapPage';
+import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
+import { BusinessGlassPage } from './businessMap/GlassPage';
+import { BusinessMatrixPage } from './businessMap/MatrixPage';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
@@ -89,6 +93,10 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/dependencies" element={<DependencyExplorer />} />
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/monitoring" element={<MonitoringPage />} />
+        <Route path="/business-map" element={<BusinessMapPage />} />
+        <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
+        <Route path="/business-map/glass" element={<BusinessGlassPage />} />
+        <Route path="/business-map/matrix" element={<BusinessMatrixPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         <Route path="/continuity" element={<ContinuityPage />} />

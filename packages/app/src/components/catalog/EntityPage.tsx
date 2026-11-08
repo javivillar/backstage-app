@@ -26,6 +26,8 @@ import {
   EntityKubernetesContent as ConsoleKubernetes,
   EntityTopologyContent as ConsoleTopology,
   TechInsightsChecks,
+  ImpactTab,
+  hasBusinessImpact,
 } from '@internal/plugin-console';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
@@ -51,6 +53,7 @@ import Inventory from '@mui/icons-material/Inventory2';
 import BubbleChart from '@mui/icons-material/BubbleChart';
 import SupportAgent from '@mui/icons-material/SupportAgent';
 import Key from '@mui/icons-material/Key';
+import BusinessIcon from '@mui/icons-material/Business';
 import { EntitySecurityContent, isSecurityAvailable } from '@internal/plugin-keycloak';
 import { useEntity } from '@backstage/plugin-catalog-react';
 import {
@@ -899,6 +902,10 @@ export const consoleEntityPage = entityPageWith(
     </EntityLayout.Route>
     <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
       <ConsoleCosts />
+    </EntityLayout.Route>
+    {/* the business processes above it (business map); on a framework line, who runs on it */}
+    <EntityLayout.Route path="/impact" title={tabLabel(<BusinessIcon />, 'Impact on the business')} if={hasBusinessImpact}>
+      <ImpactTab />
     </EntityLayout.Route>
   </>,
   <ConsoleOverview />,

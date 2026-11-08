@@ -194,7 +194,14 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({ title: zoneName, items: [{ label: tr('nav.infrastructure'), to: '/console/infrastructure' }] });
     groups.push({ title: tr('nav.itsPortal'), items: [{ label: tr('nav.openPortal'), to: '/console' }] });
   } else {
-    groups.push({ title: tr('nav.portal'), items: [{ label: tr('nav.catalogue'), to: '/console', hint: tr('nav.catalogue.hint') }, ...navOf('portal')] });
+    groups.push({
+      title: tr('nav.portal'),
+      items: [
+        { label: tr('nav.catalogue'), to: '/console', hint: tr('nav.catalogue.hint') },
+        { label: tr('nav.businessMap'), to: '/console/business-map', hint: tr('nav.businessMap.hint') },
+        ...navOf('portal'),
+      ],
+    });
     // the templates of a new application, opened in the console's own scaffolder (Portal › Create), not the classic one
     groups.push({
       title: tr('nav.development'),

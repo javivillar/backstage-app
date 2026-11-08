@@ -16,3 +16,4 @@ export { EntityDocsContent } from './components/EntityDocs';
 export { TechInsightsChecks } from './components/TechInsightsChecks';
 export { EntityKubernetesContent, EntityTopologyContent } from './components/EntityKubernetes';
 export { ContinuityClassicPage } from './components/ContinuityPage';
+export { hasBusinessImpact, ImpactTab } from './components/businessMap/ImpactTab';
