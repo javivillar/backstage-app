@@ -1,4 +1,4 @@
-import { fieldErrors, initialValues, specFrom, splitList, type Field } from './manageFormModel';
+import { declarationOf, fieldErrors, fieldsFor, initialValues, productNames, specFrom, splitList, type Field } from './manageFormModel';
 
 const FIELDS: Field[] = [
   { key: 'name', label: 'Name', kind: 'text', required: true, createOnly: true, pattern: { re: /^[a-z0-9-]+$/, message: 'lowercase' } },
@@ -27,5 +27,21 @@ describe('the fields of a Manage form', () => {
     expect(specFrom(FIELDS, { name: 'docs', users: 'ana', public: false, tier: '' }, true)).toEqual({ name: 'docs', users: ['ana'], public: false });
     const current = { name: 'docs', users: ['ana'], public: false };
     expect(specFrom(FIELDS, { name: 'docs', users: 'ana, javi', public: false, tier: '' }, false, current)).toEqual({ users: ['ana', 'javi'] });
+  });
+
+  it('keeps the fields of the owner', () => {
+    const f: Field[] = [{ key: 'name', label: 'Name', kind: 'text' }, { key: 'writeGroup', label: 'Writers', kind: 'text', only: 'platform' }];
+    expect(fieldsFor(f, { kind: 'application' }).map(x => x.key)).toEqual(['name']);
+    expect(fieldsFor(f, { kind: 'platform' }).map(x => x.key)).toEqual(['name', 'writeGroup']);
+    expect(fieldsFor(f).length).toBe(2);
+  });
+
+  it('finds the declaration of an object of the product by its name in every stage', () => {
+    const app = { owner: { kind: 'application' as const, name: 'petstore' }, id: 'files', spec: { name: 'files' }, gone: false };
+    const plat = { owner: { kind: 'platform' as const }, id: 'shared', spec: { name: 'shared' }, gone: false };
+    expect(productNames(app)).toEqual(['petstore-files', 'petstore-dev-files', 'petstore-pre-files']);
+    expect(declarationOf([app, plat], 'petstore-dev-files')).toBe(app);
+    expect(declarationOf([app, plat], 'shared')).toBe(plat);
+    expect(declarationOf([app, plat], 'manual-bucket')).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ import { useI18n } from '../../i18n';
 import { type ChangeAnswer, ManageError, type ManageOwner, type OwnerView, useManageChange } from '../../manage';
 import { ResultNote, type Note } from '../Requests';
 import { AppPicker } from './AppPicker';
-import { fieldErrors, type Field, initialValues, specFrom } from './manageFormModel';
+import { fieldErrors, type Field, fieldsFor, initialValues, specFrom } from './manageFormModel';
 
 /**
  * The form of one Manage object (create, or change one): its fields, the application it belongs to, why; then the
@@ -26,6 +26,7 @@ export const ManageForm = ({
   current,
   owner: fixedOwner,
   platform,
+  idFromOwner,
   onDone,
   onCancel,
 }: {
@@ -40,6 +41,8 @@ export const ManageForm = ({
   /** the owner of the object being changed (it cannot move) */
   owner?: ManageOwner;
   platform?: boolean;
+  /** one object per application (its gateway API, its data product…): on create, its name is the application's */
+  idFromOwner?: boolean;
   onDone?: (a: ChangeAnswer) => void;
   onCancel?: () => void;
 }) => {
@@ -53,7 +56,8 @@ export const ManageForm = ({
   const [note, setNote] = useState<Note | undefined>();
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const errors = useMemo(() => fieldErrors(fields, values, creating), [fields, values, creating]);
+  const shown = useMemo(() => fieldsFor(fields, owner).filter(f => !(idFromOwner && creating && f.key === 'name')), [fields, owner, idFromOwner, creating]);
+  const errors = useMemo(() => fieldErrors(shown, values, creating), [shown, values, creating]);
   const ready = !!owner && Object.keys(errors).length === 0 && !busy;
   const body = () => ({
     service,
@@ -61,7 +65,7 @@ export const ManageForm = ({
     action: creating ? ('create' as const) : ('update' as const),
     owner: owner!,
     id: current?.name,
-    spec: specFrom(fields, values, creating, current),
+    spec: { ...specFrom(shown, values, creating, current), ...(idFromOwner && creating && owner?.kind === 'application' ? { name: owner.name } : {}) },
     reason: reason.trim() || undefined,
   });
   const send = async (dryRun: boolean) => {
@@ -96,7 +100,7 @@ export const ManageForm = ({
           setOwner(o);
           setPreview(undefined);
         }} platform={platform} disabled={!!fixedOwner} />
-      {fields
+      {shown
         .filter(f => creating || !f.createOnly)
         .map(f =>
           f.kind === 'boolean' ? (

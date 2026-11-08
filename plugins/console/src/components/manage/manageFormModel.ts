@@ -16,7 +16,27 @@ export type Field = {
   pattern?: { re: RegExp; message: string };
   /** only when creating (the name, for instance: it cannot change afterwards) */
   createOnly?: boolean;
+  /** only for objects of the platform, or only for those of an application */
+  only?: 'platform' | 'application';
 };
+
+/** The fields that apply to an owner (all of them while no owner is picked). */
+export const fieldsFor = (fields: Field[], owner?: { kind: string }) => fields.filter(f => !f.only || !owner || f.only === owner.kind);
+
+/** An object as git declares it (GET /api/manage/declared). */
+export type DeclaredLike = { owner: { kind: 'application'; name: string } | { kind: 'platform' }; id: string; spec: Record<string, unknown>; gone: boolean };
+
+/**
+ * The names an object declared in git has in the product: for an application, the name of each of its instances
+ * (<app>-<id> in production, <app>-<stage>-<id> in dev and pre, as the provisioner names them); for the platform, its
+ * own name.
+ */
+export const productNames = (d: DeclaredLike): string[] =>
+  d.owner.kind === 'platform' ? [d.id] : [`${d.owner.name}-${d.id}`, ...['dev', 'pre'].map(st => `${(d.owner as { name: string }).name}-${st}-${d.id}`)];
+
+/** The declaration of an object of the product, by its name; undefined when git does not declare it (made by hand). */
+export const declarationOf = (declared: DeclaredLike[] | undefined, name: string) => declared?.find(d => productNames(d).includes(name));
+
 export type Values = Record<string, string | boolean>;
 
 /** A list typed as "a, b, c" (or one per line). */

@@ -31,5 +31,12 @@ export const MANAGE: Messages = {
   'mng.typeName': { en: 'Name to confirm', es: 'Nombre para confirmar' },
   'mng.create': { en: 'New {what}', es: 'Nuevo {what}' },
   'mng.edit': { en: 'Change {what} {id}', es: 'Cambiar {what} {id}' },
+  'mng.change': { en: 'Change', es: 'Cambiar' },
+  'mng.beingRemoved': { en: 'being removed', es: 'eliminándose' },
+  'mng.notInGit': { en: 'not in git', es: 'no está en git' },
+  'mng.notInGitText': {
+    en: 'No application file declares it: it was made by hand or before Manage. Assign it to an application to change it from here.',
+    es: 'Ningún fichero de aplicación lo declara: se hizo a mano o antes de Manage. Asígnalo a una aplicación para cambiarlo desde aquí.',
+  },
   'mng.viaPr': { en: 'Changes go through a pull request in refresquito-services.', es: 'Los cambios van por pull request en refresquito-services.' },
 };
