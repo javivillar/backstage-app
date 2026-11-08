@@ -1,5 +1,14 @@
 import { Entity } from '@backstage/catalog-model';
-import { applicationFacts, compareLines, frameworkLines, isApplication, lineEntityOf, normalizeLine } from './techInsights';
+import {
+  applicationFacts,
+  compareLines,
+  frameworkLines,
+  isApplication,
+  lineEntityOf,
+  normalizeLine,
+  weeklyFactRetriever,
+  weeklyFacts,
+} from './techInsights';
 import type { QualityReport } from './quality';
 import type { SbomSummary } from './cyclonedx';
 import type { ImageScan } from './vulnerabilities';
@@ -367,5 +376,33 @@ describe('vulnerabilities by layer (framework or own)', () => {
     const facts = applicationFacts(petstore, ['3.3'], [{ ref: 'ghcr.io/o/petstore-api:abc' }]);
     expect(facts).toMatchObject({ frameworkLayerCritical: -1, frameworkLayerHigh: -1, ownLayerCritical: -1, ownLayerHigh: -1 });
     expect(applicationFacts(petstore, ['3.3'], [])).toMatchObject({ frameworkLayerCritical: -1 });
+  });
+});
+
+describe('weekly history (heatmap)', () => {
+  it('weeklyFacts keeps only the weekly keys', () => {
+    const full = applicationFacts(app, ['3.1'], [{ ref: 'api', sbom: sbom([['refresquito-fastapi', '3.1.0']]), scan: scan([]) }]);
+    expect(Object.keys(weeklyFacts(full)).sort()).toEqual(
+      [
+        'critical',
+        'high',
+        'frameworkLayerCritical',
+        'frameworkLayerHigh',
+        'ownLayerCritical',
+        'ownLayerHigh',
+        'testsFailed',
+        'backendCoverage',
+        'frontendCoverage',
+        'frameworkLine',
+        'latestFrameworkLine',
+      ].sort(),
+    );
+    expect(weeklyFacts(full)).toMatchObject({ critical: 0, frameworkLine: '3.1' });
+  });
+
+  it('the weekly retriever has its own id and a schema of exactly those keys', () => {
+    expect(weeklyFactRetriever.id).toBe('refresquitoWeeklyFactRetriever');
+    expect(Object.keys(weeklyFactRetriever.schema)).toHaveLength(11);
+    expect(weeklyFactRetriever.entityFilter).toEqual([{ kind: 'component' }]);
   });
 });

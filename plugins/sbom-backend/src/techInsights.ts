@@ -306,6 +306,75 @@ export function exceptionFacts(exc: Exceptions, report: QualityReport | undefine
   };
 }
 
+/**
+ * The facts of every application of the catalog, as the supply-chain retriever stores them; the weekly retriever
+ * keeps a few of the same facts (weeklyFacts), so both read the catalog, the SBOMs and the scans the same way.
+ */
+async function allApplicationFacts(ctx: FactRetrieverContext): Promise<TechInsightFact[]> {
+  const { discovery, auth, logger } = ctx;
+  const credentials = await auth.getOwnServiceCredentials();
+  const tokenFor = async (targetPluginId: string) =>
+    (await auth.getPluginRequestToken({ onBehalfOf: credentials, targetPluginId })).token;
+
+  const catalog = new CatalogClient({ discoveryApi: discovery, fetchApi: { fetch } });
+  const { items } = await catalog.getEntities({ filter: { kind: 'component' } }, { token: await tokenFor('catalog') });
+  const lines = frameworkLines(items);
+  const apps = items.filter(isApplication);
+  if (!apps.length) return [];
+
+  const sbomBase = await discovery.getBaseUrl('sbom');
+  const sbomToken = await tokenFor('sbom');
+  const get = async <T>(path: string, ref: string): Promise<T | undefined> => {
+    const res = await fetch(`${sbomBase}${path}?ref=${encodeURIComponent(ref)}`, {
+      headers: { Authorization: `Bearer ${sbomToken}` },
+    });
+    if (!res.ok) {
+      logger.warn(`tech-insights: ${path} of ${ref} answered ${res.status}`);
+      return undefined;
+    }
+    return (await res.json()) as T;
+  };
+
+  // the libraries each line ships (its release SBOMs): what of an application's findings is the framework's to fix.
+  // Read once per line; a release that cannot be read only leaves its libraries in the own layer
+  const linePkgs = new Map<string, Promise<Set<string>>>();
+  const packagesOf = (line: Entity | undefined): Promise<Set<string>> => {
+    if (!line) return Promise.resolve(new Set());
+    const key = stringifyEntityRef(line);
+    if (!linePkgs.has(key)) {
+      linePkgs.set(
+        key,
+        (async () => {
+          const components: Component[] = [];
+          for (const ref of list(line, ANNOTATION_SBOM_RELEASES)) {
+            const release = await get<{ summary: SbomSummary | null }>('/release', ref);
+            components.push(...(release?.summary?.components ?? []));
+          }
+          return frameworkPackages(components);
+        })(),
+      );
+    }
+    return linePkgs.get(key)!;
+  };
+
+  const facts: TechInsightFact[] = [];
+  for (const entity of apps) {
+    const images: ImageFacts[] = [];
+    for (const ref of list(entity, ANNOTATION_SBOM_IMAGES)) {
+      const sbom = await get<{ summary: SbomSummary | null }>('/image', ref);
+      const scan = await get<{ configured: boolean; scan: ImageScan | null }>('/vulnerabilities', ref);
+      const quality = await get<{ report: QualityReport | null }>('/quality', ref);
+      images.push({ ref, sbom: sbom ? sbom.summary : undefined, scan, quality: quality ? quality.report : undefined });
+    }
+    facts.push({
+      entity: { namespace: entity.metadata.namespace ?? 'default', kind: entity.kind, name: entity.metadata.name },
+      facts: applicationFacts(entity, lines, images, await packagesOf(lineEntityOf(entity, items))),
+    });
+    logger.debug(`tech-insights: facts of ${stringifyEntityRef(entity)}`);
+  }
+  return facts;
+}
+
 export const supplyChainFactRetriever: FactRetriever = {
   id: 'refresquitoSupplyChainFactRetriever',
   version: '0.8.0',
@@ -409,73 +478,44 @@ export const supplyChainFactRetriever: FactRetriever = {
       description: 'Secrets in the git history (gitleaks) and in the images (Trivy); -1: not reported',
     },
   },
+  handler: allApplicationFacts,
+};
+
+/**
+ * What the weeks view of the application heatmap shows (console, Development › Application heatmap): the facts kept
+ * once a week, the retriever's lifecycle (maxItems in app-config) being its history.
+ */
+export const WEEKLY_KEYS = [
+  'critical',
+  'high',
+  'frameworkLayerCritical',
+  'frameworkLayerHigh',
+  'ownLayerCritical',
+  'ownLayerHigh',
+  'testsFailed',
+  'backendCoverage',
+  'frontendCoverage',
+  'frameworkLine',
+  'latestFrameworkLine',
+] as const;
+
+export function weeklyFacts(f: TechInsightFact['facts']): TechInsightFact['facts'] {
+  return Object.fromEntries(WEEKLY_KEYS.filter(k => k in f).map(k => [k, f[k]]));
+}
+
+export const weeklyFactRetriever: FactRetriever = {
+  id: 'refresquitoWeeklyFactRetriever',
+  version: '0.1.0',
+  title: 'Weekly history of the application',
+  description: 'Once a week, the vulnerabilities (by layer), tests, coverage and framework line of an application: the history of the heatmap',
+  entityFilter: supplyChainFactRetriever.entityFilter,
+  schema: Object.fromEntries(WEEKLY_KEYS.map(k => [k, supplyChainFactRetriever.schema[k]])),
   async handler(ctx: FactRetrieverContext): Promise<TechInsightFact[]> {
-    const { discovery, auth, logger } = ctx;
-    const credentials = await auth.getOwnServiceCredentials();
-    const tokenFor = async (targetPluginId: string) =>
-      (await auth.getPluginRequestToken({ onBehalfOf: credentials, targetPluginId })).token;
-
-    const catalog = new CatalogClient({ discoveryApi: discovery, fetchApi: { fetch } });
-    const { items } = await catalog.getEntities({ filter: { kind: 'component' } }, { token: await tokenFor('catalog') });
-    const lines = frameworkLines(items);
-    const apps = items.filter(isApplication);
-    if (!apps.length) return [];
-
-    const sbomBase = await discovery.getBaseUrl('sbom');
-    const sbomToken = await tokenFor('sbom');
-    const get = async <T>(path: string, ref: string): Promise<T | undefined> => {
-      const res = await fetch(`${sbomBase}${path}?ref=${encodeURIComponent(ref)}`, {
-        headers: { Authorization: `Bearer ${sbomToken}` },
-      });
-      if (!res.ok) {
-        logger.warn(`tech-insights: ${path} of ${ref} answered ${res.status}`);
-        return undefined;
-      }
-      return (await res.json()) as T;
-    };
-
-    // the libraries each line ships (its release SBOMs): what of an application's findings is the framework's to fix.
-    // Read once per line; a release that cannot be read only leaves its libraries in the own layer
-    const linePkgs = new Map<string, Promise<Set<string>>>();
-    const packagesOf = (line: Entity | undefined): Promise<Set<string>> => {
-      if (!line) return Promise.resolve(new Set());
-      const key = stringifyEntityRef(line);
-      if (!linePkgs.has(key)) {
-        linePkgs.set(
-          key,
-          (async () => {
-            const components: Component[] = [];
-            for (const ref of list(line, ANNOTATION_SBOM_RELEASES)) {
-              const release = await get<{ summary: SbomSummary | null }>('/release', ref);
-              components.push(...(release?.summary?.components ?? []));
-            }
-            return frameworkPackages(components);
-          })(),
-        );
-      }
-      return linePkgs.get(key)!;
-    };
-
-    const facts: TechInsightFact[] = [];
-    for (const entity of apps) {
-      const images: ImageFacts[] = [];
-      for (const ref of list(entity, ANNOTATION_SBOM_IMAGES)) {
-        const sbom = await get<{ summary: SbomSummary | null }>('/image', ref);
-        const scan = await get<{ configured: boolean; scan: ImageScan | null }>('/vulnerabilities', ref);
-        const quality = await get<{ report: QualityReport | null }>('/quality', ref);
-        images.push({ ref, sbom: sbom ? sbom.summary : undefined, scan, quality: quality ? quality.report : undefined });
-      }
-      facts.push({
-        entity: { namespace: entity.metadata.namespace ?? 'default', kind: entity.kind, name: entity.metadata.name },
-        facts: applicationFacts(entity, lines, images, await packagesOf(lineEntityOf(entity, items))),
-      });
-      logger.debug(`tech-insights: facts of ${stringifyEntityRef(entity)}`);
-    }
-    return facts;
+    return (await allApplicationFacts(ctx)).map(f => ({ ...f, facts: weeklyFacts(f.facts) }));
   },
 };
 
-/** Adds the fact retriever to Tech Insights; when it runs is in app-config (techInsights.factRetrievers). */
+/** Adds the fact retrievers to Tech Insights; when they run is in app-config (techInsights.factRetrievers). */
 export const techInsightsModuleSupplyChain = createBackendModule({
   pluginId: 'tech-insights',
   moduleId: 'refresquito-supply-chain',
@@ -485,6 +525,7 @@ export const techInsightsModuleSupplyChain = createBackendModule({
       async init({ providers }) {
         providers.addFactRetrievers({
           refresquitoSupplyChainFactRetriever: supplyChainFactRetriever,
+          refresquitoWeeklyFactRetriever: weeklyFactRetriever,
           refresquitoDataGovernanceFactRetriever: governanceFactRetriever,
         });
       },
