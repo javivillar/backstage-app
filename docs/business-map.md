@@ -101,9 +101,28 @@ The catalog module `business-map` validates them and emits `ownedBy`/`ownerOf`, 
 parent process of a sub-process) and `dependsOn`/`dependencyOf`. A top process must say its criticality; a sub-process
 may leave it out. `metadata.description` is the description of a domain or a process (imported, or written in the
 process form). The files live in refresquito-services `catalog/business-map/<namespace>/`, one entity per
-file (`domain-<name>.yaml`, `process-<name>.yaml`, `reference-model.yaml`), read through the Location `business-map`
-of the app-of-apps catalog; the catalog rules allow these kinds only there. An example customer with made-up data:
+file (`domain-<name>.yaml`, `process-<name>.yaml`, `reference-model.yaml`). An example customer with made-up data:
 `catalog/business-map/example-customer/`.
+
+**How the catalog reads them: the entity provider `business-map`** (catalog module of the backend, `provider.ts`).
+Every `businessMap.provider.frequency` minutes (10 by default; `businessMap.provider.enabled: false` turns it off) it
+reads every file of `catalog/business-map/` in **one GraphQL query** (the tree of namespaces and the text of each
+file; a file GitHub gives no text of, over its size limit, is read alone) and gives the catalog all of them as a full
+mutation (location key `business-map-provider`): a file deleted in git is an entity gone from the catalog. Each
+entity points at its file (`backstage.io/managed-by-location`, `view-url`, `edit-url`). A file that is not valid
+YAML, or a document of another kind, is left out and logged; the rest go on. When GitHub limits the token
+(`RATE_LIMITED`, 403/429), or cannot be read, the run is skipped and the catalog keeps what it has. It reads
+`businessMap.repo` / `businessMap.branch` (default refresquito-services main) with the token of the GitHub
+integration.
+
+GitHub API cost: one GraphQL query per run and per catalog (the console preview has its own): 6 an hour each with the
+default frequency, whatever the number of files. It replaces the Location `business-map` of the app-of-apps catalog
+(now off: `catalog.businessMap.enabled: false`), which read every file through the contents API on each refresh: two
+thousand files of one customer, in two catalogs, spent the hourly limit of the token (5,000, shared with the other
+users of the token) in minutes. Entities of a provider are not checked by the catalog rules of a Location; the
+processor of the module still validates each kind. On a cluster where the Location ran, its entities stay as orphans
+holding its location key: delete them once (they have the annotation `backstage.io/orphan`) so the provider can take
+them over.
 
 ## Changing it: always by pull request
 
@@ -279,7 +298,7 @@ Plugin `business-map` (`packages/backend/src/plugins/businessMap/`):
 | `POST /api/business-map/exercises` | opens the pull request of a what-if exercise |
 
 Scaffolder actions: `refresquito:business-model:preview`, `:import`, `:adopt`. Config: `businessMap.criticality`,
-`businessMap.repo` / `businessMap.branch` (where the model files are read, default refresquito-services main),
+`businessMap.repo` / `businessMap.branch` (where the model files are read, default refresquito-services main), `businessMap.provider.enabled` / `.frequency` (the entity provider: on, every 10 minutes),
 `businessMap.exercises.repo` / `.branch` (default refresquito-specs main), `camundaPublicUrl` and `camundaAdmin.*` (the
 process engine, now Operaton).
 
