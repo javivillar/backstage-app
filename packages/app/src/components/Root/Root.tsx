@@ -129,7 +129,7 @@ const ClassicRoot = ({ children }: PropsWithChildren<{}>) => (
         <SidebarItem icon={CreateComponentIcon} to="create" text="Create..." />
         <SidebarItem icon={VpnKeyIcon} to="keycloak-manager" text="Keycloak Manager" />
         <SidebarItem icon={BarChartIcon} to="superset-manager" text="Superset Manager" />
-        <SidebarItem icon={AccountTreeIcon} to="camunda-manager" text="Camunda Manager" />
+        <SidebarItem icon={AccountTreeIcon} to="camunda-manager" text="Operaton Manager" />
         <SidebarItem icon={StorageIcon} to="seaweedfs-manager" text="SeaweedFS Manager" />
         <SidebarItem icon={FolderSharedIcon} to="alfresco-manager" text="Alfresco Manager" />
         <SidebarItem icon={HubIcon} to="activepieces-manager" text="Activepieces Manager" />

@@ -2,8 +2,10 @@ import './manageHandlersIam';
 import './manageHandlersGravitee';
 import './manageHandlersDatahub';
 import './manageHandlersSuperset';
+import './manageHandlersProcesses';
 import { parseDocument } from 'yaml';
 import { applyChange, ChangeError, handlerFor, type ChangeRequest } from './manageModel';
+import { groupsWithTombstones } from './manageHandlersProcesses';
 
 const APP = `# Animal shelter
 name: animalshelter
@@ -146,5 +148,25 @@ describe('Manage › Business intelligence', () => {
     expect(json(on).platform.dashboards).toEqual({ enabled: true });
     const off = run({ service: 'superset', object: 'dashboards', action: 'delete', id: 'animalshelter' }, on);
     expect(json(off).platform.dashboards).toEqual({ enabled: true, state: 'absent' });
+  });
+});
+
+describe('Manage › Business process (Operaton)', () => {
+  it('turns the processes of an application on with its groups', () => {
+    const out = run({ service: 'processes', object: 'processes', action: 'create', spec: { name: 'animalshelter', groups: ['animalsheltercoordinators'] } });
+    expect(json(out).platform.processes).toEqual({ enabled: true, groups: ['animalsheltercoordinators'] });
+  });
+
+  it('keeps a tombstone for a group taken out, and retires the block', () => {
+    const on = run({ service: 'processes', object: 'processes', action: 'create', spec: { name: 'animalshelter', groups: ['a-team', 'b-team'] } });
+    const less = run({ service: 'processes', object: 'processes', action: 'update', id: 'animalshelter', spec: { groups: ['a-team'] } }, on);
+    expect(json(less).platform.processes.groups).toEqual(['a-team', { name: 'b-team', state: 'absent' }]);
+    const off = run({ service: 'processes', object: 'processes', action: 'delete', id: 'animalshelter' }, less);
+    expect(json(off).platform.processes.state).toBe('absent');
+    expect(fails(() => run({ service: 'processes', object: 'processes', action: 'update', id: 'animalshelter', spec: {} }, on)).status).toBe(422);
+  });
+
+  it('revives a group given back', () => {
+    expect(groupsWithTombstones(['a', { name: 'b', state: 'absent' }], ['a', 'b'])).toEqual(['a', 'b']);
   });
 });

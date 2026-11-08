@@ -5,12 +5,14 @@ function camundaConfig(config: Config) {
 }
 
 /**
- * `engine-rest` auth against Camunda, as the `camunda-backstage-sa` service
- * account. Unlike Superset (bearer token + CSRF dance) or Keycloak
- * (client-credentials grant), engine-rest's auth is delegated straight to
- * the Keycloak identity plugin (`camunda.bpm.run.auth.enabled: true` — see
- * AUTHZ.md § bpm-oneke §4): a plain HTTP Basic header carrying a real
- * Keycloak username/password is enough, no token to cache or refresh.
+ * `engine-rest` auth against Operaton (operaton-oneke, the open-source fork
+ * of Camunda 7 with the same REST API), as the `operaton-admin-sa` service
+ * account. The config keys keep their historical `camundaAdmin.*` names so
+ * existing deployments keep working. Unlike Superset (bearer token + CSRF
+ * dance) or Keycloak (client-credentials grant), engine-rest's auth is
+ * delegated straight to Operaton's Keycloak identity plugin: a plain HTTP
+ * Basic header carrying a real Keycloak username/password is enough, no
+ * token to cache or refresh.
  */
 export async function camundaFetch(
   config: Config,
@@ -31,12 +33,24 @@ export async function camundaFetch(
   });
 }
 
+/** Browser-facing Operaton base URL (config key `camundaPublicUrl`, kept for compatibility). */
 export function camundaPublicUrl(config: Config): string {
-  return (
+  const url =
     config.getOptionalString('camundaPublicUrl') ??
     camundaConfig(config).getOptionalString('baseUrl') ??
-    ''
-  );
+    '';
+  return url.replace(/\/+$/, '');
+}
+
+/**
+ * Operaton serves its webapps under `/operaton/app/...` (the Camunda 7
+ * `/camunda/app/...` paths answer 404 on Operaton).
+ */
+export const OPERATON_WEBAPP_PATH = '/operaton/app';
+
+/** Deep link into Operaton Cockpit for one process definition id. */
+export function cockpitProcessDefinitionUrl(publicUrl: string, definitionId: string): string {
+  return `${publicUrl.replace(/\/+$/, '')}${OPERATON_WEBAPP_PATH}/cockpit/default/#/process-definition/${definitionId}`;
 }
 
 /**
@@ -53,7 +67,7 @@ export async function deleteAllProcessDefinitionVersions(
   const listRes = await camundaFetch(config, `/process-definition?key=${encodeURIComponent(processKey)}`);
   if (!listRes.ok) {
     throw new Error(
-      `Failed to list versions of Camunda process "${processKey}": ${listRes.status} ${await listRes.text()}`,
+      `Failed to list versions of Operaton process "${processKey}": ${listRes.status} ${await listRes.text()}`,
     );
   }
   const versions = (await listRes.json()) as { id: string }[];
@@ -63,7 +77,7 @@ export async function deleteAllProcessDefinitionVersions(
     });
     if (!delRes.ok && delRes.status !== 204) {
       throw new Error(
-        `Failed to delete Camunda process "${processKey}" version ${id}: ${delRes.status} ${await delRes.text()}`,
+        `Failed to delete Operaton process "${processKey}" version ${id}: ${delRes.status} ${await delRes.text()}`,
       );
     }
   }
