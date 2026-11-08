@@ -55,6 +55,8 @@ backend.add(import('./plugins/topology'));
 backend.add(import('./plugins/costs'));
 // the overview of this cluster (nodes, Argo CD applications, volumes) for the console (page /console/cluster)
 backend.add(import('./plugins/cluster'));
+// Manage through git: the Manage pages of the console change objects of the platform services by pull request
+backend.add(import('./plugins/manage'));
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));

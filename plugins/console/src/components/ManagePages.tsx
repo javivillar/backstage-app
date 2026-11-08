@@ -17,6 +17,8 @@ import { TONES } from './Flow';
 import { rq } from './tokens';
 import { TitleRow } from './ui';
 import { useI18n } from '../i18n';
+import { ManageRowActions, ManageToolbar, type SectionManage } from './manage/ManageSection';
+import { blockNameField } from './manage/manageFields';
 
 type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
@@ -31,6 +33,8 @@ type Section = {
   facts?: (r: Row) => Array<[string, ReactNode]>;
   /** where the element is seen in its product (a new tab); undefined when it has no page of its own */
   open?: (r: Row, host: HostOf) => string | undefined;
+  /** what Manage changes of this section through git (create, change, remove by pull request) */
+  manage?: SectionManage;
 };
 /** One platform service of Manage: what it does (label), the product, its Argo CD application and its sections. */
 export type ManageService = { id: string; label: string; product: string; app: string; sub: string; sections?: Section[]; home?: (host: HostOf) => string };
@@ -250,6 +254,17 @@ export const MANAGE_SERVICES: ManageService[] = [
         label: 'Buckets',
         plugin: 'seaweedfs-manager',
         path: '/buckets',
+        manage: {
+          service: 'seaweedfs',
+          object: 'bucket',
+          what: 'bucket',
+          platform: true,
+          fields: [
+            blockNameField('Name', 'the bucket of an application is <application>-<name>'),
+            { key: 'writeGroup', label: 'Group that writes', kind: 'text', only: 'platform', help: 'a Keycloak group: its members read and write the bucket' },
+            { key: 'readGroup', label: 'Group that reads', kind: 'text', only: 'platform', help: 'a Keycloak group: its members only read it' },
+          ],
+        },
         title: r => String(r.name),
         open: (r, host) => `${host('seaweedfs')}/files?path=${enc(`/buckets/${String(r.name)}`)}`,
         columns: [
@@ -287,6 +302,18 @@ export const MANAGE_SERVICES: ManageService[] = [
         label: 'Sites',
         plugin: 'alfresco-manager',
         path: '/sites',
+        manage: {
+          service: 'alfresco',
+          object: 'site',
+          what: 'site',
+          platform: true,
+          nameOf: r => String(r.id ?? ''),
+          fields: [
+            blockNameField('Name', 'the site of an application is <application>-<name>, private'),
+            { key: 'users', label: 'People', kind: 'list', help: 'user names of Keycloak that enter the site' },
+            { key: 'groups', label: 'Groups', kind: 'list', help: 'Keycloak groups whose members enter the site' },
+          ],
+        },
         title: r => String(r.title ?? r.id),
         open: (r, host) => (r.id ? `${host('alfrescodms')}/share/page/site/${enc(r.id)}/dashboard` : undefined),
         columns: [
@@ -454,7 +481,10 @@ const SectionView = ({ section, product }: { section: Section; product: string }
   const picked = rows[Math.min(sel, rows.length - 1)];
   if (st.loading) return <Progress />;
   if (st.error) return <WarningPanel title={t('manage.noRead', { what: section.label })} message={st.error} />;
+  const nameOf = (r: Row) => (section.manage?.nameOf ? section.manage.nameOf(r) : String(r.name ?? ''));
   return (
+    <Box sx={{ display: 'grid', gap: 2 }}>
+    {section.manage && <ManageToolbar m={section.manage} />}
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 320px' }, alignItems: 'start' }}>
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1, minWidth: 0 }}>
         <TextField size="small" placeholder={`${t('list.search')} · ${section.label.toLowerCase()}`} value={q} onChange={e => { setQ(e.target.value); setSel(0); }} inputProps={{ 'aria-label': `${t('list.search')} · ${section.label}` }} />
@@ -521,6 +551,7 @@ const SectionView = ({ section, product }: { section: Section; product: string }
       {picked && (
         <Box sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 2, bgcolor: 'background.paper', display: 'grid', gap: 1, position: { lg: 'sticky' }, top: 12 }}>
           <Typography sx={{ fontWeight: 600 }}>{section.title(picked)}</Typography>
+          {section.manage && <ManageRowActions key={nameOf(picked)} m={section.manage} name={nameOf(picked)} />}
           {urlOf(picked) && (
             <Box>
               <Button size="small" variant="contained" disableElevation href={urlOf(picked)!} target="_blank" rel="noreferrer" endIcon={<OpenInNew fontSize="small" />} >
@@ -542,6 +573,7 @@ const SectionView = ({ section, product }: { section: Section; product: string }
           </Box>
         </Box>
       )}
+    </Box>
     </Box>
   );
 };
@@ -580,7 +612,7 @@ export const ManageServicePage = () => {
               Open {s.product}
             </Button>
           )}
-          {classic && sections.length > 0 && (
+          {classic && sections.length > 0 && !sections.some(x => x.manage) && (
             <Button component={Link} to={`/console/${classic.id}`} variant="outlined" >
               Create and change (full manager)
             </Button>
