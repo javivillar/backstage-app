@@ -1,6 +1,11 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { Request, Router } from 'express';
-import { camundaFetch, camundaPublicUrl, deleteAllProcessDefinitionVersions } from './camundaClient';
+import {
+  camundaFetch,
+  camundaPublicUrl,
+  cockpitProcessDefinitionUrl,
+  deleteAllProcessDefinitionVersions,
+} from './camundaClient';
 import { ADMIN_GROUP_REF, CallerInfo, ownerMap, requireOwnerOrAdmin } from './ownership';
 
 interface ProcessDefinition {
@@ -14,7 +19,7 @@ interface ProcessDefinition {
  * Backend for the /camunda-manager frontend page: lists the process
  * definitions the caller provisioned through Backstage (or everything, if
  * they're a backstage-admin member). Same shape as keycloak-manager/
- * superset-manager, but the ownership filter comes from Camunda's own
+ * superset-manager, but the ownership filter comes from Operaton's own
  * native authorization table (see ownership.ts) rather than a bolted-on
  * attribute.
  */
@@ -48,7 +53,7 @@ export const camundaManagerPlugin = createBackendPlugin({
             const defsRes = await camundaFetch(config, '/process-definition?latestVersion=true');
             if (!defsRes.ok) {
               throw new Error(
-                `Failed to list Camunda process definitions: ${defsRes.status} ${await defsRes.text()}`,
+                `Failed to list Operaton process definitions: ${defsRes.status} ${await defsRes.text()}`,
               );
             }
             const allDefs = (await defsRes.json()) as ProcessDefinition[];
@@ -63,7 +68,7 @@ export const camundaManagerPlugin = createBackendPlugin({
                 name: d.name ?? d.key,
                 version: d.version,
                 owner: owners[d.key],
-                cockpitUrl: `${publicUrl}/camunda/app/cockpit/default/#/process-definition/${d.id}`,
+                cockpitUrl: cockpitProcessDefinitionUrl(publicUrl, d.id),
               }));
 
             res.json({ items, isAdmin: caller.isAdmin });

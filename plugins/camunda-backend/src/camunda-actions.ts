@@ -1,7 +1,12 @@
 import { createTemplateAction } from '@backstage/plugin-scaffolder-node';
 import { Config } from '@backstage/config';
 import { UserInfoService } from '@backstage/backend-plugin-api';
-import { camundaFetch, camundaPublicUrl, deleteAllProcessDefinitionVersions } from './camundaClient';
+import {
+  camundaFetch,
+  camundaPublicUrl,
+  cockpitProcessDefinitionUrl,
+  deleteAllProcessDefinitionVersions,
+} from './camundaClient';
 import { callerInfo, grantOwnership, requireOwnerOrAdmin } from './ownership';
 
 function slugify(input: string): string {
@@ -25,18 +30,19 @@ function extractProcessId(bpmnXml: string): string | undefined {
 }
 
 /**
- * Same start-event executionListener + assignee pattern already designed,
- * implemented and verified live for `authz-test-process`
- * (`charts/bpm-oneke/files/examples/authz-test-process.bpmn` in
- * refresquito-services — see AUTHZ.md § bpm-oneke §6): grants the user who
- * STARTS an instance a per-instance READ, and assigns the task directly to
- * them rather than to the whole `camunda-editor` candidate group. Applying
- * this to every self-service-provisioned process means instance/task
- * isolation is automatic from day one, with no per-process authoring effort
+ * Same start-event executionListener + assignee pattern as
+ * `authz-test-process` (`charts/operaton-oneke/files/examples/authz-test-process.bpmn`
+ * in refresquito-services, carried over from the former bpm-oneke): grants
+ * the user who STARTS an instance a per-instance READ, and assigns the task
+ * directly to them rather than to the whole `operaton-editor` candidate group.
+ * Operaton runs BPMN with the `camunda:` extension namespace unchanged, but
+ * Java classes used from scripts live under `org.operaton.bpm` (not
+ * `org.camunda.bpm`). Applying this to every self-service-provisioned
+ * process means instance/task isolation is automatic from day one, with no per-process authoring effort
  * — only the DEFINITION-level ownership grant (who may edit/delete this
  * process at all) is new, handled separately by grantOwnership below.
  */
-function buildBpmn(processKey: string, processName: string): string {
+export function buildBpmn(processKey: string, processName: string): string {
   const name = escapeXml(processName);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -51,14 +57,14 @@ function buildBpmn(processKey: string, processName: string): string {
             <![CDATA[
               // Grants the STARTER of this instance READ on this specific
               // instance's resourceId -- per-instance isolation between
-              // users who share the same Keycloak group (camunda-editor).
+              // users who share the same Keycloak group (operaton-editor).
               var authorizationService = execution.getProcessEngineServices().getAuthorizationService();
               var identityService = execution.getProcessEngineServices().getIdentityService();
               var auth = identityService.getCurrentAuthentication();
               if (auth != null) {
-                var Authorization = Java.type('org.camunda.bpm.engine.authorization.Authorization');
-                var Resources = Java.type('org.camunda.bpm.engine.authorization.Resources');
-                var Permissions = Java.type('org.camunda.bpm.engine.authorization.Permissions');
+                var Authorization = Java.type('org.operaton.bpm.engine.authorization.Authorization');
+                var Resources = Java.type('org.operaton.bpm.engine.authorization.Resources');
+                var Permissions = Java.type('org.operaton.bpm.engine.authorization.Permissions');
                 var authorization = authorizationService.createNewAuthorization(Authorization.AUTH_TYPE_GRANT);
                 authorization.setUserId(auth.getUserId());
                 authorization.setResource(Resources.PROCESS_INSTANCE);
@@ -67,7 +73,7 @@ function buildBpmn(processKey: string, processName: string): string {
                 authorizationService.saveAuthorization(authorization);
                 // Also used to assign the Review task directly to the
                 // starter below -- deliberately NOT a candidateGroups task,
-                // otherwise every camunda-editor peer would see it.
+                // otherwise every operaton-editor peer would see it.
                 execution.setVariable('starterUserId', auth.getUserId());
               }
             ]]>
@@ -107,7 +113,7 @@ async function deploy(
 
   const res = await camundaFetch(config, '/deployment/create', { method: 'POST', body: form });
   if (!res.ok) {
-    throw new Error(`Failed to deploy Camunda process "${processKey}": ${res.status} ${await res.text()}`);
+    throw new Error(`Failed to deploy Operaton process "${processKey}": ${res.status} ${await res.text()}`);
   }
   const body = (await res.json()) as {
     deployedProcessDefinitions?: Record<string, DeployedProcessDefinition>;
@@ -115,7 +121,7 @@ async function deploy(
   const defs = Object.values(body.deployedProcessDefinitions ?? {});
   if (defs.length === 0) {
     throw new Error(
-      `Camunda deployment of "${processKey}" succeeded but returned no deployed process definitions ` +
+      `Operaton deployment of "${processKey}" succeeded but returned no deployed process definitions ` +
         '(duplicate-filtering may have skipped it as unchanged).',
     );
   }
@@ -127,7 +133,7 @@ export function createCamundaProvisionProcessAction(options: { config: Config; u
   return createTemplateAction<{ processName: string; processKey: string; description?: string }>({
     id: 'camunda:provision-process',
     description:
-      'Deploys a minimal Camunda process (start event -> one user task -> end event), pre-wired ' +
+      'Deploys a minimal Operaton process (start event -> one user task -> end event), pre-wired ' +
       'with per-developer isolation, and grants you exclusive rights to it -- no other developer ' +
       'can see or start it, even one who shares your Keycloak group.',
     schema: {
@@ -163,8 +169,8 @@ export function createCamundaProvisionProcessAction(options: { config: Config; u
       const definition = await deploy(config, processKey, bpmnXml);
       await grantOwnership(config, processKey, caller.username);
 
-      const cockpitUrl = `${camundaPublicUrl(config)}/camunda/app/cockpit/default/#/process-definition/${definition.id}`;
-      ctx.logger.info(`Provisioned Camunda process ${processKey} (${definition.id}) for ${caller.entityRef}`);
+      const cockpitUrl = cockpitProcessDefinitionUrl(camundaPublicUrl(config), definition.id);
+      ctx.logger.info(`Provisioned Operaton process ${processKey} (${definition.id}) for ${caller.entityRef}`);
       ctx.output('processKey', processKey);
       ctx.output('cockpitUrl', cockpitUrl);
       ctx.output('bpmnXml', bpmnXml);
@@ -178,8 +184,8 @@ export function createCamundaUpdateProcessAction(options: { config: Config; user
     id: 'camunda:update-process',
     description:
       'Redeploys a new BPMN version under an existing process key you own (or, if backstage-admin, ' +
-      'any key). Model the process further in the desktop Camunda Modeler, then paste the updated ' +
-      'XML here.',
+      'any key). Model the process further in a BPMN modeler (e.g. the desktop Camunda Modeler, ' +
+      'whose output Operaton runs unchanged), then paste the updated XML here.',
     schema: {
       input: {
         type: 'object',
@@ -211,7 +217,7 @@ export function createCamundaUpdateProcessAction(options: { config: Config; user
       }
 
       const definition = await deploy(config, ctx.input.processKey, ctx.input.bpmnXml);
-      ctx.logger.info(`Redeployed Camunda process ${ctx.input.processKey} (${definition.id}) for ${caller.entityRef}`);
+      ctx.logger.info(`Redeployed Operaton process ${ctx.input.processKey} (${definition.id}) for ${caller.entityRef}`);
     },
   });
 }
@@ -235,7 +241,7 @@ export function createCamundaDeleteProcessAction(options: { config: Config; user
       await requireOwnerOrAdmin(config, caller, ctx.input.processKey);
 
       await deleteAllProcessDefinitionVersions(config, ctx.input.processKey);
-      ctx.logger.info(`Deleted Camunda process ${ctx.input.processKey} for ${caller.entityRef}`);
+      ctx.logger.info(`Deleted Operaton process ${ctx.input.processKey} for ${caller.entityRef}`);
     },
   });
 }

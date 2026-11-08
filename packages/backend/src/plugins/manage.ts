@@ -8,6 +8,7 @@ import './manageHandlersIam';
 import './manageHandlersGravitee';
 import './manageHandlersDatahub';
 import './manageHandlersSuperset';
+import './manageHandlersProcesses';
 import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner, parse } from './manageModel';
 
 /**

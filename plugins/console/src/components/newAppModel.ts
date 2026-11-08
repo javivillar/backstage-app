@@ -95,7 +95,7 @@ export const BLOCKS: Block[] = [
   { id: 'gateway', label: 'API gateway', product: 'Gravitee', toggle: 'gateway', fields: ['gatewayTeam'] },
   { id: 's3', label: 'Object storage', product: 'SeaweedFS · S3', list: 's3Buckets', fields: ['s3Buckets'] },
   { id: 'dms', label: 'Documents', product: 'Alfresco', list: 'dmsSites', fields: ['dmsSites', 'dmsGroups'] },
-  { id: 'processes', label: 'Business processes', product: 'Camunda', toggle: 'processes', fields: ['processGroups'] },
+  { id: 'processes', label: 'Business processes', product: 'Operaton', toggle: 'processes', fields: ['processGroups'] },
   { id: 'dashboards', label: 'Business intelligence', product: 'Superset', toggle: 'dashboards', fields: [] },
   { id: 'flows', label: 'Workflow integration', product: 'Activepieces', toggle: 'flows', fields: ['flowGroups'] },
 ];

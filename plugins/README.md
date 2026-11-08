@@ -16,8 +16,8 @@ conflicting inside plugin logic.
 | `keycloak-backend` | backend | Keycloak self-service: the 9 `keycloak:create-/update-/delete-*` scaffolder actions, the `keycloak-manager` list-endpoints plugin, the OIDC auth module (custom `signInResolver`), and the catalog `EntityProvider` (disabled by default, see the module's own comments). Refresquito-specific, not from upstream CNOE. |
 | `superset` | frontend | `SupersetManagerPage` (`/superset-manager`). Pairs with `superset-backend`. |
 | `superset-backend` | backend | Superset self-service: `superset:create-/update-connection`, `superset:create-/update-dataset`, `superset:provision-chart`/`provision-dashboard` scaffolder actions, plus the `superset-manager` list/delete endpoints. Refresquito-specific. |
-| `camunda` | frontend | `CamundaManagerPage` (`/camunda-manager`). Pairs with `camunda-backend`. |
-| `camunda-backend` | backend | Camunda (`bpm-oneke`) self-service: `camunda:provision-/update-/delete-process` scaffolder actions (ownership enforced via Camunda's own native authorization table, not a bolted-on attribute — see the plugin's own README), plus the `camunda-manager` list/delete endpoints. Refresquito-specific. |
+| `camunda` | frontend | `CamundaManagerPage` (`/camunda-manager`, "Operaton Manager"). Pairs with `camunda-backend`. |
+| `camunda-backend` | backend | Operaton (`operaton-oneke`, Camunda 7 fork; names kept from the former Camunda `bpm-oneke`) self-service: `camunda:provision-/update-/delete-process` scaffolder actions (ownership enforced via the engine's own native authorization table, not a bolted-on attribute — see the plugin's own README), plus the `camunda-manager` list/delete endpoints. Refresquito-specific. |
 | `scaffolder-backend-module-gitlab` | backend | GitLab scaffolder actions (roadie-derived) |
 | `terraform` | frontend | Terraform state/plan viewer tab |
 | `terraform-backend` | backend | Terraform backend (S3 state, plan/apply) powering the `terraform` frontend plugin |

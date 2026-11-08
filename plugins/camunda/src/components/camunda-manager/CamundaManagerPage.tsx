@@ -26,8 +26,8 @@ interface Row {
 
 // Single resource type (process definitions) — no tabs needed, unlike
 // SupersetManagerPage. Instances/tasks are out of scope here: their
-// isolation is already handled natively by the engine once a developer
-// logs into Cockpit/Tasklist (see AUTHZ.md § bpm-oneke §6).
+// isolation is already handled natively by the engine (Operaton,
+// operaton-oneke) once a developer logs into Cockpit/Tasklist.
 export const CamundaManagerPage = () => {
   const [items, setItems] = useState<Row[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -85,8 +85,8 @@ export const CamundaManagerPage = () => {
   return (
     <Page themeId="tool">
       <Header
-        title="Camunda Manager"
-        subtitle="Browse and manage the Camunda process definitions you've provisioned"
+        title="Operaton Manager"
+        subtitle="Browse and manage the Operaton process definitions you've provisioned"
       />
       <Content>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>

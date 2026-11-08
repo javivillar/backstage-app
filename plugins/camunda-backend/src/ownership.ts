@@ -15,7 +15,7 @@ export interface CallerInfo {
 }
 
 // Backstage entity refs here are 'user:default/<username>', and that
-// username is exactly the Camunda/Keycloak username — same convention
+// username is exactly the Operaton/Keycloak username — same convention
 // already verified for Superset/Keycloak in this stack.
 function usernameFromEntityRef(entityRef: string): string {
   return entityRef.split('/').pop() ?? entityRef;
@@ -34,22 +34,23 @@ export async function callerInfo(
   };
 }
 
-// Camunda's PROCESS_DEFINITION resource type id (stable numeric enum from
-// org.camunda.bpm.engine.authorization.Resources — verified live against a
-// real engine-rest response, GET /authorization?resourceType=6).
+// PROCESS_DEFINITION resource type id (stable numeric enum from
+// org.operaton.bpm.engine.authorization.Resources, unchanged from Camunda 7's
+// org.camunda.bpm one — GET /authorization?resourceType=6).
 const PROCESS_DEFINITION_RESOURCE_TYPE = 6;
 // AUTH_TYPE_GRANT.
 const AUTH_TYPE_GRANT = 1;
-// DELETE is deliberately NOT part of the camunda-editor group's shared grant
-// (READ + CREATE_INSTANCE, resourceId=*, see AUTHZ.md § bpm-oneke §5), so
+// DELETE is deliberately NOT part of the operaton-editor group's shared grant
+// (READ + CREATE_INSTANCE, resourceId=*, see `grants` in the operaton-oneke
+// chart of refresquito-services), so
 // holding it on one specific resourceId is an unambiguous per-user ownership
 // marker — nobody gets it except whoever this backend explicitly grants it
-// to at provision time. See AUTHZ.md § bpm-oneke §9 for the full rationale
+// to at provision time. See AUTHZ.md (Backstage section) for the full rationale
 // (native-authorization-as-ownership, instead of a bolted-on attribute like
 // Keycloak/Superset use).
 const OWNERSHIP_PERMISSION = 'DELETE';
 
-interface CamundaAuthorization {
+interface EngineAuthorization {
   id: string;
   userId?: string;
   resourceId: string;
@@ -63,7 +64,7 @@ interface CamundaAuthorization {
  * the Backstage-level checks below, and, for free, as a second independent
  * enforcement layer: even a request that bypassed Backstage entirely and hit
  * engine-rest directly with another editor's own credentials would get a
- * native Camunda 403 on delete/redeploy.
+ * native Operaton 403 on delete/redeploy.
  */
 export async function grantOwnership(
   config: Config,
@@ -98,7 +99,7 @@ export async function findOwner(config: Config, processKey: string): Promise<str
   if (!res.ok) {
     throw new Error(`Failed to look up owner of process "${processKey}": ${res.status} ${await res.text()}`);
   }
-  const items = (await res.json()) as CamundaAuthorization[];
+  const items = (await res.json()) as EngineAuthorization[];
   return items.find(a => a.userId)?.userId;
 }
 
@@ -109,9 +110,9 @@ export async function ownerMap(config: Config): Promise<Record<string, string>> 
     `/authorization?resourceType=${PROCESS_DEFINITION_RESOURCE_TYPE}&permission=${OWNERSHIP_PERMISSION}`,
   );
   if (!res.ok) {
-    throw new Error(`Failed to list Camunda process-definition ownership grants: ${res.status} ${await res.text()}`);
+    throw new Error(`Failed to list Operaton process-definition ownership grants: ${res.status} ${await res.text()}`);
   }
-  const items = (await res.json()) as CamundaAuthorization[];
+  const items = (await res.json()) as EngineAuthorization[];
   const map: Record<string, string> = {};
   for (const item of items) {
     if (item.userId) map[item.resourceId] = item.userId;

@@ -87,7 +87,7 @@ backend.add(keycloakScaffolderModule);
 // dashboard provisioning) — see plugins/superset-backend.
 backend.add(supersetScaffolderModule);
 
-// Camunda self-service scaffolder actions (provision/update/delete a
+// Operaton (Camunda 7 fork) self-service scaffolder actions (provision/update/delete a
 // process definition, pre-wired with per-developer isolation) — see
 // plugins/camunda-backend.
 backend.add(camundaScaffolderModule);
@@ -190,7 +190,7 @@ backend.add(keycloakManagerPlugin);
 // dashboards). Same shape as keycloak-manager.
 backend.add(supersetManagerPlugin);
 
-// Camunda manager — list/delete endpoints backing the /camunda-manager
+// Operaton manager — list/delete endpoints backing the /camunda-manager
 // frontend page (owner-scoped browse of provisioned process definitions).
 // Same shape as keycloak-manager/superset-manager.
 backend.add(camundaManagerPlugin);

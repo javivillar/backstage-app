@@ -180,7 +180,7 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'gravitee', title: 'API management', product: 'Gravitee', layer: 'managers', classicPath: '/gravitee-manager', element: <GraviteeManagerPage /> },
   { id: 'datahub', title: 'Data management', product: 'DataHub', layer: 'managers', classicPath: '/datahub', element: <DatahubCatalogPage /> },
   { id: 'superset', title: 'Business intelligence', product: 'Superset', layer: 'managers', classicPath: '/superset-manager', element: <SupersetManagerPage /> },
-  { id: 'camunda', title: 'Business process', product: 'Camunda', layer: 'managers', classicPath: '/camunda-manager', element: <CamundaManagerPage /> },
+  { id: 'camunda', title: 'Business process', product: 'Operaton', layer: 'managers', classicPath: '/camunda-manager', element: <CamundaManagerPage /> },
   { id: 'seaweedfs', title: 'S3 buckets', product: 'SeaweedFS', layer: 'managers', classicPath: '/seaweedfs-manager', element: <SeaweedfsManagerPage /> },
   { id: 'alfresco', title: 'Document management system', product: 'Alfresco', layer: 'managers', classicPath: '/alfresco-manager', element: <AlfrescoManagerPage /> },
   { id: 'activepieces', title: 'Workflow integration', product: 'Activepieces', layer: 'managers', classicPath: '/activepieces-manager', element: <ActivepiecesManagerPage /> },

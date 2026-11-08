@@ -22,6 +22,7 @@ import { blockNameField } from './manage/manageFields';
 import { DatahubPage } from './manage/DatahubPage';
 import { GraviteePage } from './manage/GraviteePage';
 import { IamPage } from './manage/IamPage';
+import { ProcessesPage } from './manage/ProcessesPage';
 import { SupersetPage } from './manage/SupersetPage';
 
 export type Row = Record<string, unknown>;
@@ -234,10 +235,11 @@ export const MANAGE_SERVICES: ManageService[] = [
   {
     id: 'camunda',
     label: 'Business process',
-    product: 'Camunda',
-    app: 'bpm-oneke',
-    sub: 'Process definitions, running instances and their human tasks.',
-    home: host => `${host('bpm')}/camunda/app/cockpit/`,
+    product: 'Operaton',
+    app: 'operaton-oneke',
+    sub: 'The business processes of the applications (Operaton, the open-source Camunda 7 engine) and who works their tasks.',
+    home: host => `${host('operaton')}/operaton/app/cockpit/`,
+    page: ProcessesPage,
     sections: [
       {
         label: 'Process definitions',
