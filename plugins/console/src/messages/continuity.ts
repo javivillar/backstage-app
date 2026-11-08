@@ -7,7 +7,7 @@ export const CONTINUITY: Messages = {
     en: 'That what the platform keeps can be found, opened, understood and held valid for decades. Different from DR.',
     es: 'Que lo que guarda la plataforma se pueda encontrar, abrir, entender y dar por válido durante décadas. Distinto del DR.',
   },
-  'cont.crumb': { en: 'Continuity', es: 'Continuidad' },
+  'cont.crumb': { en: 'Digital continuity', es: 'Continuidad digital' },
   'cont.unreadable': { en: 'The continuity profiles could not be read', es: 'No se pudieron leer los perfiles de continuidad' },
   'cont.warnings': { en: 'Some profiles or keys could not be read', es: 'Algunos perfiles o claves no se pudieron leer' },
   'cont.finding': { en: '{c} critical and {w} warnings need attention.', es: '{c} críticos y {w} avisos requieren atención.' },

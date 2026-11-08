@@ -7,6 +7,8 @@ import { ENTITY } from './messages/entity';
 import { CONTINUITY } from './messages/continuity';
 import { MONITORING } from './messages/monitoring';
 import { MANAGE } from './messages/manage';
+import { BUSINESS_MAP } from './messages/businessMap';
+import { BUSINESS_MAP_DASHBOARDS } from './messages/businessMapDashboards';
 import { DEVELOPMENT } from './messages/development';
 
 /**
@@ -94,7 +96,7 @@ const SHELL: Messages = {
   'page.costs': { en: 'Costs', es: 'Costes' },
   'page.cis-nodes': { en: 'CIS Kubernetes nodes', es: 'CIS de los nodos' },
   'page.images': { en: 'Images', es: 'Imágenes' },
-  'page.continuity': { en: 'Continuity', es: 'Continuidad' },
+  'page.continuity': { en: 'Digital continuity', es: 'Continuidad digital' },
   'page.assistants': { en: 'The team', es: 'El equipo' },
   'page.ops-assistant': { en: 'Operations', es: 'Operaciones' },
   'page.sec-assistant': { en: 'Security', es: 'Seguridad' },
@@ -112,7 +114,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...DEVELOPMENT };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT };
 
 const KEY = 'rq-console-lang';
 

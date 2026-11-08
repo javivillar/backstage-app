@@ -5,9 +5,13 @@ import { classify, segmentOf } from './classify';
  * The model of Portal › Dependencies: the layers of the Refresquito reference architecture (business applications on
  * top, the foundations below, what is outside the zone apart) and the dependencies between the elements of the catalog.
  */
-export type Layer = 'biz' | 'fwk' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
+export type Layer = 'dom' | 'proc' | 'biz' | 'fwk' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
 export const LAYERS: Layer[] = ['biz', 'fwk', 'app', 'dat', 'ops', 'dev', 'obs', 'sec', 'inf', 'ext'];
+/** the business glass (Business map › Glass): the business domains and processes on top of the same layers */
+export const BUSINESS_LAYERS: Layer[] = ['dom', 'proc', ...LAYERS];
 export const LAYER_INFO: Record<Layer, { label: string; colour: string }> = {
+  dom: { label: 'Business domains', colour: '#E2553F' },
+  proc: { label: 'Business processes', colour: '#F0604D' },
   biz: { label: 'Business services · applications', colour: '#FF6B5B' },
   fwk: { label: 'Development services · frameworks', colour: '#FF7D5C' },
   app: { label: 'Application services · APP', colour: '#FF8A5C' },
@@ -45,6 +49,8 @@ export function layerOf(e: Entity): Layer {
     const type = String(e.spec?.type ?? '');
     if (/external|smtp|internet|saas/.test(type) || e.metadata.annotations?.['refresquito.io/external']) return 'ext';
   }
+  if (e.kind === 'Domain') return 'dom';
+  if (e.kind === 'BusinessProcess') return 'proc';
   const kind = classify(e);
   if (kind === 'business') return 'biz';
   if (kind === 'development') return 'fwk';
@@ -59,8 +65,16 @@ export type Health = 'ok' | 'warn' | 'bad' | 'off';
 export type DepNodeModel = { id: string; entity: Entity; label: string; product: string; layer: Layer; health: Health; healthLabel: string; deg: number };
 export type DepLink = { source: string; target: string; label: string; type: 'dep' | 'api' };
 
-/** a node of the glass: components, resources and the business services (Systems of type business-service) */
-const isNode = (e: Entity) => e.kind === 'Component' || e.kind === 'Resource' || (e.kind === 'System' && classify(e) === 'business');
+/**
+ * a node of the glass: components, resources and the business services (Systems of type business-service); and for the
+ * business glass the business domains (Domains of type business-area) and the business processes
+ */
+const isNode = (e: Entity) =>
+  e.kind === 'Component' ||
+  e.kind === 'Resource' ||
+  e.kind === 'BusinessProcess' ||
+  (e.kind === 'Domain' && e.spec?.type === 'business-area') ||
+  (e.kind === 'System' && classify(e) === 'business');
 
 /**
  * The nodes and links: dependsOn, an API consumed drawn to the component that provides it (labelled with the API), a
@@ -91,6 +105,7 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
       if (r.type === 'consumesApi') for (const p of providers.get(r.targetRef) ?? []) add(me, p, `${parseEntityRef(r.targetRef).name} API`, 'api');
       if (e.kind === 'System' && r.type === 'hasPart' && byRef.get(r.targetRef)?.spec?.type === 'business-application') add(me, r.targetRef, 'application', 'dep');
       if (e.spec?.type === 'business-application' && r.type === 'hasSubcomponent') add(me, r.targetRef, 'instance', 'dep');
+      if (e.kind === 'Domain' && r.type === 'hasPart') add(me, r.targetRef, byRef.get(r.targetRef)?.kind === 'Domain' ? 'subdomain' : 'process', 'dep');
     }
   }
   const deg = new Map<string, number>();
@@ -124,35 +139,67 @@ export function reach(start: string, links: DepLink[], max: number, down: boolea
   return dist;
 }
 
+/**
+ * The nodes in the chain of an element: what it uses, all the way down, and who uses it, all the way up (not the
+ * siblings: walking down from a service does not come back up through another application).
+ */
+export function chainOf(start: string, links: DepLink[]): Set<string> {
+  const walk = (down: boolean) => {
+    const seen = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const c = q.shift()!;
+      for (const l of links) {
+        const from = down ? l.source : l.target;
+        const to = down ? l.target : l.source;
+        if (from === c && !seen.has(to)) {
+          seen.add(to);
+          q.push(to);
+        }
+      }
+    }
+    return seen;
+  };
+  return new Set([...walk(true), ...walk(false)]);
+}
+
 export const BAND_H = 165;
 const MID = 4;
-export const layerY = (k: Layer) => (k === 'ext' ? (LAYERS.indexOf('inf') - MID) * BAND_H + BAND_H * 1.6 : (LAYERS.indexOf(k) - MID) * BAND_H);
-export const nodeY = (k: Layer) => layerY(k) - 28;
-const INNER = LAYERS.filter(k => k !== 'ext');
-export const GLASS = {
-  top: layerY(INNER[0]) - BAND_H / 2,
-  bottom: layerY(INNER[INNER.length - 1]) + BAND_H / 2,
-  halfTop: 1080,
-  halfBottom: 900,
-};
+/** the height of a layer; the business glass (BUSINESS_LAYERS) has two more bands on top */
+export const layerY = (k: Layer, layers: Layer[] = LAYERS) =>
+  k === 'ext' ? (layers.indexOf('inf') - MID) * BAND_H + BAND_H * 1.6 : (layers.indexOf(k) - MID) * BAND_H;
+export const nodeY = (k: Layer, layers: Layer[] = LAYERS) => layerY(k, layers) - 28;
+export type GlassShape = { top: number; bottom: number; halfTop: number; halfBottom: number };
+/** the outline of the glass for some layers */
+export function glassFor(layers: Layer[]): GlassShape {
+  const inner = layers.filter(k => k !== 'ext');
+  return { top: layerY(inner[0], layers) - BAND_H / 2, bottom: layerY(inner[inner.length - 1], layers) + BAND_H / 2, halfTop: 1080, halfBottom: 900 };
+}
+export const GLASS = glassFor(LAYERS);
 /** the half width of the glass at a height */
-export const wAt = (y: number) => GLASS.halfTop - (GLASS.halfTop - GLASS.halfBottom) * ((y - GLASS.top) / (GLASS.bottom - GLASS.top));
+export const wAt = (y: number, g: GlassShape = GLASS) => g.halfTop - (g.halfTop - g.halfBottom) * ((y - g.top) / (g.bottom - g.top));
+/** the SVG path of the glass itself (its sides and its round bottom) */
+export function glassPath(g: GlassShape = GLASS): string {
+  const { top, bottom, halfTop, halfBottom } = g;
+  return `M${-halfTop - 40},${top - 30} L${-halfBottom - 30},${bottom + 26} Q${-halfBottom - 30},${bottom + 70} ${-halfBottom + 30},${bottom + 70} L${halfBottom - 30},${bottom + 70} Q${halfBottom + 30},${bottom + 70} ${halfBottom + 30},${bottom + 26} L${halfTop + 40},${top - 30}`;
+}
 
 /** Stack: every layer spread across the glass, each node near its neighbours of the other layers (barycentres). */
-export function stackLayout(nodes: DepNodeModel[], links: DepLink[]): Map<string, { x: number; y: number }> {
+export function stackLayout(nodes: DepNodeModel[], links: DepLink[], layers: Layer[] = LAYERS): Map<string, { x: number; y: number }> {
+  const g = glassFor(layers);
   const by = new Map<Layer, DepNodeModel[]>();
   nodes.forEach(n => by.set(n.layer, [...(by.get(n.layer) ?? []), n]));
   const pos = new Map<string, { x: number; y: number }>();
   const place = (k: Layer) => {
     const arr = by.get(k) ?? [];
-    const y = nodeY(k);
-    const half = (k === 'ext' ? GLASS.halfBottom : wAt(y)) - 110;
+    const y = nodeY(k, layers);
+    const half = (k === 'ext' ? g.halfBottom : wAt(y, g)) - 110;
     arr.forEach((n, i) => pos.set(n.id, { x: arr.length === 1 ? 0 : -half + (2 * half * i) / (arr.length - 1), y }));
   };
-  LAYERS.forEach(place);
+  layers.forEach(place);
   const layerOfId = new Map(nodes.map(n => [n.id, n.layer]));
   for (let pass = 0; pass < 4; pass++)
-    for (const k of LAYERS) {
+    for (const k of layers) {
       const arr = by.get(k) ?? [];
       const order = new Map<string, number>();
       for (const n of arr) {

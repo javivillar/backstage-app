@@ -128,6 +128,11 @@ const Scope = ({ label, sub, on, onClick, menu }: { label: string; sub?: string;
   </Button>
 );
 
+/** Classic pages the Business management group lists itself (not again under Portal). */
+const BUSINESS_PAGES = new Set(['/console/continuity']);
+/** Classic pages of the FinOps group: what the services cost and how good they are. */
+const FINOPS_PAGES = new Set(['/console/costs', '/console/quality']);
+
 const LAYER_KEY: Record<Layer, string> = { infra: 'shell.platform', cluster: 'shell.cluster', portal: 'shell.portal' };
 
 /**
@@ -194,7 +199,25 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     groups.push({ title: zoneName, items: [{ label: tr('nav.infrastructure'), to: '/console/infrastructure' }] });
     groups.push({ title: tr('nav.itsPortal'), items: [{ label: tr('nav.openPortal'), to: '/console' }] });
   } else {
-    groups.push({ title: tr('nav.portal'), items: [{ label: tr('nav.catalogue'), to: '/console', hint: tr('nav.catalogue.hint') }, ...navOf('portal')] });
+    groups.push({
+      title: tr('nav.portal'),
+      items: [
+        { label: tr('nav.catalogue'), to: '/console', hint: tr('nav.catalogue.hint') },
+        ...navOf('portal').filter(i => !BUSINESS_PAGES.has(i.to) && !FINOPS_PAGES.has(i.to)),
+      ],
+    });
+    // the continuity of the business: its processes (the business map), its data, and the digital continuity of the
+    // Refresquito services (the classic page Continuity, shown here under the portal)
+    groups.push({
+      title: tr('nav.businessManagement'),
+      items: [
+        { label: tr('nav.businessMap'), to: '/console/business-map', hint: tr('nav.businessMap.hint') },
+        { label: tr('nav.dataContinuity'), to: '/console/data-continuity', hint: tr('nav.dataContinuity.hint') },
+        { label: tr('nav.digitalContinuity'), to: '/console/continuity', hint: tr('nav.digitalContinuity.hint') },
+      ],
+    });
+    const finops = navOf('portal').filter(i => FINOPS_PAGES.has(i.to));
+    if (finops.length) groups.push({ title: tr('nav.finops'), items: finops });
     // the templates of a new application, opened in the console's own scaffolder (Portal › Create), not the classic one
     groups.push({
       title: tr('nav.development'),

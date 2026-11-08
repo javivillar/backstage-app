@@ -29,6 +29,14 @@ import { ConsoleTheme } from '../theme/consoleTheme';
 import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
+import { BusinessMapPage } from './businessMap/BusinessMapPage';
+import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
+import { BusinessGlassPage } from './businessMap/GlassPage';
+import { BusinessMatrixPage } from './businessMap/MatrixPage';
+import { ImportModelPage } from './businessMap/ImportModelPage';
+import { AdoptModelPage } from './businessMap/AdoptModelPage';
+import { ProcessFormPage } from './businessMap/ProcessFormPage';
+import { DataContinuityPage } from './businessMap/DataContinuityPage';
 import { FrameworksPage } from './frameworks/FrameworksPage';
 import { FrameworkLinePage } from './frameworks/FrameworkLinePage';
 import { HeatmapPage } from './frameworks/HeatmapPage';
@@ -92,6 +100,16 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/dependencies" element={<DependencyExplorer />} />
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/monitoring" element={<MonitoringPage />} />
+        <Route path="/business-map" element={<BusinessMapPage />} />
+        <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
+        <Route path="/business-map/glass" element={<BusinessGlassPage />} />
+        <Route path="/business-map/matrix" element={<BusinessMatrixPage />} />
+        {/* the templates of the business map as console forms (no Scaffolder page) */}
+        <Route path="/business-map/import" element={<ImportModelPage />} />
+        <Route path="/business-map/adopt" element={<AdoptModelPage />} />
+        <Route path="/business-map/process/new" element={<ProcessFormPage mode="new" />} />
+        <Route path="/business-map/process/edit/:namespace/:name" element={<ProcessFormPage mode="edit" />} />
+        <Route path="/data-continuity" element={<DataContinuityPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/frameworks" element={<FrameworksPage />} />
         <Route path="/frameworks/:line" element={<FrameworkLinePage />} />

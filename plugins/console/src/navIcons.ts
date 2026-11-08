@@ -10,6 +10,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import DatasetIcon from '@mui/icons-material/Dataset';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import BackupIcon from '@mui/icons-material/Backup';
 import GridOnIcon from '@mui/icons-material/GridOn';
 import ViewTimelineIcon from '@mui/icons-material/ViewTimeline';
 import BadgeIcon from '@mui/icons-material/Badge';
@@ -35,6 +36,7 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RouterIcon from '@mui/icons-material/Router';
+import SchemaIcon from '@mui/icons-material/Schema';
 import ShieldIcon from '@mui/icons-material/Shield';
 import StorageIcon from '@mui/icons-material/Storage';
 import StorefrontIcon from '@mui/icons-material/Storefront';
@@ -74,6 +76,8 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/assistants': GroupsIcon,
   '/console/resolution-groups': Diversity3Icon,
   '/console/monitoring': MonitorHeartIcon,
+  '/console/business-map': SchemaIcon,
+  '/console/data-continuity': BackupIcon,
   '/console/frameworks': ViewTimelineIcon,
   '/console/heatmap': GridOnIcon,
   '/console/development/python-framework-app': TerminalIcon,

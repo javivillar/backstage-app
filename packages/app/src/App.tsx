@@ -10,8 +10,9 @@ import {
   CatalogImportPage,
   catalogImportPlugin,
 } from '@backstage/plugin-catalog-import';
-import { ScaffolderPage, scaffolderPlugin } from '@backstage/plugin-scaffolder';
+import { ScaffolderFieldExtensions, ScaffolderPage, scaffolderPlugin } from '@backstage/plugin-scaffolder';
 import { CustomScaffolderPage } from './components/scaffolder/CustomScaffolderPage';
+import { BusinessModelPreviewFieldExtension } from './components/scaffolder/BusinessModelPreview';
 import { orgPlugin } from '@backstage/plugin-org';
 import { SearchPage } from '@backstage/plugin-search';
 import { TechRadarPage } from '@backstage-community/plugin-tech-radar';
@@ -126,7 +127,12 @@ const scaffolderPage = (
     components={{
       EXPERIMENTAL_TemplateListPageComponent: CustomScaffolderPage,
     }}
-  />
+  >
+    {/* own form fields of the templates (the defaults stay): the preview of Import business model */}
+    <ScaffolderFieldExtensions>
+      <BusinessModelPreviewFieldExtension />
+    </ScaffolderFieldExtensions>
+  </ScaffolderPage>
 );
 const docsIndexPage = <TechDocsIndexPage initialFilter="all" />;
 const apiExplorerPage = <CustomApiExplorerPage />;
@@ -169,7 +175,8 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'costs', title: 'Costs', layer: 'portal', classicPath: '/costs', element: <CostsPage variant="console" /> },
   { id: 'cis-nodes', title: 'CIS Kubernetes nodes', layer: 'cluster', classicPath: '/cis-nodes', element: cisNodesPage },
   { id: 'images', title: 'Images', layer: 'cluster', classicPath: '/images', element: imagesPage },
-  { id: 'continuity', title: 'Continuity', layer: 'cluster', classicPath: '/continuity', nested: true, element: continuityPage },
+  // Digital continuity: in the Business management group of the portal (ConsoleShell lists it there itself)
+  { id: 'continuity', title: 'Digital continuity', layer: 'portal', classicPath: '/continuity', nested: true, element: continuityPage },
   { id: 'assistants', title: 'The team', product: 'The assistants: who does what, and how they hand over', layer: 'assistants', classicPath: '/ops-assistant', consoleOnly: true, element: <ConsoleAssistantsTeam /> },
   { id: 'ops-assistant', title: 'Operations', product: 'Operations assistant: what happens in the cluster and why', layer: 'assistants', classicPath: '/ops-assistant', element: <ConsoleAssistant id="ops-assistant" /> },
   { id: 'sec-assistant', title: 'Security', product: 'Security assistant: vulnerabilities, exposure and risk', layer: 'assistants', classicPath: '/sec-assistant', element: <ConsoleAssistant id="sec-assistant" /> },
