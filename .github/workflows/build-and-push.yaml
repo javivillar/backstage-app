@@ -42,6 +42,11 @@ jobs:
           done
           test -s cnoe_Linux_x86_64.tar.gz
 
+      # BuildKit with a cache in GitHub Actions: the layers that did not change (yarn install while yarn.lock stays, the
+      # tools of the final image) are reused instead of rebuilt on every run
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to the Container registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
         with:
@@ -66,6 +71,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see "[AUTOTITLE](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)."
       - name: Generate artifact attestation
