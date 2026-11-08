@@ -16,8 +16,11 @@ type Declared = { kind: 'application'; name: string; stage?: string } | { kind: 
 const kc = (host: HostOf, what: string) => `${host('iam')}/admin/RefresquitoTime/console/#/RefresquitoTime/${what}`;
 const enc = (v: unknown) => encodeURIComponent(String(v ?? ''));
 const list = (v: unknown) => (Array.isArray(v) ? v.join(', ') : '');
-const ownerOfDeclared = (d: Declared): ManageOwner | undefined =>
-  d?.kind === 'platform' ? { kind: 'platform' } : d?.kind === 'application' ? { kind: 'application', name: d.name } : undefined;
+const ownerOfDeclared = (d: Declared): ManageOwner | undefined => {
+  if (d?.kind === 'platform') return { kind: 'platform' };
+  if (d?.kind === 'application') return { kind: 'application', name: d.name };
+  return undefined;
+};
 
 export const IamPage = () => {
   const { lang } = useI18n();

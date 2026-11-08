@@ -69,8 +69,10 @@ export type Kind = {
 
 type Mode = { kind: 'create'; platform: boolean } | { kind: 'edit'; d: DeclaredObject } | { kind: 'delete'; d: DeclaredObject } | undefined;
 
-const ownerLabel = (o: ManageOwner, owners: OwnerView[] | undefined, es: boolean) =>
-  o.kind === 'platform' ? (es ? 'plataforma' : 'platform') : owners?.find(x => x.kind === 'application' && x.name === o.name)?.title ?? o.name;
+const ownerLabel = (o: ManageOwner, owners: OwnerView[] | undefined, es: boolean) => {
+  if (o.kind === 'platform') return es ? 'plataforma' : 'platform';
+  return owners?.find(x => x.kind === 'application' && x.name === o.name)?.title ?? o.name;
+};
 
 export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
   const { lang } = useI18n();

@@ -637,9 +637,8 @@ export const ManageServicePage = () => {
           )}
         </Box>
       </Box>
-      {s.page ? (
-        <s.page />
-      ) : sections.length > 0 ? (
+      {s.page && <s.page />}
+      {!s.page && (sections.length > 0 ? (
         <>
           <Box role="tablist" aria-label={`Sections of ${s.label}`} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
             {sections.map((sec, i) => (
@@ -658,7 +657,7 @@ export const ManageServicePage = () => {
         </>
       ) : (
         <Box>{classic ? classic.element : <Typography color="text.secondary">This portal does not include its manager.</Typography>}</Box>
-      )}
+      ))}
     </Box>
   );
 };

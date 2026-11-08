@@ -51,7 +51,10 @@ const groupsOf = (it: unknown): unknown[] => {
   const g = isMap(it) ? it.get('groups') : undefined;
   return isSeq(g) ? (g.toJSON() as unknown[]) : [];
 };
-const gName = (g: unknown) => (typeof g === 'string' ? g : g && typeof g === 'object' ? String((g as { name?: unknown }).name ?? '') : '');
+const gName = (g: unknown) => {
+  if (typeof g === 'string') return g;
+  return g && typeof g === 'object' ? String((g as { name?: unknown }).name ?? '') : '';
+};
 const gGone = (g: unknown) => !!g && typeof g === 'object' && (g as { state?: unknown }).state === 'absent';
 
 /** The role entry rewritten with its groups changed (the whole item: a role is one line of the file). */
@@ -152,7 +155,8 @@ export function testUsersOf(v: unknown): boolean | number | undefined {
   if (v === true || v === 'true') return true;
   if (v === false || v === 'false' || v === '0' || v === 0) return false;
   const n = Number(v);
-  return Number.isInteger(n) && n >= 1 && n <= 5 ? (n === 1 ? true : n) : undefined;
+  if (!Number.isInteger(n) || n < 1 || n > 5) return undefined;
+  return n === 1 ? true : n;
 }
 
 export function clientFields(spec: Record<string, unknown>) {
