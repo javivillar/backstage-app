@@ -6,6 +6,7 @@ import { PORTAL } from './messages/portal';
 import { ENTITY } from './messages/entity';
 import { CONTINUITY } from './messages/continuity';
 import { MONITORING } from './messages/monitoring';
+import { MANAGE } from './messages/manage';
 
 /**
  * The languages of the console: English and Spanish. Texts live in MESSAGES by key; a page calls t('key', {n: 3}).
@@ -107,7 +108,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE };
 
 const KEY = 'rq-console-lang';
 
