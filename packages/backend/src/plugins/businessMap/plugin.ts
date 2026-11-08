@@ -3,6 +3,8 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { Router } from 'express';
 import { checkProcess, ContinuityGraph, continuityOf, type MapEntity, readDefaults } from './continuityModel';
 import { buildMap, engineLinks, impactOf } from './mapModel';
+import { createExercisesRouter } from './exercisesRouter';
+import { createPreviewRouter } from './previewRouter';
 
 /**
  * The business map (docs/business-map.md): the kinds BusinessProcess and ReferenceModel in the catalog, and the
@@ -50,11 +52,12 @@ export const businessMapPlugin = createBackendPlugin({
       deps: {
         httpRouter: coreServices.httpRouter,
         httpAuth: coreServices.httpAuth,
+        userInfo: coreServices.userInfo,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
         catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, config, logger, catalog }) {
+      async init({ httpRouter, httpAuth, userInfo, config, logger, catalog }) {
         const defaults = readDefaults(config.getOptional('businessMap.criticality'));
         if (!Object.keys(defaults).length) logger.warn('business-map: no businessMap.criticality, only the rpo/rto of each process count');
 
@@ -168,6 +171,8 @@ export const businessMapPlugin = createBackendPlugin({
           }
         });
 
+        // POST /import/preview (previewRouter.ts) and POST /exercises (exercisesRouter.ts)
+        router.use(createPreviewRouter({ httpAuth, userInfo, config, logger, catalog }), createExercisesRouter({ httpAuth, userInfo, config, logger, catalog }));
         httpRouter.use(router);
       },
     });

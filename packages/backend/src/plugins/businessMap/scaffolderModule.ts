@@ -1,31 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { coreServices, createBackendModule, type BackstageCredentials } from '@backstage/backend-plugin-api';
-import type { Config } from '@backstage/config';
-import { catalogServiceRef, type CatalogService } from '@backstage/plugin-catalog-node';
+import { coreServices, createBackendModule } from '@backstage/backend-plugin-api';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { createTemplateAction, scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
-import { parseAllDocuments } from 'yaml';
-import { GitHubFiles } from '../clusterVms';
-import {
-  A,
-  API_VERSION,
-  copyDrafts,
-  type CurrentFile,
-  type Draft,
-  hasHeader,
-  type Issue,
-  type Mapping,
-  type ModelEntity,
-  normRef,
-  parseRows,
-  plan,
-  type Planned,
-  slug,
-  type Source,
-  supportCategories,
-  type ValueMapping,
-} from './importModel';
-import { readUpload, type Sheet } from './sheets';
+import { copyDrafts, type CurrentFile, plan } from './importModel';
+import { currentFiles, dirOf, type ImportDeps, type ImportInput, modelFromCatalog, NAMESPACE, prepare, previewOf } from './prepareImport';
 
 /**
  * Scaffolder actions of the business map (the templates Import business model and Adopt reference model):
@@ -33,149 +12,11 @@ import { readUpload, type Sheet } from './sheets';
  *   refresquito:business-model:import   writes catalog/business-map/<namespace>/*.yaml into the workspace
  *   refresquito:business-model:adopt    copies level-1 categories of a ReferenceModel into a customer namespace
  * The next step of the template publishes the workspace as a pull request on refresquito-services. The current files
- * of the namespace are read from its main branch (the GitHub token of the backend) for the reimport rules.
+ * of the namespace are read from its main branch (the GitHub token of the backend) for the reimport rules. What they read
+ * and plan is prepareImport.ts, shared with the route POST /api/business-map/import/preview (previewRouter.ts).
  */
 
-const NAMESPACE = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/;
-const dirOf = (namespace: string) => `catalog/business-map/${namespace}`;
-
-type ImportInput = {
-  source: Source;
-  file: string;
-  fileName?: string;
-  sheet?: string | number;
-  namespace: string;
-  owner?: string;
-  mapping?: Mapping;
-  valueMapping?: ValueMapping;
-  keepFrom?: string;
-  industry?: string;
-  version?: string;
-  skipErrors?: boolean;
-};
-
-type Deps = { config: Config; catalog: CatalogService };
-
-/** The files of a namespace's folder in refresquito-services main ([] when it does not exist yet). */
-async function currentFiles(config: Config, namespace: string): Promise<CurrentFile[]> {
-  const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
-  const repo = config.getOptionalString('businessMap.repo') ?? config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services';
-  const gh = new GitHubFiles(repo, config.getOptionalString('businessMap.branch') ?? 'main', token);
-  const list = (await gh.list(dirOf(namespace))).filter(f => /\.ya?ml$/.test(f.name));
-  return Promise.all(list.map(async f => ({ path: f.path, text: (await gh.get(f.path)).text })));
-}
-
-const refOf = (e: { kind: string; metadata: { name: string; namespace?: string } }) => `${e.kind}:${e.metadata.namespace ?? 'default'}/${e.metadata.name}`.toLowerCase();
-
-/** A ReferenceModel of the catalog and the Domains and BusinessProcesses of its namespace. */
-async function modelFromCatalog(catalog: CatalogService, credentials: BackstageCredentials, ref: string) {
-  const model = (await catalog.getEntityByRef(normRef(ref, 'referencemodel'), { credentials })) as ModelEntity | undefined;
-  const ns = model?.spec?.namespace;
-  if (!model || typeof ns !== 'string') throw new Error(`There is no ReferenceModel ${ref} in the catalog.`);
-  const { items } = await catalog.getEntities(
-    { filter: [{ kind: 'domain', 'metadata.namespace': ns }, { kind: 'businessprocess', 'metadata.namespace': ns }] },
-    { credentials },
-  );
-  return { model, entities: items as ModelEntity[], ref: refOf(model) };
-}
-
-/** The sheet to read: the one named or numbered, else the first with the header of the source (APQC: "Combined"). */
-function pickSheet(sheets: Sheet[], input: ImportInput): Sheet {
-  if (input.sheet !== undefined && input.sheet !== '') {
-    const n = Number(input.sheet);
-    const s = Number.isInteger(n) && n > 0 ? sheets[n - 1] : sheets.find(x => x.name.toLowerCase() === String(input.sheet).toLowerCase());
-    if (!s) throw new Error(`There is no sheet ${input.sheet}: ${sheets.map(x => x.name).join(', ')}.`);
-    return s;
-  }
-  const fits = sheets.filter(s => hasHeader(s.rows, input.source, input.mapping));
-  return fits.find(s => input.source === 'apqc' && s.name.toLowerCase() === 'combined') ?? fits[0] ?? sheets[0];
-}
-
-/** Everything an import needs, read and planned: what preview shows and import writes. */
-async function prepare(input: ImportInput, deps: Deps, credentials: BackstageCredentials, user: string | undefined, strict: boolean) {
-  if (!NAMESPACE.test(input.namespace)) throw new Error(`${input.namespace} is not a namespace (lowercase letters, digits and "-").`);
-  const warnings: Issue[] = [];
-  let current: CurrentFile[] = [];
-  try {
-    current = await currentFiles(deps.config, input.namespace);
-  } catch (e) {
-    // an import that cannot see the current files would overwrite them: only the preview goes on
-    if (strict) throw new Error(`Cannot read ${dirOf(input.namespace)} of refresquito-services: ${(e as Error).message}`);
-    warnings.push({ message: `The current files could not be read (${(e as Error).message}): shown as a first import.` });
-  }
-  const oldModel = current
-    .flatMap(f => parseAllDocuments(f.text).map(d => d.toJS() as ModelEntity | null))
-    .find(d => d?.kind === 'ReferenceModel');
-  let mapping = input.mapping;
-  let valueMapping = input.valueMapping;
-  const saved = oldModel?.metadata.annotations?.[A.importMapping];
-  if (saved && input.source === 'own' && !mapping) {
-    try {
-      const m = JSON.parse(saved) as { mapping?: Mapping; valueMapping?: ValueMapping };
-      mapping = m.mapping;
-      valueMapping = valueMapping ?? m.valueMapping;
-    } catch {
-      warnings.push({ message: 'The saved column mapping of the model could not be read: give it again.' });
-    }
-  }
-
-  const upload = readUpload(input.file, input.fileName);
-  const sheet = pickSheet(upload.sheets, { ...input, mapping });
-  const [groups, others] = await Promise.all([
-    deps.catalog.getEntities({ filter: { kind: 'group' }, fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
-    deps.catalog.getEntities({ filter: [{ kind: 'system' }, { kind: 'component' }, { kind: 'resource' }], fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
-  ]);
-  const parsed = parseRows(sheet.rows, {
-    source: input.source,
-    mapping,
-    valueMapping,
-    owner: input.owner,
-    version: input.version,
-    knownGroups: new Set(groups.items.map(refOf)),
-    knownEntities: new Set(others.items.map(refOf)),
-  });
-
-  let kept: Draft[] = [];
-  if (input.keepFrom) {
-    const m = await modelFromCatalog(deps.catalog, credentials, input.keepFrom);
-    const roots = supportCategories(m.model, m.entities);
-    if (!roots.length) warnings.push({ message: `${m.ref} declares no support categories (spec.supportCategories): nothing kept from it.` });
-    kept = copyDrafts(m.entities, roots, { owner: input.owner, from: m.ref });
-  }
-
-  const status = input.source === 'own' ? 'customer' : input.source;
-  const industry = input.industry || 'cross-industry';
-  const suffix = input.version ? `-${slug(input.version)}` : '';
-  const shownVersion = input.version ? ` ${input.version}` : '';
-  const apqc = input.source === 'apqc';
-  const model: ModelEntity = {
-    apiVersion: API_VERSION,
-    kind: 'ReferenceModel',
-    metadata: {
-      name: apqc ? `apqc-${slug(industry)}${suffix}` : `${input.namespace}-business-model`,
-      title: apqc ? `APQC PCF · ${industry}${shownVersion}` : `Business model of ${input.namespace}`,
-      annotations: {
-        [A.importMapping]: JSON.stringify({ source: input.source, sheet: sheet.name, mapping, valueMapping }),
-        [A.lastImport]: JSON.stringify({ file: upload.fileName, date: new Date().toISOString(), by: user ?? 'unknown' }),
-        ...(input.keepFrom ? { [A.keptFrom]: normRef(input.keepFrom, 'referencemodel') } : {}),
-      },
-    },
-    spec: {
-      source: status,
-      ...(apqc ? { industry } : {}),
-      ...(input.version ? { version: input.version } : {}),
-      namespace: input.namespace,
-    },
-  };
-  const planned: Planned = plan([...parsed.drafts, ...kept], current, {
-    namespace: input.namespace,
-    dir: dirOf(input.namespace),
-    today: new Date().toISOString().slice(0, 10),
-    goneFamily: input.source === 'apqc' ? 'apqc' : 'model',
-    model,
-  });
-  return { parsed, planned, warnings: [...warnings, ...parsed.warnings] };
-}
+type Deps = ImportDeps;
 
 async function writeAll(workspace: string, files: CurrentFile[]) {
   for (const f of files) {
@@ -210,15 +51,16 @@ function createImportLikeAction(deps: Deps, write: boolean) {
     },
     async handler(ctx) {
       const input = ctx.input as ImportInput;
-      const { parsed, planned, warnings } = await prepare(input, deps, await ctx.getInitiatorCredentials(), ctx.user?.ref, write);
       if (!write) {
-        ctx.output('counts', planned.counts);
-        ctx.output('errors', parsed.errors);
-        ctx.output('warnings', warnings);
-        ctx.output('changes', planned.changes);
-        ctx.logger.info(`business model ${input.namespace}: ${JSON.stringify(planned.counts)}, ${parsed.errors.length} errors, ${warnings.length} warnings`);
+        const p = await previewOf(input, deps, await ctx.getInitiatorCredentials(), ctx.user?.ref);
+        ctx.output('counts', p.counts);
+        ctx.output('errors', p.errors);
+        ctx.output('warnings', p.warnings);
+        ctx.output('changes', p.changes);
+        ctx.logger.info(`business model ${input.namespace}: ${JSON.stringify(p.counts)}, ${p.errors.length} errors, ${p.warnings.length} warnings`);
         return;
       }
+      const { parsed, planned } = await prepare(input, deps, await ctx.getInitiatorCredentials(), ctx.user?.ref, true);
       if (parsed.errors.length && !input.skipErrors) {
         const first = parsed.errors.slice(0, 10).map(e => (e.row ? `row ${e.row}: ${e.message}` : e.message));
         throw new Error(`The file has ${parsed.errors.length} errors (or import skipping them):\n${first.join('\n')}`);

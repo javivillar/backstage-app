@@ -10,8 +10,9 @@ import {
   CatalogImportPage,
   catalogImportPlugin,
 } from '@backstage/plugin-catalog-import';
-import { ScaffolderPage, scaffolderPlugin } from '@backstage/plugin-scaffolder';
+import { ScaffolderFieldExtensions, ScaffolderPage, scaffolderPlugin } from '@backstage/plugin-scaffolder';
 import { CustomScaffolderPage } from './components/scaffolder/CustomScaffolderPage';
+import { BusinessModelPreviewFieldExtension } from './components/scaffolder/BusinessModelPreview';
 import { orgPlugin } from '@backstage/plugin-org';
 import { SearchPage } from '@backstage/plugin-search';
 import { TechRadarPage } from '@backstage-community/plugin-tech-radar';
@@ -126,7 +127,12 @@ const scaffolderPage = (
     components={{
       EXPERIMENTAL_TemplateListPageComponent: CustomScaffolderPage,
     }}
-  />
+  >
+    {/* own form fields of the templates (the defaults stay): the preview of Import business model */}
+    <ScaffolderFieldExtensions>
+      <BusinessModelPreviewFieldExtension />
+    </ScaffolderFieldExtensions>
+  </ScaffolderPage>
 );
 const docsIndexPage = <TechDocsIndexPage initialFilter="all" />;
 const apiExplorerPage = <CustomApiExplorerPage />;
