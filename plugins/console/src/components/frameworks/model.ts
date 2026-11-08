@@ -176,3 +176,21 @@ export function latestLines(lines: Line[]): Map<string, Line> {
   for (const l of lines) m.set(l.framework, l); // sorted: the last one wins
   return m;
 }
+
+/**
+ * What each line costs a month in production: for the pro instances on the line, the cost of their namespaces in the
+ * window (OpenCost) scaled to 30 days. Only lines with at least one pro instance whose namespace has a cost.
+ */
+export function costPerLine(apps: AppRow[], lines: Line[], nsOf: (ref: string) => string | undefined, costs: Map<string, number>, windowDays: number): Array<{ line: Line; apps: number; perApp: number; total: number }> {
+  const out: Array<{ line: Line; apps: number; perApp: number; total: number }> = [];
+  for (const l of lines) {
+    const values = apps
+      .filter(a => a.framework === l.framework && a.lines.pro === l.line && a.instances.pro)
+      .map(a => { const ns = nsOf(a.instances.pro!); return ns !== undefined ? costs.get(ns) : undefined; })
+      .filter((v): v is number => typeof v === 'number');
+    if (!values.length) continue;
+    const total = (values.reduce((x, y) => x + y, 0) * 30) / windowDays;
+    out.push({ line: l, apps: values.length, perApp: total / values.length, total });
+  }
+  return out;
+}

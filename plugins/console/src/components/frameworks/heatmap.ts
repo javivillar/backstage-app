@@ -171,8 +171,11 @@ export function isoWeek(date: string): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
-export type Metric = 'vulns' | 'coverage' | 'tests' | 'line';
-export const METRICS: Metric[] = ['vulns', 'coverage', 'tests', 'line'];
+export type EventMetric = 'deploys' | 'incidents';
+export type Metric = 'vulns' | 'coverage' | 'tests' | 'line' | EventMetric;
+export const METRICS: Metric[] = ['vulns', 'coverage', 'tests', 'line', 'deploys', 'incidents'];
+/** a metric counted from dated events (Argo CD history, incidents of the support), not from the weekly facts */
+export const isEventMetric = (m: Metric): m is EventMetric => m === 'deploys' || m === 'incidents';
 
 /** latestLine: the latest line of the app's own framework (a Spring app is never compared with Python's) */
 function metricCell(metric: Metric, f: Record<string, unknown>, latestLine?: string): Cell {
@@ -208,5 +211,29 @@ export function weekly(series: Array<{ timestamp: string; facts: Record<string, 
     const week = k.slice(5);
     if (!p) return { week, text: '', level: null };
     return { week, ...metricCell(metric, p.facts ?? {}, latestLine) };
+  });
+}
+
+/**
+ * The last `weeks` ISO weeks of a count of dated events, oldest first. deploys: a week with none is "ok" (nothing
+ * changed), any is good; incidents: 0 good, 1 ok, 2 attention, 3+ act now. `dates` undefined: the source could not be
+ * read, every week n/a (never 0).
+ */
+export function weeklyCounts(dates: string[] | undefined, metric: EventMetric, weeks: number, today: string): Array<{ week: string; text: string; level: Level }> {
+  const base = Date.parse(today.length === 10 ? `${today}T00:00:00Z` : today);
+  const keys = Array.from({ length: weeks }, (_, i) => isoWeek(new Date(base - (weeks - 1 - i) * 7 * 86400000).toISOString()));
+  if (!dates) return keys.map(k => ({ week: k.slice(5), text: 'n/a', level: null }));
+  const count = new Map<string, number>();
+  for (const d of dates) {
+    if (!d || Number.isNaN(Date.parse(d))) continue;
+    const k = isoWeek(d);
+    count.set(k, (count.get(k) ?? 0) + 1);
+  }
+  return keys.map(k => {
+    const n = count.get(k) ?? 0;
+    let level: Level;
+    if (metric === 'deploys') level = n ? 0 : 1;
+    else level = Math.min(3, n) as Level;
+    return { week: k.slice(5), text: String(n), level };
   });
 }

@@ -1,5 +1,5 @@
 import type { Entity } from '@backstage/catalog-model';
-import { appsOf, daysBetween, isLine, linesOf, statusOf } from './model';
+import { type AppRow, type Line, appsOf, costPerLine, daysBetween, isLine, linesOf, statusOf } from './model';
 
 const line = (framework: string, version: string, supportedUntil: string, extra: Partial<Entity['metadata']> = {}, spec: Record<string, unknown> = {}): Entity => ({
   apiVersion: 'backstage.io/v1alpha1',
@@ -135,4 +135,23 @@ describe('statusOf', () => {
 
 describe('daysBetween', () => {
   it('counts whole days', () => expect(daysBetween('2026-11-08', '2027-01-20')).toBe(73));
+});
+
+describe('costPerLine', () => {
+  const mkLine = (framework: string, l: string) => ({ framework, line: l, ref: `component:default/${framework}-${l}` }) as unknown as Line;
+  const mkApp = (application: string, framework: string, pro?: string) =>
+    ({ application, framework, lines: pro ? { pro } : {}, instances: pro ? { pro: `component:default/${application}-oneke` } : {}, blocks: [] }) as unknown as AppRow;
+  const costs = new Map([['ns-a', 7], ['ns-b', 14]]);
+  const nsOf = (ref: string) => ({ 'component:default/a-oneke': 'ns-a', 'component:default/b-oneke': 'ns-b', 'component:default/c-oneke': 'ns-c' } as Record<string, string>)[ref];
+  it('scales the window to 30 days and averages per application', () => {
+    const out = costPerLine([mkApp('a', 'python', '3.3'), mkApp('b', 'python', '3.3')], [mkLine('python', '3.3')], nsOf, costs, 7);
+    expect(out).toHaveLength(1);
+    expect(out[0].apps).toBe(2);
+    expect(out[0].total).toBeCloseTo(90);
+    expect(out[0].perApp).toBeCloseTo(45);
+  });
+  it('leaves out lines without a pro instance with a cost, and other frameworks', () => {
+    const out = costPerLine([mkApp('c', 'python', '3.2'), mkApp('a', 'spring', '3.3'), mkApp('d', 'python')], [mkLine('python', '3.2'), mkLine('python', '3.3')], nsOf, costs, 7);
+    expect(out).toEqual([]);
+  });
 });
