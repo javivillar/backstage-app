@@ -1,5 +1,5 @@
 import { Entity } from '@backstage/catalog-model';
-import { applicationFacts, compareLines, frameworkLines, isApplication, normalizeLine } from './techInsights';
+import { applicationFacts, compareLines, frameworkLines, isApplication, lineEntityOf, normalizeLine } from './techInsights';
 import type { QualityReport } from './quality';
 import type { SbomSummary } from './cyclonedx';
 import type { ImageScan } from './vulnerabilities';
@@ -322,5 +322,50 @@ describe('quality report', () => {
       { ref: 'api', quality: { schema: 'refresquito.quality/v1', backend: { coverage: { lines: 90 } } } },
     ]);
     expect(facts).toMatchObject({ qualityReport: true, testsFailed: -1, backendCoverage: 90, frontendCoverage: 100, lintIssues: -1, typeErrors: -1 });
+  });
+});
+
+describe('vulnerabilities by layer (framework or own)', () => {
+  const petstore = component('petstore-oneke', {
+    'refresquito.io/framework-line': '3.3',
+    'refresquito.io/application': 'petstore',
+  });
+
+  it('platform images, OS packages and framework libraries are the framework layer; the rest is own', () => {
+    const facts = applicationFacts(
+      petstore,
+      ['3.3'],
+      [
+        {
+          ref: 'ghcr.io/o/petstore-api:abc',
+          scan: scan([
+            { id: 'CVE-1', sev: 'CRITICAL', cls: 'os', pkg: 'openssl', ver: '3.0' },
+            { id: 'CVE-2', sev: 'HIGH', cls: 'lang', pkg: 'starlette', ver: '0.47.1' },
+            { id: 'CVE-3', sev: 'HIGH', cls: 'lang', pkg: 'requests', ver: '2.0' },
+            { id: 'CVE-4', sev: 'CRITICAL', cls: 'lang', pkg: 'kernel', ver: '1', not_applicable: 'kernel' },
+          ]),
+        },
+        { ref: 'ghcr.io/o/refresquito-postgres:3.3.0', scan: scan([{ id: 'CVE-5', sev: 'HIGH', cls: 'lang', pkg: 'x', ver: '1' }]) },
+      ],
+      new Set(['starlette@0.47.1']),
+    );
+    expect(facts).toMatchObject({ frameworkLayerCritical: 1, frameworkLayerHigh: 2, ownLayerCritical: 0, ownLayerHigh: 1 });
+  });
+
+  it('finds the line entity of an application by name or by line, tag or spec.type', () => {
+    const typed: Entity = { ...component('spring-framework-1-0', { 'refresquito.io/framework-line': '1.0' }), spec: { type: 'framework-line' } };
+    const entities = [line('3.2'), line('3.3'), typed, petstore];
+    expect(lineEntityOf(petstore, entities)?.metadata.name).toBe('python-framework-3-3');
+    const byName = component('a', { 'refresquito.io/framework-line': 'python-framework-3-2' });
+    expect(lineEntityOf(byName, entities)?.metadata.name).toBe('python-framework-3-2');
+    const spring = component('petshop', { 'refresquito.io/framework-line': '1.0' });
+    expect(lineEntityOf(spring, entities)?.metadata.name).toBe('spring-framework-1-0');
+    expect(lineEntityOf(component('none'), entities)).toBeUndefined();
+  });
+
+  it('-1 when an image is not scanned', () => {
+    const facts = applicationFacts(petstore, ['3.3'], [{ ref: 'ghcr.io/o/petstore-api:abc' }]);
+    expect(facts).toMatchObject({ frameworkLayerCritical: -1, frameworkLayerHigh: -1, ownLayerCritical: -1, ownLayerHigh: -1 });
+    expect(applicationFacts(petstore, ['3.3'], [])).toMatchObject({ frameworkLayerCritical: -1 });
   });
 });
