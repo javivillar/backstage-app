@@ -87,8 +87,10 @@ const matches = (q: string, ...xs: Array<string | undefined>) => !q || xs.join('
 
 const kindBadge = (e: Entity) => {
   const k = classify(e);
+  if (k === 'business' && e.kind === 'System') return <Badge label="Business service" bg={rq.biz.bg} fg={rq.biz.fg} />;
   if (k === 'business') return <Badge label="Business application" bg={rq.biz.bg} fg={rq.biz.fg} />;
   if (k === 'service') return <Badge label="Refresquito service" bg={rq.svc.bg} fg={rq.svc.fg} />;
+  if (k === 'development') return <Badge label="Development service" bg={rq.svc.bg} fg={rq.svc.fg} />;
   return <Badge label={e.kind} outlined />;
 };
 
@@ -377,7 +379,7 @@ const QualityMatrix = ({ rows, checks, all, passed, components, check, setCheck 
 };
 
 export const PortalQualityPage = () => {
-  const { loading, items, error } = useEntities({ kind: 'component' }, ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'spec.owner', 'spec.system']);
+  const { loading, items, error } = useEntities({ kind: 'component' }, ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'spec.type', 'spec.owner', 'spec.system']);
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [runs, setRuns] = useState<{ loading: boolean; value: Map<string, CheckRun['results']>; error?: string }>({ loading: true, value: new Map() });

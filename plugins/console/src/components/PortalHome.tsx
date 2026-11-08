@@ -19,7 +19,7 @@ import { useRq } from '../theme/consoleTheme';
 import { Kpis, TitleRow } from './ui';
 import { Seg } from './ui-portal';
 
-const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.lifecycle', 'spec.system', 'spec.owner'];
+const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.type', 'spec.lifecycle', 'spec.system', 'spec.owner'];
 
 function useComponents() {
   const catalog = useApi(catalogApiRef);
@@ -84,7 +84,11 @@ const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
   const { t: tr } = useI18n();
   const ann = e.metadata.annotations ?? {};
   const sp = (e.spec ?? {}) as { owner?: string; system?: string; lifecycle?: string };
-  const business = classify(e) === 'business';
+  const kind = classify(e);
+  const business = kind === 'business';
+  let what = tr('cat.service');
+  if (business) what = tr('cat.business');
+  else if (kind === 'development') what = tr('cat.developmentOne');
   const Icon = business ? StorefrontIcon : HubIcon;
   const suspended = ann['refresquito.io/suspended'] === 'true';
   let state = app ? app.health : tr('cat.notInArgo');
@@ -103,7 +107,7 @@ const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontWeight: 500, overflowWrap: 'anywhere' }}>{e.metadata.title ?? e.metadata.name}</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>
-            {[business ? tr('cat.business') : tr('cat.service'), sp.owner?.replace(/^group:(default\/)?/, '')].filter(Boolean).join(' · ')}
+            {[what, sp.owner?.replace(/^group:(default\/)?/, '')].filter(Boolean).join(' · ')}
           </Typography>
         </Box>
       </Box>
@@ -119,7 +123,7 @@ const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
   );
 };
 
-type Filter = 'all' | 'business' | 'service' | 'mine' | 'favourites';
+type Filter = 'all' | 'business' | 'service' | 'development' | 'mine' | 'favourites';
 
 /** Portal › Catalogue: the software of this cluster, as cards, filtered by what it is or whose it is. */
 export const PortalHome = () => {
@@ -144,6 +148,7 @@ export const PortalHome = () => {
     all: () => true,
     business: e => classify(e) === 'business',
     service: e => classify(e) === 'service',
+    development: e => classify(e) === 'development',
     mine: owns,
     favourites: e => starred.has(stringifyEntityRef(e)),
   };
@@ -163,6 +168,7 @@ export const PortalHome = () => {
     ['all', tr('cat.all'), counts.all],
     ['business', tr('cat.businessApps'), counts.business],
     ['service', tr('cat.services'), counts.service],
+    ['development', tr('cat.development'), counts.development],
     ['mine', tr('cat.mine'), counts.mine],
     ['favourites', tr('cat.favourites'), counts.favourites],
   ];

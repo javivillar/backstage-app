@@ -1,14 +1,15 @@
 import { type Entity, parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
-import { classify } from './classify';
+import { classify, segmentOf } from './classify';
 
 /**
  * The model of Portal › Dependencies: the layers of the Refresquito reference architecture (business applications on
  * top, the foundations below, what is outside the zone apart) and the dependencies between the elements of the catalog.
  */
-export type Layer = 'biz' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
-export const LAYERS: Layer[] = ['biz', 'app', 'dat', 'ops', 'dev', 'obs', 'sec', 'inf', 'ext'];
+export type Layer = 'biz' | 'fwk' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
+export const LAYERS: Layer[] = ['biz', 'fwk', 'app', 'dat', 'ops', 'dev', 'obs', 'sec', 'inf', 'ext'];
 export const LAYER_INFO: Record<Layer, { label: string; colour: string }> = {
-  biz: { label: 'Business applications', colour: '#FF6B5B' },
+  biz: { label: 'Business services · applications', colour: '#FF6B5B' },
+  fwk: { label: 'Development services · frameworks', colour: '#FF7D5C' },
   app: { label: 'Application services · APP', colour: '#FF8A5C' },
   dat: { label: 'Data & integration · DAT · INT', colour: '#FFA347' },
   ops: { label: 'Platform operations · OPS', colour: '#FFB547' },
@@ -44,10 +45,12 @@ export function layerOf(e: Entity): Layer {
     const type = String(e.spec?.type ?? '');
     if (/external|smtp|internet|saas/.test(type) || e.metadata.annotations?.['refresquito.io/external']) return 'ext';
   }
-  if (classify(e) === 'business') return 'biz';
+  const kind = classify(e);
+  if (kind === 'business') return 'biz';
+  if (kind === 'development') return 'fwk';
   const name = e.metadata.name.toLowerCase();
   for (const [re, layer] of BY_NAME) if (re.test(name)) return layer;
-  const seg = e.metadata.labels?.['refresquito.io/segment'];
+  const seg = segmentOf(e);
   if (seg && BY_SEGMENT[seg]) return BY_SEGMENT[seg];
   return e.kind === 'Resource' ? 'inf' : 'ops';
 }
@@ -56,13 +59,17 @@ export type Health = 'ok' | 'warn' | 'bad' | 'off';
 export type DepNodeModel = { id: string; entity: Entity; label: string; product: string; layer: Layer; health: Health; healthLabel: string; deg: number };
 export type DepLink = { source: string; target: string; label: string; type: 'dep' | 'api' };
 
+/** a node of the glass: components, resources and the business services (Systems of type business-service) */
+const isNode = (e: Entity) => e.kind === 'Component' || e.kind === 'Resource' || (e.kind === 'System' && classify(e) === 'business');
+
 /**
- * The nodes (components and resources) and links: dependsOn, and an API consumed drawn to the component that provides
- * it (labelled with the API). Links to elements not in the catalog are dropped.
+ * The nodes and links: dependsOn, an API consumed drawn to the component that provides it (labelled with the API), a
+ * business service to its business application (hasPart) and an application to its instances (hasSubcomponent).
+ * Links to elements not in the catalog are dropped.
  */
 export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: Health; label: string }): { nodes: DepNodeModel[]; links: DepLink[] } {
-  const items = entities.filter(e => e.kind === 'Component' || e.kind === 'Resource');
-  const ids = new Set(items.map(e => stringifyEntityRef(e)));
+  const items = entities.filter(isNode);
+  const byRef = new Map(items.map(e => [stringifyEntityRef(e), e]));
   // the providers of each API
   const providers = new Map<string, string[]>();
   for (const e of entities)
@@ -72,7 +79,7 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
   const seen = new Set<string>();
   const add = (source: string, target: string, label: string, type: DepLink['type']) => {
     const k = `${source}>${target}`;
-    if (source === target || seen.has(k) || !ids.has(source) || !ids.has(target)) return;
+    if (source === target || seen.has(k) || !byRef.has(source) || !byRef.has(target)) return;
     seen.add(k);
     links.push({ source, target, label, type });
   };
@@ -82,6 +89,8 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
       if (r.type === 'dependsOn') add(me, r.targetRef, 'depends on', 'dep');
       if (r.type === 'dependencyOf') add(r.targetRef, me, 'depends on', 'dep');
       if (r.type === 'consumesApi') for (const p of providers.get(r.targetRef) ?? []) add(me, p, `${parseEntityRef(r.targetRef).name} API`, 'api');
+      if (e.kind === 'System' && r.type === 'hasPart' && byRef.get(r.targetRef)?.spec?.type === 'business-application') add(me, r.targetRef, 'application', 'dep');
+      if (e.spec?.type === 'business-application' && r.type === 'hasSubcomponent') add(me, r.targetRef, 'instance', 'dep');
     }
   }
   const deg = new Map<string, number>();

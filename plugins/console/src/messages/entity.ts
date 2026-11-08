@@ -4,6 +4,7 @@ import type { Messages } from '../i18n';
 export const ENTITY: Messages = {
   'ent.business': { en: 'Business application', es: 'Aplicación de negocio' },
   'ent.service': { en: 'Refresquito service', es: 'Servicio de Refresquito' },
+  'ent.development': { en: 'Development service', es: 'Servicio de desarrollo' },
   'ent.owner': { en: 'Owner', es: 'Propietario' },
   'ent.system': { en: 'System', es: 'Sistema' },
   'ent.namespace': { en: 'Namespace', es: 'Namespace' },
