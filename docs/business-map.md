@@ -6,7 +6,7 @@ afford to lose (RPO) and to be down (RTO); the map checks that what runs underne
 business risk is, and rehearses what stops when a service fails.
 
 Console: menu group **Business management › Business continuity** (`/console/business-map`), with the views Map ·
-Heat map · Glass · Matrix, the page of each process, and the tab **Impact on the business** on services, applications
+Explorer · Heat map · Glass · Matrix, the page of each process, and the tab **Impact on the business** on services, applications
 and framework lines. The same group has **Data continuity** (`/console/data-continuity`, still empty) and **Digital continuity**
 (`/console/continuity`, the continuity profiles of each service).
 
@@ -71,11 +71,13 @@ spec:
   rpo: 15m                               # optional overrides: <n>m|h|d|y
   rto: 4h
   retention: 30y
+  mtpd: 72h                              # business impact analysis: maximum tolerable period of disruption
+  workaround: { manual: true, maxDuration: 24h, note: paper work orders }   # can it go on by hand, and how long
   classification: occar-restricted
   dependsOn: [system:default/maintenance, system:default/documents]
 ---
-# a sub-process: it inherits from its parent chain whatever it does not say (criticality, rpo, rto, retention,
-# dependsOn); spec.domain is the domain of its top process
+# a sub-process: it inherits from its parent chain whatever it does not say (criticality, rpo, rto, mtpd, retention,
+# workaround, dependsOn); spec.domain is the domain of its top process
 apiVersion: refresquito.io/v1alpha1
 kind: BusinessProcess
 metadata:
@@ -108,6 +110,7 @@ of the app-of-apps catalog; the catalog rules allow these kinds only there. An e
 | What | Where in the console | Template | Writes |
 |---|---|---|---|
 | Import a business model | Business continuity › Import business model | `business-model-import` | `catalog/business-map/<ns>/` |
+| Upload BIA results | Business continuity › Import business model › BIA results | `business-model-import` (source `bia`) | the processes it changes |
 | Adopt a reference model | Business continuity › Adopt reference model | `business-model-adopt` | `catalog/business-map/<ns>/` |
 | New / edit a process | Business continuity › New business process; a process › Edit | `business-process-new` / `-edit` | `process-<name>.yaml` |
 | Save a what-if exercise | Matrix › Save as exercise | — (route) | refresquito-specs `continuity/exercises/<ns>/<date>-<slug>.yaml` |
@@ -134,13 +137,51 @@ Rows with errors can be skipped. The table of changes has pages (25, 50 or 100 r
 the type (domain, subdomain, process, sub-process), the level-1 domain, and a search on ID, title or description; the
 description shows under each title.
 
-**Reimport**: entities are matched by their original ID. What a person changed in the portal after the last import
+**Reimport**: entities are matched by their original ID. Only what the file says is compared: an empty cell, or a
+column the file does not have (an APQC PCF has no RPO), never changes nor clears a value. What a person changed in the portal after the last import
 (owner, applications, overrides, description) wins over the file, and the pull request lists it; an entity no longer in the file is
 kept and marked `refresquito.io/deprecated`, never deleted. Each entity keeps per-field hashes of what was imported
 (`refresquito.io/imported-hash`) to tell portal edits from imported values.
 
 **Licence**: Refresquito never ships APQC content (not in the repositories, not as test data). The importer reads the
 PCF files each customer has downloaded under APQC's terms.
+
+## Business impact analysis
+
+An APQC model brings the **structure** only: domains, processes and sub-processes, with their IDs and descriptions.
+The continuity values of each process come from the **business impact analysis (BIA)** its business owners make,
+usually once a year:
+
+1. **Download the BIA sheet**: Business continuity › *Download BIA sheet* (`GET /api/business-map/bia?namespace=<ns>
+   [&domain=<level-1 domain>][&level=3|all]`). An .xlsx with one row per process (level 3; *processes and
+   sub-processes* adds the rest), its current values filled in, and a *Guide* sheet with the allowed values and the
+   defaults of each criticality. Pick a level-1 domain so each business owner gets the processes of theirs.
+
+   | Column | Means |
+   |---|---|
+   | ID, Domain, Subdomain, Process | which process (the ID matches the row; do not change it) |
+   | Description, Owner | what it is and the group in charge |
+   | Criticality | critical / important / standard |
+   | RPO, RTO | how much data it can lose; how long it can be down |
+   | MTPD | maximum tolerable period of disruption: after it the harm is unacceptable |
+   | Retention | how long its records are kept |
+   | Workaround, Workaround max | whether it can go on by hand (yes/no), and for how long |
+   | Applications | the business services it needs (their names, comma separated) |
+   | Notes | for the owners and the analysts: not imported |
+
+2. **The owners fill** only the cells they mean to change. An empty cell changes nothing; a sub-process left empty
+   inherits from its parent.
+3. **Upload the results**: Import business model › *BIA results*. The preview lists every change field by field (`rto:
+   72h → 4h`); rows whose ID is no process of the customer, or with a value that is not valid (a criticality, a
+   duration, an owner that is no group, an application not in the catalog), are errors of their row. The analysis
+   **only updates**: it never creates a process and never marks one gone because its row is not in the sheet. One pull
+   request.
+4. **The check**: each process checks its RTO against its MTPD; an RTO above the MTPD shows as a warning on the page
+   of the process (the restore would end after the business can bear it).
+
+What the analysis writes counts as a portal value: a later APQC reimport never overwrites it (the PCF has none of
+these columns, and these values are not part of the imported hash). The page of a process shows the MTPD and the
+manual workaround next to the RPO and RTO.
 
 ### Adopting a reference model
 
@@ -166,6 +207,11 @@ support categories of a loaded APQC model).
 - **Impact on the business** (tab of services, business services, applications and framework lines): the processes
   that depend on it, strictest first, with the check; on a framework line, the business services that still run it in
   each stage and their processes, to plan upgrades.
+- **Explorer**: the whole model as one tree-table (level-1 domains → subdomains → processes → sub-processes): ID,
+  title and description, level, criticality (and whether it is inherited), RPO · RTO, the check, applications and
+  owner. A search over ID, title and description shows each match with its ancestors (the matches highlighted);
+  filters by level, level-1 domain, criticality, check and owner; *Expand all* / *Collapse to level 3*; pages of 25,
+  50 or 100 rows; *Export CSV* of the rows of the filters. It reads the same `GET /map`, sub-processes included.
 - **Heat map**: every process coloured by one lens at a time, a domain showing its worst process:
 
   | Lens | Source |
@@ -216,6 +262,7 @@ Plugin `business-map` (`packages/backend/src/plugins/businessMap/`):
 | `GET /api/business-map/processes/:ns/:name/check` | the check of every element of a process's chain |
 | `GET /api/business-map/impact?entity=` | the processes that depend on an entity (or run on a framework line) |
 | `GET /api/business-map/engine?key=` | links into Operaton for a process key |
+| `GET /api/business-map/bia?namespace=[&domain=][&level=3\|all]` | the .xlsx of the business impact analysis |
 | `POST /api/business-map/import/preview` | the preview of an import (no write) |
 | `POST /api/business-map/exercises` | opens the pull request of a what-if exercise |
 

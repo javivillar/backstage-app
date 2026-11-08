@@ -168,3 +168,14 @@ describe('sub-processes', () => {
   });
 });
 
+describe('the business impact analysis in the check', () => {
+  const bia = (spec: Record<string, unknown>): MapEntity[] =>
+    ENTITIES.map(e => (e.metadata.name === 'repair' && e.kind === 'BusinessProcess' ? { ...e, spec: { ...e.spec, ...spec } } : e));
+  it('says when the RTO is above the MTPD', () => {
+    const c = checkProcess(new ContinuityGraph(bia({ mtpd: '2h' }), DEFAULTS), 'businessprocess:customer/repair')!;
+    expect(c.issues).toEqual([{ key: 'rto-above-mtpd', rto: '4h', mtpd: '2h' }]);
+    expect(checkProcess(new ContinuityGraph(bia({ mtpd: '8h' }), DEFAULTS), 'businessprocess:customer/repair')!.issues).toBeUndefined();
+    expect(checkProcess(graph(), 'businessprocess:customer/repair')!.issues).toBeUndefined();
+  });
+});
+

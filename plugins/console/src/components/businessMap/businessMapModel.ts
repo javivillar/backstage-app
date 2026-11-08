@@ -9,6 +9,7 @@ import type {
   MapProcess,
   ModelSummary,
   Origin,
+  Workaround,
 } from '../../businessMap';
 
 /**
@@ -125,6 +126,21 @@ export function originText(t: (k: string, v?: Vars) => string, o: Origin, critic
   if (o === 'override') return t('bm.from.override');
   if (o === 'inherited') return t('bm.from.inherited');
   return t('bm.from.default', { criticality: t(`bm.crit.${criticality}`) });
+}
+
+/** A workaround as a card says it: yes, up to 1d / no / — when the analysis says nothing. */
+export function workaroundText(t: (k: string, v?: Vars) => string, w: Workaround | undefined): string {
+  if (!w) return '—';
+  if (!w.manual) return t('bmp.workaround.no');
+  return w.maxDuration ? t('bmp.workaround.upTo', { d: w.maxDuration }) : t('bmp.workaround.yes');
+}
+
+/** The path of the BIA sheet of a customer (GET /api/business-map/bia), of one level-1 domain (its name) if given. */
+export function biaPath(namespace: string, domain?: string, level: '3' | 'all' = '3'): string {
+  const q = new URLSearchParams({ namespace });
+  if (domain) q.set('domain', domain);
+  if (level === 'all') q.set('level', 'all');
+  return `/bia?${q.toString()}`;
 }
 
 /** How many processes a tree holds. */

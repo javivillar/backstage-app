@@ -35,7 +35,7 @@ function createImportLikeAction(deps: Deps, write: boolean) {
       : 'Reads a business model file (APQC PCF, the Refresquito template or an own layout) and says what an import would do. Writes nothing.',
     schema: {
       input: {
-        source: z => z.enum(['apqc', 'template', 'own']).describe('apqc, the Refresquito template, or an own layout'),
+        source: z => z.enum(['apqc', 'template', 'own', 'bia']).describe('apqc, the Refresquito template, an own layout, or bia (the filled sheet of a business impact analysis: updates only)'),
         file: z => z.string().describe('The uploaded file, a data URL (base64)'),
         fileName: z => z.string().optional(),
         sheet: z => z.union([z.string(), z.number()]).optional().describe('The sheet of an .xlsx, by name or number'),

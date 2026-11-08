@@ -24,6 +24,7 @@ import {
   supportCategories,
   type ValueMapping,
 } from './importModel';
+import { pickBiaSheet, planBia } from './biaModel';
 import { compactSheet, readUpload, type Sheet } from './sheets';
 
 /**
@@ -121,6 +122,17 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     deps.catalog.getEntities({ filter: { kind: 'group' }, fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
     deps.catalog.getEntities({ filter: [{ kind: 'system' }, { kind: 'component' }, { kind: 'resource' }], fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
   ]);
+  if (input.source === 'bia') {
+    // the analysis only updates what is there: no ReferenceModel, no new entity, nothing marked gone
+    const biaSheet = input.sheet !== undefined && input.sheet !== '' ? sheet : pickBiaSheet(upload.sheets);
+    const b = planBia(biaSheet.rows, current, {
+      namespace: input.namespace,
+      dir: dirOf(input.namespace),
+      knownGroups: new Set(groups.items.map(refOf)),
+      knownEntities: new Set(others.items.map(refOf)),
+    });
+    return { parsed: { drafts: [] as Draft[], errors: b.errors, warnings: b.warnings }, planned: b.planned, warnings: [...warnings, ...b.warnings], upload, sheet: biaSheet };
+  }
   const parsed = parseRows(sheet.rows, {
     source: input.source,
     mapping,
@@ -193,7 +205,7 @@ export async function previewOf(input: ImportInput, deps: ImportDeps, credential
 /** A bad request body of the preview route (400). */
 export class InputError extends Error {}
 
-const SOURCES: Source[] = ['apqc', 'template', 'own'];
+const SOURCES: Source[] = ['apqc', 'template', 'own', 'bia'];
 const optString = (v: unknown, what: string): string | undefined => {
   if (v === undefined || v === null || v === '') return undefined;
   if (typeof v !== 'string') throw new InputError(`${what} is a string.`);
@@ -217,7 +229,7 @@ const stringMap = (v: unknown, what: string): Record<string, string> | undefined
  */
 export function readImportInput(body: unknown): ImportInput {
   const b = (body ?? {}) as Record<string, unknown>;
-  if (!SOURCES.includes(b.source as Source)) throw new InputError('source is apqc, template or own.');
+  if (!SOURCES.includes(b.source as Source)) throw new InputError('source is apqc, template, own or bia.');
   if (typeof b.file !== 'string' || !b.file) throw new InputError('file is the uploaded file, a data URL.');
   if (typeof b.namespace !== 'string' || !NAMESPACE.test(b.namespace)) throw new InputError('namespace is a namespace (lowercase letters, digits and "-").');
   let sheet: string | number | undefined;

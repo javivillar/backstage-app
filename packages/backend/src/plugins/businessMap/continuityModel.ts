@@ -8,7 +8,8 @@
  * framework lines and development services (they are not run time: no RPO/RTO of theirs is checked).
  *
  * A sub-process (spec.parentProcess) inherits from its parent chain what it does not say itself: criticality, rpo,
- * rto, retention and what it depends on. The answers that list the processes above an element (continuity, impact)
+ * rto, mtpd, retention, workaround and what it depends on. The check of a process also says when its RTO is above
+ * its MTPD (spec.mtpd, from the business impact analysis): a restore that ends after the business can bear it. The answers that list the processes above an element (continuity, impact)
  * take the top processes and only the sub-processes that say something of their own, so one service does not list
  * every activity of a process.
  */
@@ -42,7 +43,9 @@ export type CheckElement = {
   result: Result;
   gap?: Array<{ field: 'rpo' | 'rto'; needs: string; delivers: string }>;
 };
-export type ProcessCheck = { process: string; requirement: Requirement; elements: CheckElement[] };
+/** Something wrong in the requirement itself (not in an element): an RTO above the MTPD. */
+export type RequirementIssue = { key: 'rto-above-mtpd'; rto: string; mtpd: string };
+export type ProcessCheck = { process: string; requirement: Requirement; elements: CheckElement[]; issues?: RequirementIssue[] };
 
 const MINUTE: Record<string, number> = {
   m: 1, min: 1, mins: 1, minute: 1, minutes: 1,
@@ -89,7 +92,7 @@ const KINDS = new Set(['system', 'component', 'resource']);
 const NOT_RUN_TIME = new Set(['framework-line', 'development-service']);
 const NOT_A_SERVICE_SYSTEM = new Set(['network-segment', 'development-services']);
 
-export type Need = { criticality: Criticality; rpo?: number; rto?: number };
+export type Need = { criticality: Criticality; rpo?: number; rto?: number; mtpd?: number };
 
 /** The catalog as a graph: who is under whom along the chain. */
 export class ContinuityGraph {
@@ -237,6 +240,7 @@ export class ContinuityGraph {
       criticality,
       rpo: parseDuration(this.inherited(process, 'rpo')) ?? parseDuration(d.rpo),
       rto: parseDuration(this.inherited(process, 'rto')) ?? parseDuration(d.rto),
+      ...(parseDuration(this.inherited(process, 'mtpd')) === undefined ? {} : { mtpd: parseDuration(this.inherited(process, 'mtpd')) }),
     };
   }
 
@@ -305,6 +309,12 @@ export function continuityOf(graph: ContinuityGraph, entityRef: string): Continu
   };
 }
 
+/** What is wrong in a requirement itself: an RTO longer than the MTPD (the business cannot wait for the restore). */
+export function issuesOf(need: Need): RequirementIssue[] {
+  if (need.rto === undefined || need.mtpd === undefined || need.rto <= need.mtpd) return [];
+  return [{ key: 'rto-above-mtpd', rto: formatDuration(need.rto), mtpd: formatDuration(need.mtpd) }];
+}
+
 /** GET /processes/:namespace/:name/check: every element of the chain of a process, checked. Undefined if no process. */
 export function checkProcess(graph: ContinuityGraph, processRef: string): ProcessCheck | undefined {
   const ref = processRef.toLowerCase();
@@ -325,7 +335,8 @@ export function checkProcess(graph: ContinuityGraph, processRef: string): Proces
     if (gap.length) el.gap = gap;
     return el;
   });
-  return { process: ref, requirement: { criticality: need.criticality, rpo: fmt(need.rpo), rto: fmt(need.rto), from: [ref] }, elements };
+  const issues = issuesOf(need);
+  return { process: ref, requirement: { criticality: need.criticality, rpo: fmt(need.rpo), rto: fmt(need.rto), from: [ref] }, elements, ...(issues.length ? { issues } : {}) };
 }
 
 /** businessMap.criticality read from a plain object (the app-config), anything malformed left out. */

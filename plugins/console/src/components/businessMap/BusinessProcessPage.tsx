@@ -1,6 +1,7 @@
 import { type Entity, stringifyEntityRef } from '@backstage/catalog-model';
 import { Progress } from '@backstage/core-components';
 import { EntityProvider } from '@backstage/plugin-catalog-react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Table from '@mui/material/Table';
@@ -18,7 +19,7 @@ import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { EntityDependenciesContent } from '../EntityDependencies';
 import { EmptyState, Id, Section, TitleRow } from '../ui';
-import { chainColumns, closeAdvice, consolePath, editProcessUrl, gapText, nameOf, originText, parentsOf, type ProcessNode, subprocessTree, treeSize, UNASSIGNED } from './businessMapModel';
+import { chainColumns, closeAdvice, consolePath, editProcessUrl, gapText, nameOf, originText, parentsOf, workaroundText, type ProcessNode, subprocessTree, treeSize, UNASSIGNED } from './businessMapModel';
 import { CritPill, pair, ResultPill } from './parts';
 
 /** The sub-processes of a process, nested, each a link to its page with its criticality and its check. */
@@ -284,11 +285,22 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
       )}
       {!onDeps && p && (
         <>
+          {(p.issues ?? []).map(i => (
+            <Alert key={i.key} severity="warning" sx={{ mb: 2 }}>
+              {t('bmp.issue.rtoAboveMtpd', { rto: i.rto, mtpd: i.mtpd })}
+            </Alert>
+          ))}
           <Section title={t('bmp.requirement')}>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 1.5 }}>
               <Card k="RPO" v={p.requirement.rpo ?? '—'} w={from(p.requirement.from.rpo)} />
               <Card k="RTO" v={p.requirement.rto ?? '—'} w={from(p.requirement.from.rto)} />
               <Card k={t('bm.retention')} v={p.requirement.retention ?? '—'} w={p.requirement.retention ? t('bm.from.override') : t('bmp.notDeclared')} />
+              <Card k={t('bmp.mtpd')} v={p.requirement.mtpd ?? '—'} w={p.requirement.from.mtpd ? from(p.requirement.from.mtpd) : t('bmp.notDeclared')} />
+              <Card
+                k={t('bmp.workaround')}
+                v={workaroundText(t, p.requirement.workaround)}
+                w={p.requirement.workaround?.note ?? (p.requirement.from.workaround ? from(p.requirement.from.workaround) : t('bmp.notDeclared'))}
+              />
               <Card k={t('bmp.ha')} v={p.requirement.ha ? t('bmp.required') : t('bmp.notRequired')} w={from('default')} />
               <Card k={t('bm.owner')} v={owner ?? t('bm.noOwner')} w={t('bmp.group')} />
               <Card k={t('bmp.classification')} v={p.classification ?? '—'} />

@@ -16,7 +16,7 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { Pill, TitleRow, type Tone } from '../ui';
@@ -350,6 +350,12 @@ export const ImportModelPage = () => {
           );
         })}
       </Box>
+      {form.source === 'bia' && (
+        <Alert severity="info">
+          <b>{t('bmf.bia.cycle.title')}</b> {t('bmf.bia.cycle')}{' '}
+          <Link to={`/console/business-map${form.namespace ? `?ns=${encodeURIComponent(form.namespace)}` : ''}`}>{t('bmf.bia.download')}</Link>
+        </Alert>
+      )}
       <Box sx={{ border: `2px dashed ${problem('file') ? rq.negative : rq.border}`, borderRadius: '8px', p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minWidth: 0 }}>
           <Box aria-hidden sx={{ width: 36, height: 44, borderRadius: '6px', bgcolor: rq.dataSoft, color: rq.data, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 10, fontWeight: 600 }}>
@@ -379,8 +385,12 @@ export const ImportModelPage = () => {
           onInputChange={(_, v) => set({ namespace: v.trim() })}
           renderInput={p => <TextField {...p} required label={t('bmf.namespace')} error={!!problem('namespace')} helperText={problem('namespace') ?? t('bmf.namespace.hint')} />}
         />
-        <RefPicker label={t('bmf.defaultOwner')} items={groups.items} loading={groups.loading} value={form.owner} onChange={v => set({ owner: v })} help={t('bmf.defaultOwner.hint')} />
-        <RefPicker label={t('bmf.keepFrom')} items={models.items} loading={models.loading} value={form.keepFrom} onChange={v => set({ keepFrom: v })} help={t('bmf.keepFrom.hint')} />
+        {form.source !== 'bia' && (
+          <>
+            <RefPicker label={t('bmf.defaultOwner')} items={groups.items} loading={groups.loading} value={form.owner} onChange={v => set({ owner: v })} help={t('bmf.defaultOwner.hint')} />
+            <RefPicker label={t('bmf.keepFrom')} items={models.items} loading={models.loading} value={form.keepFrom} onChange={v => set({ keepFrom: v })} help={t('bmf.keepFrom.hint')} />
+          </>
+        )}
         {form.source === 'apqc' && (
           <>
             <TextField size="small" label={t('bmf.industry')} value={form.industry} onChange={e => set({ industry: e.target.value })} error={!!problem('industry')} helperText={problem('industry') ?? t('bmf.industry.hint')} />

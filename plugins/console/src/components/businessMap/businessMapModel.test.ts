@@ -5,6 +5,7 @@ import {
   compareVersions,
   consolePath,
   adoptModelUrl,
+  biaPath,
   editProcessUrl,
   importModelUrl,
   gapText,
@@ -18,6 +19,7 @@ import {
   parentsOf,
   subprocessTree,
   treeSize,
+  workaroundText,
   resultLabel,
   strictestOf,
   supportOf,
@@ -186,6 +188,23 @@ describe('originText', () => {
     expect(originText(t, 'override', 'critical')).toBe('bm.from.override');
     expect(originText(t, 'inherited', 'critical')).toBe('bm.from.inherited');
     expect(originText(t, 'default', 'critical')).toBe('bm.from.default(bm.crit.critical)');
+  });
+});
+
+describe('workaroundText', () => {
+  const t = (k: string, v?: Record<string, string | number>) => (v ? `${k}(${Object.values(v).join(',')})` : k);
+  it('says the workaround of the analysis', () => {
+    expect(workaroundText(t, undefined)).toBe('—');
+    expect(workaroundText(t, { manual: false })).toBe('bmp.workaround.no');
+    expect(workaroundText(t, { manual: true })).toBe('bmp.workaround.yes');
+    expect(workaroundText(t, { manual: true, maxDuration: '24h' })).toBe('bmp.workaround.upTo(24h)');
+  });
+});
+
+describe('biaPath', () => {
+  it('asks for the sheet of a customer, a level-1 domain, the sub-processes', () => {
+    expect(biaPath('customer')).toBe('/bia?namespace=customer');
+    expect(biaPath('customer', 'after-sales', 'all')).toBe('/bia?namespace=customer&domain=after-sales&level=all');
   });
 });
 

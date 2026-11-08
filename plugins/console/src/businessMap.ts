@@ -17,7 +17,21 @@ export type MapDomain = { ref: string; title: string; description?: string; pcfI
 export type MapService = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: CheckResult; gaps: ElementGap[] };
 /** Where a value of the requirement comes from: the criticality's default, the process itself, or a parent process. */
 export type Origin = 'default' | 'override' | 'inherited';
-export type MapRequirement = { rpo: Duration; rto: Duration; retention: Duration; ha?: boolean; from: { rpo: Origin; rto: Origin } };
+/** The manual way to go on while the systems are down (business impact analysis). */
+export type Workaround = { manual: boolean; maxDuration?: string; note?: string };
+/** mtpd and workaround only when the process (or a parent) says them. */
+export type MapRequirement = {
+  rpo: Duration;
+  rto: Duration;
+  retention: Duration;
+  ha?: boolean;
+  mtpd?: string;
+  workaround?: Workaround;
+  from: { rpo: Origin; rto: Origin; mtpd?: Origin; workaround?: Origin };
+};
+/** Something wrong in a requirement itself: an RTO above the MTPD. */
+export type RequirementIssue = { key: 'rto-above-mtpd'; rto: string; mtpd: string };
+export type InheritedField = 'criticality' | 'rpo' | 'rto' | 'mtpd' | 'retention' | 'workaround' | 'dependsOn';
 export type MapProcess = {
   ref: string;
   name: string;
@@ -30,6 +44,10 @@ export type MapProcess = {
   parent?: string;
   /** its direct sub-processes ([] or absent when none) */
   subprocesses?: string[];
+  /** a sub-process: what it takes from its parent chain */
+  inherited?: InheritedField[];
+  /** an RTO above the MTPD */
+  issues?: RequirementIssue[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -94,7 +112,7 @@ export type CheckElement = {
   gap?: Array<{ field: 'rpo' | 'rto'; needs: string; delivers: string }>;
 };
 /** GET /api/business-map/processes/:namespace/:name/check */
-export type ProcessCheck = { process: string; requirement: { criticality: Criticality; rpo: Duration; rto: Duration; from: string[] }; elements: CheckElement[] };
+export type ProcessCheck = { process: string; requirement: { criticality: Criticality; rpo: Duration; rto: Duration; from: string[] }; elements: CheckElement[]; issues?: RequirementIssue[] };
 
 type Loaded<T> = { loading: boolean; data?: T; error?: string };
 

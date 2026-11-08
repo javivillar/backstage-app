@@ -161,6 +161,20 @@ describe('buildMap: sub-processes', () => {
     expect(repair.dependsOn).toEqual(['system:default/shop']);
     expect(repair.parent).toBeUndefined();
   });
+  it('says what a sub-process inherits, and the MTPD and workaround of the analysis', () => {
+    const bia = withSub.map(e =>
+      e.metadata.name === 'repair' && e.kind === 'BusinessProcess' ? { ...e, spec: { ...e.spec, mtpd: '2h', workaround: { manual: true, maxDuration: '1d', note: 'paper forms' } } } : e,
+    );
+    const mb = buildMap(new ContinuityGraph(bia, DEFAULTS), DEFAULTS);
+    const repair = mb.processes.find(p => p.name === 'repair')!;
+    expect(repair.requirement.mtpd).toBe('2h');
+    expect(repair.requirement.workaround).toEqual({ manual: true, maxDuration: '1d', note: 'paper forms' });
+    expect(repair.requirement.from).toEqual({ rpo: 'default', rto: 'default', mtpd: 'override', workaround: 'override' });
+    expect(repair.issues).toEqual([{ key: 'rto-above-mtpd', rto: '4h', mtpd: '2h' }]);
+    const plan = mb.processes.find(p => p.name === 'plan')!;
+    expect(plan.inherited).toEqual(['criticality', 'mtpd', 'retention', 'workaround', 'dependsOn']);
+    expect(plan.requirement.from.mtpd).toBe('inherited');
+  });
   it('the impact lists the top process, not its sub-process that says nothing of its own', () => {
     expect(impactOf(new ContinuityGraph(withSub, DEFAULTS), 'component:default/postgres-oneke').processes.map(p => p.ref)).toEqual([
       'businessprocess:customer/repair',

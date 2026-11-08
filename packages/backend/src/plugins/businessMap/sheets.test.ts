@@ -1,5 +1,5 @@
 import { deflateRawSync } from 'node:zlib';
-import { columnOf, parseCsv, readUpload, readXlsx, compactSheet } from './sheets';
+import { columnOf, parseCsv, readUpload, readXlsx, compactSheet, writeXlsx, crc32, columnName } from './sheets';
 
 /** A tiny zip writer for the tests: deflated entries, CRC left 0 (the reader does not check it). */
 function zip(files: Record<string, string>): Buffer {
@@ -116,3 +116,25 @@ describe('compactSheet', () => {
     expect(back.sheets).toEqual([{ name: 'Combined', rows: sheet.rows }]);
   });
 });
+
+describe('writeXlsx', () => {
+  it('writes a workbook the reader reads back: sheets, cells, empty cells, XML characters', () => {
+    const buf = writeXlsx([
+      { name: 'BIA', header: true, widths: [10, 40], rows: [['ID', 'Process', 'Notes'], ['6.3.2', 'Repair <fast> & "well"', ''], ['6.3.3', '', 'Línea\ndos']] },
+      { name: 'Guide', rows: [['Criticality', 'critical, important, standard']] },
+    ]);
+    const sheets = readXlsx(buf);
+    expect(sheets.map(s => s.name)).toEqual(['BIA', 'Guide']);
+    expect(sheets[0].rows).toEqual([
+      { n: 1, cells: ['ID', 'Process', 'Notes'] },
+      { n: 2, cells: ['6.3.2', 'Repair <fast> & "well"'] },
+      { n: 3, cells: ['6.3.3', '', 'Línea\ndos'] },
+    ]);
+    expect(sheets[1].rows[0].cells[1]).toBe('critical, important, standard');
+  });
+  it('the CRC-32 and the column names', () => {
+    expect(crc32(Buffer.from('123456789'))).toBe(0xcbf43926);
+    expect([columnName(0), columnName(25), columnName(26), columnName(27), columnName(701), columnName(702)]).toEqual(['A', 'Z', 'AA', 'AB', 'ZZ', 'AAA']);
+  });
+});
+

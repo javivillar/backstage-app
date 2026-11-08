@@ -40,6 +40,18 @@ export const businessProcessSchema = {
             rpo: { type: 'string', pattern: DURATION },
             rto: { type: 'string', pattern: DURATION },
             retention: { type: 'string', pattern: DURATION },
+            // the business impact analysis: maximum tolerable period of disruption, and the manual way to go on
+            mtpd: { type: 'string', pattern: DURATION },
+            workaround: {
+              type: 'object',
+              required: ['manual'],
+              additionalProperties: false,
+              properties: {
+                manual: { type: 'boolean' },
+                maxDuration: { type: 'string', pattern: DURATION },
+                note: { type: 'string' },
+              },
+            },
             classification: { type: 'string', minLength: 1 },
             dependsOn: { type: 'array', items: { type: 'string', minLength: 1 } },
           },

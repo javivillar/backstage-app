@@ -20,7 +20,8 @@ import type { SheetRow } from './sheets';
  * never commit APQC content anywhere (not even as a test fixture): the fixtures of the tests are made up.
  */
 
-export type Source = 'apqc' | 'template' | 'own';
+/** Where a model comes from; bia is the sheet of a business impact analysis, which only updates (biaModel.ts). */
+export type Source = 'apqc' | 'template' | 'own' | 'bia';
 export const FIELDS = ['id', 'title', 'description', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
 type Field = (typeof FIELDS)[number] | 'elementId';
 /** Which column holds each field: a header name, or a column letter (A, B, AA). */
@@ -71,6 +72,7 @@ export const DEFAULT_COLUMNS: Record<Source, Mapping> = {
     rpo: 'RPO', rto: 'RTO', retention: 'Retention', applications: 'Applications',
   },
   own: {},
+  bia: { id: 'ID' },
 };
 
 /** An entity to be, before it has a name: what the file (or a copied model) says of it. */
@@ -94,6 +96,12 @@ export type Draft = {
   rto?: string;
   retention?: string;
   dependsOn?: string[];
+  /**
+   * The tracked fields the file says something of (a non-empty cell; the structure always). On a reimport only these
+   * are compared: an empty cell or a column the file has not never overrides what the portal or a BIA wrote.
+   * Undefined (an adopted model): every field.
+   */
+  given?: string[];
   /** Fields copied as they are (from an adopted model: classification, process key). */
   extra?: { annotations?: Record<string, string>; spec?: Record<string, unknown> };
 };
@@ -368,6 +376,8 @@ export function parseRows(rows: SheetRow[], o: ParseOptions): Parsed {
     const isProcess = k === 'process' || k === 'subprocess';
     const d: Draft = { key: keyOf(annotations)!, kind: isProcess ? 'BusinessProcess' : 'Domain', title: i.title, parentKey, row: i.row, annotations, owner: ownerOf(i) };
     if (i.cells.description) d.description = i.cells.description;
+    const fromFile = { owner: 'owner', criticality: 'criticality', rpo: 'rpo', rto: 'rto', retention: 'retention', applications: 'dependsOn', description: 'description' } as const;
+    d.given = ['title', 'subdomainOf', 'domain', 'parentProcess', ...Object.entries(fromFile).filter(([c]) => i.cells[c as Field]).map(([, f]) => f)];
     d.level = depth.get(i.id)! + 1;
     d.root = rootOf.get(i.id);
     if (k === 'subprocess') d.sub = true;
@@ -538,10 +548,10 @@ function readHashes(s: string | undefined): Map<string, string> | undefined {
   return new Map(s.split(',').map(p => p.split(':') as [string, string]));
 }
 
-const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') || '(none)' : String(v ?? '(none)'));
+export const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') || '(none)' : String(v ?? '(none)'));
 
 /** Parse the YAML documents of the current files. */
-function readCurrent(files: CurrentFile[]) {
+export function readCurrent(files: CurrentFile[]) {
   return files.map(f => ({
     path: f.path,
     docs: parseAllDocuments(f.text)
@@ -550,10 +560,10 @@ function readCurrent(files: CurrentFile[]) {
   }));
 }
 
-const render = (docs: ModelEntity[]) => docs.map(d => stringify(d, { lineWidth: 0 })).join('---\n');
+export const render = (docs: ModelEntity[]) => docs.map(d => stringify(d, { lineWidth: 0 })).join('---\n');
 
 /** An entity in the order a person reads it. */
-function tidy(e: ModelEntity): ModelEntity {
+export function tidy(e: ModelEntity): ModelEntity {
   const { name, namespace, title, annotations, ...rest } = e.metadata;
   const metadata: ModelEntity['metadata'] = { name };
   if (namespace) metadata.namespace = namespace;
@@ -672,6 +682,7 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     const stored = readHashes(e.metadata.annotations?.[A.hash]);
     const applied: string[] = [];
     for (const f of d.kind === 'Domain' ? DOMAIN_FIELDS : PROCESS_FIELDS) {
+      if (d.given && !d.given.includes(f)) continue; // the file says nothing of it
       const now = getField(e, f);
       const next = getField(fresh, f);
       if (norm(f, now, ns) === norm(f, next, ns)) continue;

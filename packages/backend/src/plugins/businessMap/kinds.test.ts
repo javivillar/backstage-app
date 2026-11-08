@@ -45,6 +45,15 @@ describe('sub-processes', () => {
   });
 });
 
+describe('the business impact analysis', () => {
+  it('accepts an MTPD and a workaround, and refuses bad ones', () => {
+    expect(validateBusinessMapEntity(bp({ mtpd: '48h', workaround: { manual: true, maxDuration: '3d', note: 'paper' } }))).toBe(true);
+    expect(() => validateBusinessMapEntity(bp({ mtpd: 'two days' }))).toThrow();
+    expect(() => validateBusinessMapEntity(bp({ workaround: { maxDuration: '3d' } }))).toThrow();
+    expect(() => validateBusinessMapEntity(bp({ workaround: { manual: 'yes' } }))).toThrow();
+  });
+});
+
 describe('relations', () => {
   it('owner and dependsOn default to the namespace default, the domain to its own', () => {
     const r = relationsOf(bp({ owner: 'maintenance', dependsOn: ['petstore', 'component:default/shop-oneke'] }));

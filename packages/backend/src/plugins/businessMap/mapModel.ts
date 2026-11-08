@@ -1,5 +1,7 @@
 import {
   type CheckElement,
+  issuesOf,
+  type RequirementIssue,
   checkProcess,
   type ContinuityGraph,
   type Criticality,
@@ -32,7 +34,19 @@ export type MapDomain = { ref: string; title: string; description?: string; pcfI
 export type MapServiceCheck = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: Result; gaps: ElementGap[] };
 /** Where a value of the requirement comes from: the default of the criticality, the process, or a parent process. */
 export type Origin = 'default' | 'override' | 'inherited';
-export type MapRequirement = { rpo: string | null; rto: string | null; retention: string | null; ha?: boolean; from: { rpo: Origin; rto: Origin } };
+export type Workaround = { manual: boolean; maxDuration?: string; note?: string };
+/** mtpd and workaround (the business impact analysis) only when the process or a parent says them. */
+export type MapRequirement = {
+  rpo: string | null;
+  rto: string | null;
+  retention: string | null;
+  ha?: boolean;
+  mtpd?: string;
+  workaround?: Workaround;
+  from: { rpo: Origin; rto: Origin; mtpd?: Origin; workaround?: Origin };
+};
+/** The fields a sub-process takes from its parent chain. */
+export type InheritedField = 'criticality' | 'rpo' | 'rto' | 'mtpd' | 'retention' | 'workaround' | 'dependsOn';
 export type MapProcess = {
   ref: string;
   name: string;
@@ -44,6 +58,10 @@ export type MapProcess = {
   parent?: string;
   /** The direct sub-processes (refs), [] when none. */
   subprocesses: string[];
+  /** A sub-process: what it takes from its parent chain (absent when nothing). */
+  inherited?: InheritedField[];
+  /** Something wrong in the requirement itself (an RTO above the MTPD); absent when nothing. */
+  issues?: RequirementIssue[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -161,6 +179,16 @@ function domainsOf(all: MapEntity[], namespace: string, pointed: Set<string>): M
     .sort((x, y) => compareIds(x.pcfId ?? x.modelId, y.pcfId ?? y.modelId) || x.title.localeCompare(y.title));
 }
 
+/** spec.workaround as the map gives it; undefined when it is not one. */
+export function readWorkaround(v: unknown): Workaround | undefined {
+  if (!v || typeof v !== 'object' || typeof (v as Workaround).manual !== 'boolean') return undefined;
+  const w = v as Record<string, unknown>;
+  const out: Workaround = { manual: w.manual as boolean };
+  if (str(w.maxDuration)) out.maxDuration = String(w.maxDuration);
+  if (str(w.note)) out.note = String(w.note);
+  return out;
+}
+
 /** One process of the map, checked down its chain. */
 export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: CriticalityDefaults): MapProcess {
   const ref = refOf(e);
@@ -194,6 +222,19 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     retention: fmt(parseDuration(retention)) ?? str(retention) ?? null,
     from: { rpo: origin('rpo'), rto: origin('rto') },
   };
+  const hasOwn = (f: string) => {
+    const v = spec[f];
+    return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
+  };
+  if (need?.mtpd !== undefined) {
+    requirement.mtpd = formatDuration(need.mtpd);
+    requirement.from.mtpd = hasOwn('mtpd') ? 'override' : 'inherited';
+  }
+  const workaround = readWorkaround(graph.inherited(ref, 'workaround'));
+  if (workaround) {
+    requirement.workaround = workaround;
+    requirement.from.workaround = hasOwn('workaround') ? 'override' : 'inherited';
+  }
   const ha = defaults[criticality]?.ha;
   if (ha !== undefined) requirement.ha = ha;
   const dataProducts = [...new Set(elements.map(el => graph.entity(el.ref)?.metadata.annotations?.[A.dataProduct]).filter((x): x is string => !!x))];
@@ -214,7 +255,15 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
   };
   if (e.metadata.description) p.description = e.metadata.description;
   const parent = graph.parentProcess(ref);
-  if (parent) p.parent = parent;
+  if (parent) {
+    p.parent = parent;
+    const fields: InheritedField[] = ['criticality', 'rpo', 'rto', 'mtpd', 'retention', 'workaround'];
+    const inherited: InheritedField[] = fields.filter(f => !hasOwn(f) && graph.inherited(ref, f) !== undefined);
+    if (!graph.children(ref).some(c => !c.startsWith('businessprocess:')) && dependsOn.length) inherited.push('dependsOn');
+    if (inherited.length) p.inherited = inherited;
+  }
+  const issues = need ? issuesOf(need) : [];
+  if (issues.length) p.issues = issues;
   if (str(spec.owner)) p.owner = normRef(String(spec.owner), 'group', 'default');
   if (str(spec.classification)) p.classification = String(spec.classification);
   if (a[A.pcfId]) p.pcfId = a[A.pcfId];

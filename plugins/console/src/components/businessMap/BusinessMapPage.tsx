@@ -10,6 +10,7 @@ import { type MapData, type MapProcess, type Origin, topProcesses, useBusinessMa
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { EmptyState, Facts, Id, Kpis, TitleRow } from '../ui';
+import { BiaDownload } from './BiaDownload';
 import { BusinessMapTabs, useCustomer } from './BusinessMapTabs';
 import {
   adoptModelUrl,
@@ -228,6 +229,7 @@ export const BusinessMapPage = () => {
   const actions = (
     <>
       <BusinessMapTabs />
+      <BiaDownload namespace={customer} domains={data?.domains ?? []} />
       <Button variant="outlined" size="small" component={Link} to={importModelUrl(customer)}>
         {t('bm.import')}
       </Button>

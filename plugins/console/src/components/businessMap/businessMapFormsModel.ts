@@ -51,8 +51,9 @@ export function slugOf(title: string): string {
 
 // ---------------------------------------------------------------- import
 
-export type ImportSource = 'apqc' | 'template' | 'own';
-export const IMPORT_SOURCES: ImportSource[] = ['apqc', 'template', 'own'];
+/** bia: the sheet of a business impact analysis, filled by the business owners: it only updates processes there. */
+export type ImportSource = 'apqc' | 'template' | 'own' | 'bia';
+export const IMPORT_SOURCES: ImportSource[] = ['apqc', 'template', 'own', 'bia'];
 export const MAPPING_FIELDS = ['id', 'title', 'description', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
 export type MappingField = (typeof MAPPING_FIELDS)[number];
 export const REQUIRED_MAPPING: MappingField[] = ['id', 'title'];
@@ -139,8 +140,9 @@ export function previewBody(form: ImportForm): PreviewBody | undefined {
   const body: PreviewBody = { source: form.source, file: form.file, namespace: form.namespace };
   if (form.fileName) body.fileName = form.fileName;
   if (form.sheet.trim()) body.sheet = form.sheet.trim();
-  if (form.owner) body.owner = form.owner;
-  if (form.keepFrom) body.keepFrom = form.keepFrom;
+  // the analysis only updates: no default owner, no categories kept from a model
+  if (form.owner && form.source !== 'bia') body.owner = form.owner;
+  if (form.keepFrom && form.source !== 'bia') body.keepFrom = form.keepFrom;
   if (form.source === 'apqc') {
     if (form.industry.trim()) body.industry = form.industry.trim();
     if (form.version.trim()) body.version = form.version.trim();
@@ -235,8 +237,8 @@ export function importValues(form: ImportForm, preview: PreviewState | undefined
       ? { state: preview.state, key: preview.key, errors: preview.preview?.errors.length ?? 0, warnings: preview.preview?.warnings.length ?? 0 }
       : {},
   };
-  if (form.owner) v.owner = form.owner;
-  if (form.keepFrom) v.keepFrom = form.keepFrom;
+  if (form.owner && form.source !== 'bia') v.owner = form.owner;
+  if (form.keepFrom && form.source !== 'bia') v.keepFrom = form.keepFrom;
   if (form.source === 'apqc') {
     v.industry = form.industry.trim();
     v.version = form.version.trim();
