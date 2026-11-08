@@ -186,6 +186,7 @@ export const ServiceHeader = () => {
             {health && <Pill tone={choose<'pos' | 'info' | 'neg'>([[health === 'Healthy', 'pos'], [health === 'Progressing', 'info']], 'neg')}>{health}</Pill>}
             {kind === 'business' && <Pill tone="neu" plain>{tr('ent.business')}</Pill>}
             {kind === 'service' && <Pill tone="neu" plain>{tr('ent.service')}</Pill>}
+            {kind === 'development' && <Pill tone="neu" plain>{tr('ent.development')}</Pill>}
             {stage && <Pill tone="neu" plain>{stage}</Pill>}
             {s.lifecycle && <Pill tone="neu" plain>{s.lifecycle}</Pill>}
           </Box>

@@ -31,6 +31,9 @@ import {
 } from '@internal/backstage-plugin-alfresco-backend';
 import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backend';
 import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-backend';
+import { businessMapCatalogModule } from './plugins/businessMap/catalogModule';
+import { businessMapPlugin } from './plugins/businessMap/plugin';
+import { businessMapScaffolderModule } from './plugins/businessMap/scaffolderModule';
 
 const backend = createBackend();
 
@@ -57,6 +60,9 @@ backend.add(import('./plugins/costs'));
 backend.add(import('./plugins/cluster'));
 // Manage through git: the Manage pages of the console change objects of the platform services by pull request
 backend.add(import('./plugins/manage'));
+// Business map: the continuity check of the chain under each business process (/api/business-map/continuity,
+// /api/business-map/processes/:namespace/:name/check); businessMap.criticality of the app-config
+backend.add(businessMapPlugin);
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));
@@ -100,6 +106,10 @@ backend.add(alfrescoScaffolderModule);
 // + member/role management) — see plugins/activepieces-backend.
 backend.add(activepiecesScaffolderModule);
 
+// Business map: import a business model (APQC PCF, the Refresquito template, an own layout) and adopt a reference
+// model, written as YAML into the workspace for a pull request (plugins/businessMap/scaffolderModule.ts)
+backend.add(businessMapScaffolderModule);
+
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
 backend.add(import('@roadiehq/scaffolder-backend-module-http-request'));
@@ -113,6 +123,9 @@ backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 
 // Catalog
 backend.add(import('@backstage/plugin-catalog-backend'));
+// Business map: the kinds BusinessProcess and ReferenceModel (refresquito.io/v1alpha1), validated, with their relations
+// (plugins/businessMap/kinds.ts, docs/business-map.md)
+backend.add(businessMapCatalogModule);
 
 // Discover catalog-info.yaml files in the repositories of a GitHub owner. Does nothing until
 // app-config declares catalog.providers.github (owner, filters, schedule).

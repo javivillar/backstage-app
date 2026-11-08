@@ -31,11 +31,11 @@ jobs:
           yarn --cwd plugins/continuity-backend test
           yarn --cwd packages/app test src/components/opsassistant src/components/cost
 
-      - name: Test the data view, the Grafana tabs, the monitoring page and the paths of the console
+      - name: Test the data view, the Grafana tabs, the monitoring page, the business types and the paths of the console
         run: |
           yarn --cwd plugins/datahub-backend test src/application
-          yarn --cwd packages/backend test src/plugins/manageModel
-          yarn --cwd plugins/console test src/components/EntityData src/components/EntityGrafana src/components/monitoringModel src/components/manage src/pages src/paths
+          yarn --cwd packages/backend test src/plugins/manageModel src/plugins/businessMap
+          yarn --cwd plugins/console test src/components/EntityData src/components/EntityGrafana src/components/monitoringModel src/components/manage src/components/classifyTypes src/components/businessService src/components/depsModel src/pages src/paths
 
       - name: Build backend
         run: yarn build:backend

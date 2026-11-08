@@ -8,7 +8,7 @@ import { classify, consoleEntityPath } from './classify';
 import { rq } from './tokens';
 import { useI18n } from '../i18n';
 
-const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels'];
+const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'spec.type', 'spec.system'];
 const KINDS = ['component', 'api', 'system', 'resource', 'group'];
 
 export function findMatches(entities: Entity[], text: string, max = 8): Entity[] {
@@ -105,8 +105,9 @@ export const QuickFind = () => {
           {matches.map((e, i) => {
             const k = classify(e);
             let what = e.kind;
-            if (k === 'business') what = t('shell.business');
+            if (k === 'business') what = e.kind === 'System' ? t('shell.businessService') : t('shell.business');
             else if (k === 'service') what = t('shell.service');
+            else if (k === 'development') what = t('shell.development');
             return (
               <Box component="li" key={stringifyEntityRef(e)} role="option" aria-selected={i === active}>
                 <Box
