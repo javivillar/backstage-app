@@ -106,8 +106,9 @@ file (`domain-<name>.yaml`, `process-<name>.yaml`, `reference-model.yaml`). An e
 
 **How the catalog reads them: the entity provider `business-map`** (catalog module of the backend, `provider.ts`).
 Every `businessMap.provider.frequency` minutes (10 by default; `businessMap.provider.enabled: false` turns it off) it
-reads every file of `catalog/business-map/` in **one GraphQL query** (the tree of namespaces and the text of each
-file; a file GitHub gives no text of, over its size limit, is read alone) and gives the catalog all of them as a full
+reads every file of `catalog/business-map/` through **GraphQL**: the tree of namespaces in one query, then the text of
+the files not read before in batches of 100 (three at a time; the text of two thousand files in one query made GitHub
+answer 502); a file GitHub gives no text of, over its size limit, is read alone and gives the catalog all of them as a full
 mutation (location key `business-map-provider`): a file deleted in git is an entity gone from the catalog. Each
 entity points at its file (`backstage.io/managed-by-location`, `view-url`, `edit-url`). A file that is not valid
 YAML, or a document of another kind, is left out and logged; the rest go on. When GitHub limits the token
@@ -115,8 +116,9 @@ YAML, or a document of another kind, is left out and logged; the rest go on. Whe
 `businessMap.repo` / `businessMap.branch` (default refresquito-services main) with the token of the GitHub
 integration.
 
-GitHub API cost: one GraphQL query per run and per catalog (the console preview has its own): 6 an hour each with the
-default frequency, whatever the number of files. It replaces the Location `business-map` of the app-of-apps catalog
+GitHub API cost: per catalog (the console preview has its own) the first run reads every file (about 21 queries for
+2,000 files), each later run one query for the tree plus a batch for the files that changed: about 6 an hour with the
+default frequency. It replaces the Location `business-map` of the app-of-apps catalog
 (now off: `catalog.businessMap.enabled: false`), which read every file through the contents API on each refresh: two
 thousand files of one customer, in two catalogs, spent the hourly limit of the token (5,000, shared with the other
 users of the token) in minutes. Entities of a provider are not checked by the catalog rules of a Location; the

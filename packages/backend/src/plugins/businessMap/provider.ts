@@ -6,8 +6,8 @@ import { type FolderFile, GitHubRateLimitError, readFolder } from './githubFolde
 
 /**
  * The entity provider `business-map` (docs/business-map.md): the Domains, BusinessProcesses and ReferenceModels of
- * catalog/business-map/<namespace>/*.yaml of refresquito-services, read in ONE GraphQL query per run (every 10
- * minutes) and given to the catalog as a full mutation. It replaces the Location that read every file through the
+ * catalog/business-map/<namespace>/*.yaml of refresquito-services, read through GraphQL every 10 minutes (the tree in
+ * one query, the text of the files that changed in batches) and given to the catalog as a full mutation. It replaces the Location that read every file through the
  * contents API on each refresh (thousands of requests an hour for one customer, the whole limit of the token).
  *
  * A file that is not valid YAML, or a document that is not one of these kinds, is left out and logged: the rest go
@@ -128,7 +128,7 @@ export class BusinessMapEntityProvider implements EntityProvider {
     const { entities, skipped } = providerEntities(files, this.options);
     for (const s of skipped) this.logger.warn(`business-map provider: left out ${s.path}: ${s.reason}`);
     await this.connection.applyMutation({ type: 'full', entities: entities.map(entity => ({ entity, locationKey: LOCATION_KEY })) });
-    this.logger.info(`business-map provider: ${entities.length} entities from ${files.length} files of ${this.options.repo}@${this.options.branch} (1 GraphQL query)${skipped.length ? `, ${skipped.length} left out` : ''}`);
+    this.logger.info(`business-map provider: ${entities.length} entities from ${files.length} files of ${this.options.repo}@${this.options.branch} (GraphQL: the tree + the changed files in batches of 100)${skipped.length ? `, ${skipped.length} left out` : ''}`);
     return 'applied';
   }
 }

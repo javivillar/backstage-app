@@ -59,7 +59,7 @@ export async function currentFiles(config: Config, namespace: string, fetchFn: t
   const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
   const repo = config.getOptionalString('businessMap.repo') ?? config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services';
   const branch = config.getOptionalString('businessMap.branch') ?? 'main';
-  // ONE GraphQL query for the whole folder (githubFolder.ts, shared with the entity provider of the catalog)
+  // GraphQL for the whole folder: the tree in one query, the text in batches (githubFolder.ts, shared with the entity provider of the catalog)
   return readFolder({ repo, branch, token }, dirOf(namespace), 1, fetchFn);
 }
 

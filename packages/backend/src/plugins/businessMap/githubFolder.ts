@@ -1,8 +1,9 @@
 /**
- * The files of a folder of a GitHub repository in ONE GraphQL query (the contents API takes a request per file: a
- * customer with thousands of processes spent the hourly limit of the token of Backstage in minutes). One level (the
- * files of the folder) or two (the files of each subfolder, as catalog/business-map/<namespace>/). A file GitHub gives
- * no text of (over its size limit, isTruncated) is read alone through the contents API.
+ * The files of a folder of a GitHub repository through GraphQL: the tree in one query, the text of the files in batches
+ * and only for the files that changed (the contents API takes a request per file: a customer with thousands of
+ * processes spent the hourly limit of the token of Backstage in minutes; their text in one query made GitHub answer
+ * 502). One level (the files of the folder) or two (the files of each subfolder, as catalog/business-map/<namespace>/).
+ * A file GitHub gives no text of (over its size limit, isTruncated) is read alone through the contents API.
  */
 
 export type FolderFile = { path: string; text: string };
@@ -17,13 +18,27 @@ export class GitHubRateLimitError extends Error {
 }
 
 type Blob = { text?: string | null; isTruncated?: boolean };
-type Entry = { name: string; type: string; object?: (Blob & { entries?: Entry[] }) | null };
+type Entry = { name: string; type: string; oid: string; object?: { entries?: Entry[] } | null };
 
-const BLOB = '... on Blob { text isTruncated }';
-const queryOf = (depth: 1 | 2) => {
-  const inner = depth === 2 ? `entries { name type object { ${BLOB} } }` : '';
-  return `query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { ... on Tree { entries { name type object { ${BLOB} ${inner ? `... on Tree { ${inner} }` : ''} } } } } } }`;
-};
+/** The tree without the text of its files: names and blob ids only (the text of ~2000 files in one query made GitHub answer 502). */
+const listQuery = (depth: 1 | 2) =>
+  `query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { ... on Tree { entries { name type oid ${
+    depth === 2 ? 'object { ... on Tree { entries { name type oid } } }' : ''
+  } } } } } }`;
+
+/** The text of up to BATCH blobs by their id, one alias each. */
+const textQuery = (oids: string[]) =>
+  `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${oids
+    .map((oid, i) => `b${i}: object(oid: "${oid}") { ... on Blob { text isTruncated } }`)
+    .join(' ')} } }`;
+const BATCH = 100;
+const PARALLEL = 3;
+
+/** The text of each blob already read, by its id: a run reads only the files that changed since the one before. */
+const texts = new Map<string, string>();
+const CACHE_MAX = 20000;
+/** For the tests. */
+export const clearFolderCache = () => texts.clear();
 
 const headersOf = (token?: string): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {});
 
@@ -46,37 +61,64 @@ async function readOne(src: FolderSource, path: string, fetchFn: typeof fetch): 
   return res.text();
 }
 
-/**
- * The .yaml files of a folder (depth 1) or of its subfolders (depth 2), [] when the folder does not exist. Throws
- * GitHubRateLimitError when GitHub limits the token, Error for anything else.
- */
-export async function readFolder(src: FolderSource, folder: string, depth: 1 | 2, fetchFn: typeof fetch = fetch): Promise<FolderFile[]> {
-  const [owner, name] = src.repo.split('/');
+async function graphql<T>(src: FolderSource, query: string, variables: Record<string, string>, what: string, fetchFn: typeof fetch): Promise<T> {
   const res = await fetchFn('https://api.github.com/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headersOf(src.token) },
-    body: JSON.stringify({ query: queryOf(depth), variables: { owner, name, expr: `${src.branch}:${folder}` } }),
+    body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) {
     const limit = limited(res);
     if (limit) throw limit;
-    throw new Error(`GitHub answered ${res.status} reading ${src.repo}/${folder}${res.status === 401 || res.status === 403 ? ' (does the token of Backstage have Contents: read on it?)' : ''}`);
+    throw new Error(`GitHub answered ${res.status} reading ${src.repo}/${what}${res.status === 401 || res.status === 403 ? ' (does the token of Backstage have Contents: read on it?)' : ''}`);
   }
-  const body = (await res.json()) as { data?: { repository?: { object?: { entries?: Entry[] } | null } | null }; errors?: Array<{ type?: string; message: string }> };
+  const body = (await res.json()) as { data?: T; errors?: Array<{ type?: string; message: string }> };
   if (body.errors?.length) {
     if (body.errors.some(e => e.type === 'RATE_LIMITED')) throw new GitHubRateLimitError();
     throw new Error(`GitHub: ${body.errors.map(e => e.message).join('; ')}`);
   }
-  const top = body.data?.repository?.object?.entries ?? [];
-  const found: Array<{ path: string; blob?: Blob | null }> = [];
+  return body.data as T;
+}
+
+/**
+ * The .yaml files of a folder (depth 1) or of its subfolders (depth 2), [] when the folder does not exist: one query
+ * for the tree, then the text of the files not read before in batches of BATCH (a run with no change is one query).
+ * Throws GitHubRateLimitError when GitHub limits the token, Error for anything else.
+ */
+export async function readFolder(src: FolderSource, folder: string, depth: 1 | 2, fetchFn: typeof fetch = fetch): Promise<FolderFile[]> {
+  const [owner, name] = src.repo.split('/');
+  type Listing = { repository?: { object?: { entries?: Entry[] } | null } | null };
+  const data = await graphql<Listing>(src, listQuery(depth), { owner, name, expr: `${src.branch}:${folder}` }, folder, fetchFn);
+  const top = data?.repository?.object?.entries ?? [];
+  const found: Array<{ path: string; oid: string }> = [];
   const yaml = (e: Entry) => e.type === 'blob' && /\.ya?ml$/.test(e.name);
-  if (depth === 1) for (const e of top.filter(yaml)) found.push({ path: `${folder}/${e.name}`, blob: e.object });
+  if (depth === 1) for (const e of top.filter(yaml)) found.push({ path: `${folder}/${e.name}`, oid: e.oid });
   else
     for (const dir of top.filter(e => e.type === 'tree'))
-      for (const e of (dir.object?.entries ?? []).filter(yaml)) found.push({ path: `${folder}/${dir.name}/${e.name}`, blob: e.object });
+      for (const e of (dir.object?.entries ?? []).filter(yaml)) found.push({ path: `${folder}/${dir.name}/${e.name}`, oid: e.oid });
+
+  const missing = [...new Set(found.map(f => f.oid).filter(oid => !texts.has(oid)))];
+  if (texts.size + missing.length > CACHE_MAX) texts.clear();
+  const batches: string[][] = [];
+  for (let i = 0; i < missing.length; i += BATCH) batches.push(missing.slice(i, i + BATCH));
+  const tooBig = new Set<string>();
+  const readBatch = async (oids: string[]) => {
+    const got = await graphql<{ repository?: Record<string, Blob | null> | null }>(src, textQuery(oids), { owner, name }, folder, fetchFn);
+    oids.forEach((oid, i) => {
+      const b = got?.repository?.[`b${i}`];
+      if (b && !b.isTruncated && typeof b.text === 'string') texts.set(oid, b.text);
+      else tooBig.add(oid);
+    });
+  };
+  for (let i = 0; i < batches.length; i += PARALLEL) await Promise.all(batches.slice(i, i + PARALLEL).map(readBatch));
+
   const out: FolderFile[] = [];
   for (const f of found) {
-    const text = !f.blob?.isTruncated && typeof f.blob?.text === 'string' ? f.blob.text : await readOne(src, f.path, fetchFn);
+    let text = texts.get(f.oid);
+    if (text === undefined || tooBig.has(f.oid)) {
+      text = await readOne(src, f.path, fetchFn);
+      texts.set(f.oid, text);
+    }
     out.push({ path: f.path, text });
   }
   return out;
