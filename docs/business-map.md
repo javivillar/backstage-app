@@ -227,7 +227,19 @@ support categories of a loaded APQC model).
   A lens whose source fails shows "no data" and the rest of the page works.
 - **Glass**: the Dependencies glass with domains and processes on top; colour by criticality (inherited down),
   continuity (gaps flow up), framework support or health; the size of a service is its blast radius; picking a node
-  lights its whole chain.
+  lights its whole chain. A big model (an APQC PCF has thousands of processes) is cut down before it is drawn:
+  - *Only what is linked to applications* (on by default): the processes with no application, their own or inherited,
+    fold into one dashed node "+N without applications" per domain (no edges; its panel lists them, *Draw them all*
+    turns the switch off); a subdomain with no linked process is not drawn.
+  - *Detail*: domains, subdomains (default) or processes. What is not drawn folds into one "N processes" node per
+    domain that keeps their applications (the chains below stay). A click on a domain opens it (its subdomains, or its
+    processes), on a group opens its domain, on a process with sub-processes shows them.
+  - Level-1 domains (up to three at once), criticality (all, critical and important, critical; the effective one) and
+    *Find*: a process (ID, title, description) or an application (anywhere in the chain of a business service); only
+    the matches are drawn, each on its own, with their chains.
+
+  The status line says how many elements are drawn of the whole and how many processes are folded. The view is in the
+  URL (`/console/business-map/glass?ns=&detail=&domains=&crit=&linked=0&open=&q=`), to share it.
 - **Matrix**: processes × platform and development services; **what if**: mark platform services as failed and see
   which processes stop, how critical they are, how long the restore takes (the RTO of the failed services) and the
   margin of each process (to spare, no margin, breach). *Save as exercise* records the rehearsal by pull request; it
