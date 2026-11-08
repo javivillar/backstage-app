@@ -29,6 +29,9 @@ import { ConsoleTheme } from '../theme/consoleTheme';
 import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
+import { FrameworksPage } from './frameworks/FrameworksPage';
+import { FrameworkLinePage } from './frameworks/FrameworkLinePage';
+import { HeatmapPage } from './frameworks/HeatmapPage';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
@@ -90,6 +93,9 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/monitoring" element={<MonitoringPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
+        <Route path="/frameworks" element={<FrameworksPage />} />
+        <Route path="/frameworks/:line" element={<FrameworkLinePage />} />
+        <Route path="/heatmap" element={<HeatmapPage />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         <Route path="/continuity" element={<ContinuityPage />} />
         <Route path="/continuity/:service" element={<ContinuityServicePage />} />
