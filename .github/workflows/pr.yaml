@@ -25,6 +25,11 @@ jobs:
       - name: Lint
         run: yarn lint:all
 
+      - name: Test the frameworks pages, the application heatmap and the framework layer of the vulnerabilities
+        run: |
+          yarn --cwd plugins/sbom-backend test
+          yarn --cwd plugins/console test src/components/frameworks
+
       - name: Test the assistants and the continuity portal
         run: |
           yarn --cwd plugins/ops-assistant-backend test
