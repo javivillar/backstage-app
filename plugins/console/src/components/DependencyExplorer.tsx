@@ -14,7 +14,7 @@ import { useClusterOverview } from '../overview';
 import { consoleEntityPath } from './classify';
 import { healthOf } from './EntityDependencies';
 import { TONES } from './Flow';
-import { BAND_H, buildGraph, type DepNodeModel, forceLayout, GLASS, type Health, LAYER_INFO, LAYERS, type Layer, layerY, reach, stackLayout, wAt } from './depsModel';
+import { BAND_H, buildGraph, type DepNodeModel, forceLayout, GLASS, glassFor, glassPath, type Health, LAYER_INFO, LAYERS, type Layer, layerY, reach, stackLayout, wAt } from './depsModel';
 
 const HEALTH: Record<Health, { label: string; colour: string }> = {
   ok: { label: 'Healthy', colour: TONES.ok.fg },
@@ -29,6 +29,44 @@ const cut = (s: string, n = 26) => (s.length > n ? `${s.slice(0, n - 1)}…` : s
 
 type View = { k: number; x: number; y: number };
 type Drag = { kind: 'pan'; sx: number; sy: number; v: View } | { kind: 'node'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean };
+
+/** The bands of the layers and the glass around them (Stack); the business glass draws the same with BUSINESS_LAYERS. */
+export const GlassBands = ({ layers, muted }: { layers: Layer[]; muted: string }) => {
+  const g = glassFor(layers);
+  return (
+    <g aria-hidden>
+      {layers
+        .filter(k => k !== 'ext')
+        .map((k, i) => {
+          const y0 = layerY(k, layers) - BAND_H / 2 + 5;
+          const y1 = layerY(k, layers) + BAND_H / 2 - 5;
+          return (
+            <g key={k}>
+              <path d={`M${-wAt(y0, g)},${y0} L${wAt(y0, g)},${y0} L${wAt(y1, g)},${y1} L${-wAt(y1, g)},${y1} Z`} fill={LAYER_INFO[k].colour} opacity={i === 0 ? 0.2 : 0.16} />
+              <text x={-wAt(y0, g) + 30} y={y0 + 30} fill={muted} style={{ font: '700 19px sans-serif', letterSpacing: '.1em', textTransform: 'uppercase' }}>
+                {LAYER_INFO[k].label}
+              </text>
+            </g>
+          );
+        })}
+      <path d={glassPath(g)} fill="none" stroke={GLASS_COLOUR} strokeWidth={14} strokeLinejoin="round" opacity={0.7} />
+      <line x1={g.halfTop - 260} y1={g.top - 30} x2={g.halfTop - 120} y2={g.top - 330} stroke={GLASS_COLOUR} strokeWidth={16} strokeLinecap="round" opacity={0.7} />
+      {[
+        [-700, g.top - 150, 34],
+        [-520, g.top - 270, 22],
+        [480, g.top - 200, 28],
+        [150, g.top - 330, 16],
+      ].map(([x, y, r]) => (
+        <circle key={`${x}`} cx={x} cy={y} r={r} fill="none" stroke={GLASS_COLOUR} strokeWidth={7} opacity={0.6} />
+      ))}
+      {layers.includes('ext') && (
+        <text x={-g.halfTop} y={layerY('ext', layers) - 20} fill={muted} style={{ font: '700 19px sans-serif', letterSpacing: '.1em', textTransform: 'uppercase' }}>
+          {LAYER_INFO.ext.label}
+        </text>
+      )}
+    </g>
+  );
+};
 
 /** Portal › Dependencies: the platform as the Refresquito glass (Stack) or as a free graph, from the catalog and Argo CD. */
 export const DependencyExplorer = () => {
@@ -173,10 +211,6 @@ export const DependencyExplorer = () => {
     const b = byId.get(to);
     return !!a && !!b && visible(a) && visible(b);
   };
-  const glassPath = (() => {
-    const { top, bottom, halfTop, halfBottom } = GLASS;
-    return `M${-halfTop - 40},${top - 30} L${-halfBottom - 30},${bottom + 26} Q${-halfBottom - 30},${bottom + 70} ${-halfBottom + 30},${bottom + 70} L${halfBottom - 30},${bottom + 70} Q${halfBottom + 30},${bottom + 70} ${halfBottom + 30},${bottom + 26} L${halfTop + 40},${top - 30}`;
-  })();
   const out = selected ? graph.links.filter(l => l.source === selected.id) : [];
   const inc = selected ? graph.links.filter(l => l.target === selected.id) : [];
   const btn = () => ({ borderRadius: 999, minWidth: 0, px: 1.25, py: 0.25 }) as const;
@@ -321,35 +355,7 @@ export const DependencyExplorer = () => {
               </filter>
             </defs>
             <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-              {mode === 'stack' && (
-                <g aria-hidden>
-                  {LAYERS.filter(k => k !== 'ext').map((k, i) => {
-                    const y0 = layerY(k) - BAND_H / 2 + 5;
-                    const y1 = layerY(k) + BAND_H / 2 - 5;
-                    return (
-                      <g key={k}>
-                        <path d={`M${-wAt(y0)},${y0} L${wAt(y0)},${y0} L${wAt(y1)},${y1} L${-wAt(y1)},${y1} Z`} fill={LAYER_INFO[k].colour} opacity={i === 0 ? 0.2 : 0.16} />
-                        <text x={-wAt(y0) + 30} y={y0 + 30} fill={muted} style={{ font: '700 19px sans-serif', letterSpacing: '.1em', textTransform: 'uppercase' }}>
-                          {LAYER_INFO[k].label}
-                        </text>
-                      </g>
-                    );
-                  })}
-                  <path d={glassPath} fill="none" stroke={GLASS_COLOUR} strokeWidth={14} strokeLinejoin="round" opacity={0.7} />
-                  <line x1={GLASS.halfTop - 260} y1={GLASS.top - 30} x2={GLASS.halfTop - 120} y2={GLASS.top - 330} stroke={GLASS_COLOUR} strokeWidth={16} strokeLinecap="round" opacity={0.7} />
-                  {[
-                    [-700, GLASS.top - 150, 34],
-                    [-520, GLASS.top - 270, 22],
-                    [480, GLASS.top - 200, 28],
-                    [150, GLASS.top - 330, 16],
-                  ].map(([x, y, r]) => (
-                    <circle key={`${x}`} cx={x} cy={y} r={r} fill="none" stroke={GLASS_COLOUR} strokeWidth={7} opacity={0.6} />
-                  ))}
-                  <text x={-GLASS.halfTop} y={layerY('ext') - 20} fill={muted} style={{ font: '700 19px sans-serif', letterSpacing: '.1em', textTransform: 'uppercase' }}>
-                    {LAYER_INFO.ext.label}
-                  </text>
-                </g>
-              )}
+              {mode === 'stack' && <GlassBands layers={LAYERS} muted={muted} />}
               <g>
                 {graph.links.map(l => {
                   const a = pos.get(l.source);
