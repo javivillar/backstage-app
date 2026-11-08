@@ -3,7 +3,7 @@ import type { Messages } from '../i18n';
 /** Texts of the business map dashboards (Heat map, Glass, Matrix: components/businessMap): key → English and Spanish. */
 export const BUSINESS_MAP_DASHBOARDS: Messages = {
   // shared
-  'bmd.crumb': { en: 'Business map', es: 'Mapa de negocio' },
+  'bmd.crumb': { en: 'Business continuity', es: 'Continuidad del negocio' },
   'bmd.customer': { en: 'Customer', es: 'Cliente' },
   'bmd.allCustomers': { en: 'All customers', es: 'Todos los clientes' },
   'bmd.noMap': { en: 'The business map could not be read', es: 'No se pudo leer el mapa de negocio' },

@@ -10,6 +10,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import DatasetIcon from '@mui/icons-material/Dataset';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import BackupIcon from '@mui/icons-material/Backup';
 import BadgeIcon from '@mui/icons-material/Badge';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import GradeIcon from '@mui/icons-material/Grade';
@@ -74,6 +75,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/resolution-groups': Diversity3Icon,
   '/console/monitoring': MonitorHeartIcon,
   '/console/business-map': SchemaIcon,
+  '/console/data-continuity': BackupIcon,
   '/console/development/python-framework-app': TerminalIcon,
   '/console/development/spring-framework-app': WidgetsIcon,
   '/console/ops-assistant': EngineeringIcon,

@@ -95,7 +95,7 @@ const SHELL: Messages = {
   'page.costs': { en: 'Costs', es: 'Costes' },
   'page.cis-nodes': { en: 'CIS Kubernetes nodes', es: 'CIS de los nodos' },
   'page.images': { en: 'Images', es: 'Imágenes' },
-  'page.continuity': { en: 'Continuity', es: 'Continuidad' },
+  'page.continuity': { en: 'Digital continuity', es: 'Continuidad digital' },
   'page.assistants': { en: 'The team', es: 'El equipo' },
   'page.ops-assistant': { en: 'Operations', es: 'Operaciones' },
   'page.sec-assistant': { en: 'Security', es: 'Seguridad' },
