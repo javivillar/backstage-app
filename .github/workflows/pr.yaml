@@ -29,7 +29,7 @@ jobs:
         run: |
           yarn --cwd plugins/ops-assistant-backend test
           yarn --cwd plugins/continuity-backend test
-          yarn --cwd packages/app test src/components/opsassistant src/components/cost
+          yarn --cwd packages/app test src/components/opsassistant src/components/cost src/components/scaffolder
 
       - name: Test the data view, the Grafana tabs, the monitoring page, the business types and the paths of the console
         run: |
