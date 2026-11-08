@@ -12,6 +12,7 @@ import { useConsoleConfig } from '../config';
 import { type AppOverview, useClusterOverview } from '../overview';
 import { Badge } from './Badge';
 import { classify, consoleEntityPath } from './classify';
+import { catalogueCategory, type Layer, SERVICE_LAYERS } from './depsModel';
 import { TONES } from './Flow';
 import { NeedsAttention } from './NeedsAttention';
 import { useI18n } from '../i18n';
@@ -86,7 +87,9 @@ const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
   const sp = (e.spec ?? {}) as { owner?: string; system?: string; lifecycle?: string };
   const kind = classify(e);
   const business = kind === 'business';
-  let what = tr('cat.service');
+  // a Refresquito service says its band (APP, DAT · INT, …); a development service is a framework, line or library
+  const category = catalogueCategory(e);
+  let what = category && category !== 'business' ? tr(`cat.layer.${category}`) : tr('cat.service');
   if (business) what = tr('cat.business');
   else if (kind === 'development') what = tr('cat.developmentOne');
   const Icon = business ? StorefrontIcon : HubIcon;
@@ -123,7 +126,8 @@ const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
   );
 };
 
-type Filter = 'all' | 'business' | 'service' | 'development' | 'mine' | 'favourites';
+/** what the catalogue shows: everything, the business applications, one band of the Refresquito services, yours, starred */
+type Filter = 'all' | 'business' | Layer | 'mine' | 'favourites';
 
 /** Portal › Catalogue: the software of this cluster, as cards, filtered by what it is or whose it is. */
 export const PortalHome = () => {
@@ -144,33 +148,34 @@ export const PortalHome = () => {
     const o = ownerRef((e.spec as { owner?: string } | undefined)?.owner);
     return !!o && mine.has(o);
   };
-  const keep: Record<Filter, (e: Entity) => boolean> = {
-    all: () => true,
-    business: e => classify(e) === 'business',
-    service: e => classify(e) === 'service',
-    development: e => classify(e) === 'development',
-    mine: owns,
-    favourites: e => starred.has(stringifyEntityRef(e)),
+  const keep = (f: Filter) => (e: Entity): boolean => {
+    if (f === 'all') return true;
+    if (f === 'mine') return owns(e);
+    if (f === 'favourites') return starred.has(stringifyEntityRef(e));
+    return catalogueCategory(e) === f;
   };
-  const counts = Object.fromEntries((Object.keys(keep) as Filter[]).map(f => [f, items.filter(keep[f]).length])) as Record<Filter, number>;
+  const filters: Filter[] = ['all', 'business', ...SERVICE_LAYERS, 'mine', 'favourites'];
+  const counts = new Map(filters.map(f => [f, items.filter(keep(f)).length]));
+  const count = (f: Filter) => counts.get(f) ?? 0;
+  const services = SERVICE_LAYERS.filter(l => l !== 'fwk').reduce((n, l) => n + count(l), 0);
   // problems first (not healthy in Argo CD), then business applications, then by name
   const bad = (e: Entity) => {
     const h = health.get(e.metadata.name)?.health;
     return h && h !== 'Healthy' ? 0 : 1;
   };
-  const shown = items.filter(e => match(e) && keep[filter](e)).sort((a, b) => {
+  const shown = items.filter(e => match(e) && keep(filter)(e)).sort((a, b) => {
     const ca = classify(a) === 'business' ? 0 : 1;
     const cb = classify(b) === 'business' ? 0 : 1;
     return bad(a) - bad(b) || ca - cb || a.metadata.name.localeCompare(b.metadata.name);
   });
   const where = [cfg.cluster.zone, cfg.cluster.program].filter(Boolean).join(' / ');
+  // the bands with nothing in this cluster are left out, so the row stays short
   const chips: Array<[Filter, string, number]> = [
-    ['all', tr('cat.all'), counts.all],
-    ['business', tr('cat.businessApps'), counts.business],
-    ['service', tr('cat.services'), counts.service],
-    ['development', tr('cat.development'), counts.development],
-    ['mine', tr('cat.mine'), counts.mine],
-    ['favourites', tr('cat.favourites'), counts.favourites],
+    ['all', tr('cat.all'), count('all')],
+    ['business', tr('cat.businessApps'), count('business')],
+    ...SERVICE_LAYERS.filter(l => count(l) > 0).map(l => [l, tr(`cat.layer.${l}`), count(l)] as [Filter, string, number]),
+    ['mine', tr('cat.mine'), count('mine')],
+    ['favourites', tr('cat.favourites'), count('favourites')],
   ];
   return (
     <Box>
@@ -182,10 +187,10 @@ export const PortalHome = () => {
       {error && <WarningPanel title={tr('cat.noCatalog')} message={error} />}
       <Kpis
         items={[
-          { label: tr('cat.businessApps'), value: counts.business },
-          { label: tr('cat.services'), value: counts.service },
+          { label: tr('cat.businessApps'), value: count('business') },
+          { label: tr('cat.services'), value: services },
           { label: tr('cat.apis'), value: apis },
-          { label: tr('cat.mine'), value: counts.mine },
+          { label: tr('cat.mine'), value: count('mine') },
         ]}
       />
       <NeedsAttention limit={5} />

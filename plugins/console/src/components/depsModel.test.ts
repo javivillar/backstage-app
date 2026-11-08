@@ -1,5 +1,5 @@
 import type { Entity } from '@backstage/catalog-model';
-import { buildGraph, layerOf, reach, stackLayout } from './depsModel';
+import { buildGraph, catalogueCategory, layerOf, reach, stackLayout } from './depsModel';
 
 const c = (name: string, extra: Partial<Entity['metadata']> = {}, relations: Entity['relations'] = []): Entity => ({
   apiVersion: 'backstage.io/v1alpha1',
@@ -64,3 +64,36 @@ describe('depsModel', () => {
     expect(pos.get('component:default/iam-oneke')!.y).toBeGreaterThan(pos.get('component:default/petstore-oneke')!.y);
   });
 });
+
+describe('the layer of a Refresquito service', () => {
+  const svc = (name: string, extra: Partial<Entity['metadata']> = {}, spec: Entity['spec'] = { type: 'platform-service' }): Entity => ({
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'Component',
+    metadata: { name, labels: { 'refresquito.io/segment': 'platform' }, ...extra },
+    spec,
+  });
+  it('the declared layer wins over the name and the segment', () => {
+    expect(layerOf(svc('observability-oneke', { annotations: { 'refresquito.io/layer': 'ops' } }))).toBe('ops');
+    expect(layerOf(svc('x', { annotations: { 'refresquito.io/layer': 'nonsense' } }))).toBe('ops');
+  });
+  it('by name when it says nothing: the ones that fell into infrastructure', () => {
+    const by = (name: string) => layerOf(svc(name));
+    expect(['cnoe-oneke', 'continuity-oneke', 'headlamp-oneke', 'console-vms-oneke', 'opsassistant-oneke'].map(by)).toEqual(['ops', 'ops', 'ops', 'ops', 'ops']);
+    expect(['events-oneke', 'activepieces-oneke', 'datahub-oneke'].map(by)).toEqual(['dat', 'dat', 'dat']);
+    expect(['misp-oneke', 'intelmq-oneke', 'pki-oneke', 'secassistant-oneke', 'iam-oneke'].map(by)).toEqual(['sec', 'sec', 'sec', 'sec', 'sec']);
+    expect(['functionalassistant-oneke', 'harbor'].map(by)).toEqual(['dev', 'dev']);
+    expect(['nodes-oneke', 'segments-oneke', 'longhorn'].map(by)).toEqual(['inf', 'inf', 'inf']);
+    expect(['operaton-oneke', 'whisker-oneke'].map(by)).toEqual(['app', 'obs']);
+  });
+  it('a database is data', () => {
+    const db: Entity = { apiVersion: 'backstage.io/v1alpha1', kind: 'Resource', metadata: { name: 'petstore-database', annotations: { 'refresquito.io/application': 'petstore' } }, spec: { type: 'database' } };
+    expect(layerOf(db)).toBe('dat');
+  });
+  it('the category of the catalogue: business, a band, or the development services', () => {
+    expect(catalogueCategory(svc('iam-oneke', { annotations: { 'refresquito.io/layer': 'sec' } }))).toBe('sec');
+    expect(catalogueCategory(svc('python-framework-3-3', {}, { type: 'framework-line' }))).toBe('fwk');
+    expect(catalogueCategory({ ...svc('petstore-oneke', { annotations: { 'refresquito.io/application': 'petstore' } }), spec: { type: 'application-instance' } })).toBe('business');
+    expect(catalogueCategory({ apiVersion: 'backstage.io/v1alpha1', kind: 'API', metadata: { name: 'x' }, spec: { type: 'openapi' } })).toBeUndefined();
+  });
+});
+

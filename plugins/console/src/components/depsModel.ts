@@ -24,15 +24,22 @@ export const LAYER_INFO: Record<Layer, { label: string; colour: string }> = {
   ext: { label: 'Outside the zone', colour: '#8592A0' },
 };
 
-/** the services by their name (Refresquito charts): the foundation each one belongs to */
+/** the bands a Refresquito service can declare (refresquito.io/layer), fwk being the development services */
+export const SERVICE_LAYERS: Layer[] = ['app', 'dat', 'ops', 'dev', 'obs', 'sec', 'inf', 'fwk'];
+const DECLARABLE = new Set<string>(SERVICE_LAYERS);
+
+/**
+ * When a service does not declare its layer: by its name (Refresquito charts), in this order — the specific ones
+ * first, infrastructure last (its names are generic: nodes, storage).
+ */
 const BY_NAME: Array<[RegExp, Layer]> = [
-  [/superset|activepieces|bpm|operaton|camunda|alfresco|opensearch|search/, 'app'],
-  [/gravitee|datahub|seaweed|redis|rabbit|kafka|postgres|minio/, 'dat'],
-  [/harbor|registry|sbom|trivy|cosign|buildkit|images/, 'dev'],
-  [/prometheus|loki|grafana|observability|monitoring|alloy|tempo/, 'obs'],
-  [/iam|keycloak|wazuh|step-ca|cert-manager|secrets|shuffle|iris|soc|vault/, 'sec'],
-  [/longhorn|calico|metallb|traefik|oneke|opennebula|storage/, 'inf'],
-  [/cnoe|backstage|argo|opencost|crossplane|assistant|support|topology/, 'ops'],
+  [/superset|bpm|operaton|camunda|alfresco|opensearch/, 'app'],
+  [/gravitee|datahub|seaweed|redis|rabbit|events|kafka|postgres|database|minio|activepieces/, 'dat'],
+  [/harbor|registry|sbom|trivy|cosign|buildkit|images|functionalassistant|architectassistant|developerassistant/, 'dev'],
+  [/prometheus|loki|grafana|observability|monitoring|alloy|tempo|whisker/, 'obs'],
+  [/iam|keycloak|wazuh|step-ca|stepca|pki|cert-manager|secrets|shuffle|iris|misp|intelmq|secassistant|soc|vault/, 'sec'],
+  [/cnoe|backstage|argo|opencost|crossplane|headlamp|console-vms|continuity|opsassistant|assistant|support|topology/, 'ops'],
+  [/longhorn|calico|segments|metallb|traefik|opennebula|nodes|storage/, 'inf'],
 ];
 const BY_SEGMENT: Record<string, Layer> = {
   'business-support': 'app',
@@ -51,6 +58,11 @@ export function layerOf(e: Entity): Layer {
   }
   if (e.kind === 'Domain') return 'dom';
   if (e.kind === 'BusinessProcess') return 'proc';
+  // what the service says (catalog.services.<name>.layer of refresquito-services) wins over any guess
+  const declared = e.metadata.annotations?.['refresquito.io/layer'];
+  if (declared && DECLARABLE.has(declared)) return declared as Layer;
+  // a database is data, whatever application it is of
+  if (e.kind === 'Resource' && String(e.spec?.type ?? '') === 'database') return 'dat';
   const kind = classify(e);
   if (kind === 'business') return 'biz';
   if (kind === 'development') return 'fwk';
@@ -59,6 +71,19 @@ export function layerOf(e: Entity): Layer {
   const seg = segmentOf(e);
   if (seg && BY_SEGMENT[seg]) return BY_SEGMENT[seg];
   return e.kind === 'Resource' ? 'inf' : 'ops';
+}
+
+/**
+ * The category of an entity in the catalogue of the console: a business application, or the band of a Refresquito
+ * service (a development service is fwk); undefined for the rest (APIs, systems, what nothing classifies).
+ */
+export function catalogueCategory(e: Entity): 'business' | Layer | undefined {
+  const kind = classify(e);
+  if (kind === 'business') return 'business';
+  if (kind === 'development') return 'fwk';
+  if (kind !== 'service') return undefined;
+  const layer = layerOf(e);
+  return DECLARABLE.has(layer) ? layer : 'ops';
 }
 
 export type Health = 'ok' | 'warn' | 'bad' | 'off';
