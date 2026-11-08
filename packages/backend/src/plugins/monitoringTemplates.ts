@@ -115,6 +115,8 @@ function panels(id: TemplateId): Panel[] {
         panel('timeseries', '$metric', at(0, 1, 12, 8), [{ expr: `sum({__name__="$metric", ${NS}})`, legend: 'value' }]),
         panel('timeseries', '$metric per second (counters)', at(12, 1, 12, 8), [{ expr: `sum(rate({__name__="$metric", ${NS}}[$__rate_interval]))`, legend: 'per second' }]),
       ];
+    default:
+      return [];
   }
 }
 
@@ -182,7 +184,7 @@ export function importedDashboard(text: string): Record<string, unknown> {
   let json = JSON.stringify(rest);
   const used = new Set<string>();
   for (const input of Array.isArray(inputs) ? (inputs as Array<Record<string, unknown>>) : []) {
-    const plugin = input.pluginId === 'loki' ? 'loki' : input.pluginId === 'prometheus' ? 'prometheus' : undefined;
+    const plugin = ['loki', 'prometheus'].includes(String(input.pluginId)) ? String(input.pluginId) : undefined;
     if (typeof input.name !== 'string' || !plugin) continue;
     json = json.split(`\${${input.name}}`).join(`\${${plugin}}`);
     used.add(plugin);
