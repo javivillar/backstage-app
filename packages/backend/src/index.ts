@@ -32,6 +32,7 @@ import {
 import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backend';
 import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-backend';
 import { businessMapCatalogModule } from './plugins/businessMap/catalogModule';
+import { businessMapPlugin } from './plugins/businessMap/plugin';
 
 const backend = createBackend();
 
@@ -58,6 +59,9 @@ backend.add(import('./plugins/costs'));
 backend.add(import('./plugins/cluster'));
 // Manage through git: the Manage pages of the console change objects of the platform services by pull request
 backend.add(import('./plugins/manage'));
+// Business map: the continuity check of the chain under each business process (/api/business-map/continuity,
+// /api/business-map/processes/:namespace/:name/check); businessMap.criticality of the app-config
+backend.add(businessMapPlugin);
 
 // Scaffolder
 backend.add(import('@backstage/plugin-scaffolder-backend'));

@@ -34,7 +34,7 @@ jobs:
       - name: Test the data view, the Grafana tabs, the monitoring page and the paths of the console
         run: |
           yarn --cwd plugins/datahub-backend test src/application
-          yarn --cwd packages/backend test src/plugins/manageModel
+          yarn --cwd packages/backend test src/plugins/manageModel src/plugins/businessMap
           yarn --cwd plugins/console test src/components/EntityData src/components/EntityGrafana src/components/monitoringModel src/components/manage src/pages src/paths
 
       - name: Build backend
