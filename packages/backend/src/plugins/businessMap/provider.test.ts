@@ -1,3 +1,4 @@
+import { clearFolderCache } from './githubFolder';
 import { BusinessMapEntityProvider, LOCATION_KEY, providerEntities } from './provider';
 
 // made-up files
@@ -43,6 +44,7 @@ describe('providerEntities', () => {
 describe('BusinessMapEntityProvider', () => {
   const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => logger } as never;
   const json = (status: number, body: unknown, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
+  // the tree (names and blob ids), then the text of the .yaml files by id: process-sell is over GitHub's size limit
   const tree = {
     data: {
       repository: {
@@ -51,11 +53,12 @@ describe('BusinessMapEntityProvider', () => {
             {
               name: 'acme',
               type: 'tree',
+              oid: 't1',
               object: {
                 entries: [
-                  { name: 'domain-sales.yaml', type: 'blob', object: { text: DOMAIN, isTruncated: false } },
-                  { name: 'process-sell.yaml', type: 'blob', object: { text: null, isTruncated: true } },
-                  { name: 'README.md', type: 'blob', object: { text: '#', isTruncated: false } },
+                  { name: 'domain-sales.yaml', type: 'blob', oid: 'd1' },
+                  { name: 'process-sell.yaml', type: 'blob', oid: 'p1' },
+                  { name: 'README.md', type: 'blob', oid: 'r1' },
                 ],
               },
             },
@@ -64,6 +67,8 @@ describe('BusinessMapEntityProvider', () => {
       },
     },
   };
+  const texts = { data: { repository: { b0: { text: DOMAIN, isTruncated: false }, b1: { text: null, isTruncated: true } } } };
+  beforeEach(() => clearFolderCache());
   const setup = (answers: Array<() => Response>) => {
     const calls: string[] = [];
     const fetchFn = (async (url: string) => {
@@ -74,17 +79,25 @@ describe('BusinessMapEntityProvider', () => {
     const p = new BusinessMapEntityProvider({ ...SRC, fetchFn }, logger);
     return { p, calls, mutations, connect: () => p.connect({ applyMutation: async (m: unknown) => void mutations.push(m), refresh: async () => {} } as never) };
   };
-  it('one GraphQL query for the tree (and the one file GitHub gives no text of), a full mutation', async () => {
-    const s = setup([() => json(200, tree), () => new Response(PROCESS, { status: 200 })]);
+  it('the tree, the text in a batch (and the one file GitHub gives no text of), a full mutation; then only the tree', async () => {
+    const s = setup([() => json(200, tree), () => json(200, texts), () => new Response(PROCESS, { status: 200 }), () => json(200, tree)]);
     await s.connect();
     expect(await s.p.refresh()).toBe('applied');
-    expect(s.calls).toEqual(['https://api.github.com/graphql', 'https://api.github.com/repos/acme/services/contents/catalog/business-map/acme/process-sell.yaml?ref=main']);
+    expect(s.calls).toEqual([
+      'https://api.github.com/graphql',
+      'https://api.github.com/graphql',
+      'https://api.github.com/repos/acme/services/contents/catalog/business-map/acme/process-sell.yaml?ref=main',
+    ]);
     const m = s.mutations[0] as { type: string; entities: Array<{ entity: { metadata: { name: string } }; locationKey: string }> };
     expect(m.type).toBe('full');
     expect(m.entities.map(x => [x.entity.metadata.name, x.locationKey])).toEqual([
       ['sales', LOCATION_KEY],
       ['sell', LOCATION_KEY],
     ]);
+    // nothing changed: one query for the tree, the same entities
+    expect(await s.p.refresh()).toBe('applied');
+    expect(s.calls).toHaveLength(4);
+    expect((s.mutations[1] as typeof m).entities.map(x => x.entity.metadata.name)).toEqual(['sales', 'sell']);
   });
   it('skips the run (no mutation) when GitHub limits the token or answers an error', async () => {
     const limited = setup([() => json(200, { errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] })]);
