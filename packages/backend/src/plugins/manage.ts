@@ -3,6 +3,11 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import express, { Router } from 'express';
 import { mayAct, ownsEntity } from './clusterActions';
 import { GitHubFiles, PR_PREFIX } from './clusterVms';
+// the kinds of object of IAM, API management, Data management and Business intelligence (each file registers its own)
+import './manageHandlersIam';
+import './manageHandlersGravitee';
+import './manageHandlersDatahub';
+import './manageHandlersSuperset';
 import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner, parse } from './manageModel';
 
 /**

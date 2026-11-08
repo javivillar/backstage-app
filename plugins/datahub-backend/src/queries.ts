@@ -20,7 +20,7 @@ const DATASET = `
   ${COMMON}
 `;
 
-const DATA_PRODUCT = `urn exists properties { name description } ${COMMON}`;
+const DATA_PRODUCT = `urn exists properties { name description customProperties { key value } } ${COMMON}`;
 const DATA_FLOW = `urn exists platform { name } properties { name description } ${COMMON}`;
 
 export const ASSET_FRAGMENTS = `

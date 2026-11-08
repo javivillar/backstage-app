@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ComponentType, Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import { useConsoleConfig } from '../config';
@@ -19,11 +19,15 @@ import { TitleRow } from './ui';
 import { useI18n } from '../i18n';
 import { ManageRowActions, ManageToolbar, type SectionManage } from './manage/ManageSection';
 import { BLOCK_NAME_FIELD } from './manage/manageFields';
+import { DatahubPage } from './manage/DatahubPage';
+import { GraviteePage } from './manage/GraviteePage';
+import { IamPage } from './manage/IamPage';
+import { SupersetPage } from './manage/SupersetPage';
 
-type Row = Record<string, unknown>;
+export type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
 /** a host of the platform from its first label: host('iam') → https://iam.<domain> */
-type HostOf = (sub: string) => string;
+export type HostOf = (sub: string) => string;
 type Section = {
   label: string;
   plugin: string;
@@ -37,7 +41,17 @@ type Section = {
   manage?: SectionManage;
 };
 /** One platform service of Manage: what it does (label), the product, its Argo CD application and its sections. */
-export type ManageService = { id: string; label: string; product: string; app: string; sub: string; sections?: Section[]; home?: (host: HostOf) => string };
+export type ManageService = {
+  id: string;
+  label: string;
+  product: string;
+  app: string;
+  sub: string;
+  sections?: Section[];
+  home?: (host: HostOf) => string;
+  /** a page of its own in the console (create, change and remove by pull request): replaces the sections and the classic manager */
+  page?: ComponentType;
+};
 
 const list = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? ''));
 const owner = (v: unknown) => String(v ?? '').replace(/^user:default\//, '').replace(/^group:default\//, '') || '—';
@@ -70,8 +84,9 @@ export const MANAGE_SERVICES: ManageService[] = [
     label: 'IAM',
     product: 'Keycloak',
     app: 'iam-oneke',
-    sub: 'Users, groups and SSO clients of every application (realm RefresquitoTime).',
-    home: host => kcUrl(host, 'users'),
+    sub: 'Groups, roles and SSO clients of every application and of the platform (realm RefresquitoTime).',
+    home: host => kcUrl(host, 'groups'),
+    page: IamPage,
     sections: [
       {
         label: 'Users',
@@ -109,6 +124,7 @@ export const MANAGE_SERVICES: ManageService[] = [
     app: 'gravitee-oneke',
     sub: 'APIs published to the other applications and to partners, their plans and subscriptions.',
     home: host => `${host('gravitee')}/console/`,
+    page: GraviteePage,
     sections: [
       {
         label: 'APIs',
@@ -141,6 +157,7 @@ export const MANAGE_SERVICES: ManageService[] = [
     app: 'datahub-oneke',
     sub: 'The data assets of the zone, their classification, owners and lineage.',
     home: host => host('datahub'),
+    page: DatahubPage,
     sections: [
       {
         label: 'Datasets',
@@ -196,6 +213,7 @@ export const MANAGE_SERVICES: ManageService[] = [
     app: 'superset-oneke',
     sub: 'Dashboards, charts, datasets and the database connections they read.',
     home: host => host('superset'),
+    page: SupersetPage,
     sections: [
       {
         label: 'Dashboards',
@@ -364,7 +382,7 @@ export const MANAGE_SERVICES: ManageService[] = [
 ];
 
 /** The hosts of the platform: the domain is the one of the classic Backstage (backstage.<domain>), else this page's. */
-function useHostOf(): HostOf {
+export function useHostOf(): HostOf {
   const cfg = useConsoleConfig();
   let base: URL;
   try {
@@ -377,7 +395,7 @@ function useHostOf(): HostOf {
 }
 
 /** GET a manager backend: { items }. */
-function useManagerList(plugin?: string, path?: string) {
+export function useManagerList(plugin?: string, path?: string) {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [state, setState] = useState<{ loading: boolean; items?: Row[]; error?: string }>({ loading: !!plugin });
@@ -612,14 +630,16 @@ export const ManageServicePage = () => {
               Open {s.product}
             </Button>
           )}
-          {classic && sections.length > 0 && !sections.some(x => x.manage) && (
+          {classic && sections.length > 0 && !s.page && !sections.some(x => x.manage) && (
             <Button component={Link} to={`/console/${classic.id}`} variant="outlined" >
               Create and change (full manager)
             </Button>
           )}
         </Box>
       </Box>
-      {sections.length > 0 ? (
+      {s.page ? (
+        <s.page />
+      ) : sections.length > 0 ? (
         <>
           <Box role="tablist" aria-label={`Sections of ${s.label}`} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
             {sections.map((sec, i) => (
