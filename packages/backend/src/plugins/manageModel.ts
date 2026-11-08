@@ -327,9 +327,11 @@ export function lineDiff(a: string, b: string): string {
 
 // ---- the handlers of the blocks s3 and dms (the other services register theirs the same way)
 
+/** The names of buckets and sites, as the charts of the applications check them (3 to 30 characters). */
+export const BLOCK_NAME = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 const checkName = (spec: Record<string, unknown>, what: string) => {
   const n = str(spec.name);
-  return n && NAME.test(n) ? [] : [`${what}: lowercase letters, digits and "-", 1 to 40 characters.`];
+  return n && BLOCK_NAME.test(n) ? [] : [`${what}: lowercase letters, digits and "-", 3 to 30 characters.`];
 };
 
 registerHandler({
