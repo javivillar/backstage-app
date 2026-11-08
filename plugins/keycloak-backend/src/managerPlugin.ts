@@ -43,11 +43,11 @@ interface KcClient {
  * or by the old direct-write actions: Manage cannot change it until it is declared).
  */
 export type Declared = { kind: 'application'; name: string; stage?: string } | { kind: 'platform' } | undefined;
-const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const firstOf = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export function declaredBy(attributes?: Record<string, string | string[]>): Declared {
-  if (first(attributes?.['refresquito.managed']) === 'platform') return { kind: 'platform' };
-  const component = first(attributes?.['refresquito.component']);
-  if (component && component !== 'platform') return { kind: 'application', name: component, stage: first(attributes?.['refresquito.stage']) };
+  if (firstOf(attributes?.['refresquito.managed']) === 'platform') return { kind: 'platform' };
+  const component = firstOf(attributes?.['refresquito.component']);
+  if (component && component !== 'platform') return { kind: 'application', name: component, stage: firstOf(attributes?.['refresquito.stage']) };
   return undefined;
 }
 
