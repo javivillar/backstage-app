@@ -4,8 +4,8 @@ import { buildMatrix, exerciseBody, whatIf } from './matrixModel';
 
 const g = businessGraph(MAP, CATALOG, () => ({ tone: 'ok', label: 'Healthy' }));
 const m = buildMatrix(g, MAP, NOW);
-const P = (n: string) => `businessprocess:occar/${n}`;
-const C = (n: string) => `component:default/${n}`;
+const proc = (n: string) => `businessprocess:occar/${n}`;
+const comp = (n: string) => `component:default/${n}`;
 
 describe('matrixModel', () => {
   it('has the platform services, then the framework lines, as columns', () => {
@@ -16,22 +16,22 @@ describe('matrixModel', () => {
       ['python-framework-3-2', 'development'],
       ['python-framework-3-3', 'development'],
     ]);
-    expect(m.columns[0]).toEqual({ id: C('iam-oneke'), label: 'iam-oneke', family: 'platform', tier: 'gold', rpo: 15, rto: 60 });
+    expect(m.columns[0]).toEqual({ id: comp('iam-oneke'), label: 'iam-oneke', family: 'platform', tier: 'gold', rpo: 15, rto: 60 });
   });
 
   it('checks each process against the services it depends on', () => {
-    const repair = m.groups[0].rows.find(r => r.ref === P('repair'))!;
-    expect(repair.cells.get(C('seaweedfs-oneke'))).toEqual({ family: 'platform', check: 'rpo' });
-    expect(repair.cells.get(C('python-framework-3-2'))).toEqual({ family: 'development', support: 'ending' });
-    expect(repair.cells.has(C('iam-oneke'))).toBe(false);
-    expect(m.footer.get(C('iam-oneke'))).toEqual({ deps: 2, gaps: 0 });
-    expect(m.footer.get(C('seaweedfs-oneke'))).toEqual({ deps: 1, gaps: 1 });
-    expect(m.footer.get(C('python-framework-2-0'))).toEqual({ deps: 1, gaps: 1 });
+    const repair = m.groups[0].rows.find(r => r.ref === proc('repair'))!;
+    expect(repair.cells.get(comp('seaweedfs-oneke'))).toEqual({ family: 'platform', check: 'rpo' });
+    expect(repair.cells.get(comp('python-framework-3-2'))).toEqual({ family: 'development', support: 'ending' });
+    expect(repair.cells.has(comp('iam-oneke'))).toBe(false);
+    expect(m.footer.get(comp('iam-oneke'))).toEqual({ deps: 2, gaps: 0 });
+    expect(m.footer.get(comp('seaweedfs-oneke'))).toEqual({ deps: 1, gaps: 1 });
+    expect(m.footer.get(comp('python-framework-2-0'))).toEqual({ deps: 1, gaps: 1 });
     expect(m.groups.map(x => x.rows.length)).toEqual([2, 2]);
   });
 
   it('rehearses a failure: what stops, the restore time and the margins', () => {
-    const w = whatIf(g, m, [C('iam-oneke')]);
+    const w = whatIf(g, m, [comp('iam-oneke')]);
     expect(w.stopped.map(p => p.title)).toEqual(['Manage spare parts', 'Grant access']);
     expect(w.critical).toBe(1);
     expect(w.restore).toBe(60);
@@ -44,19 +44,19 @@ describe('matrixModel', () => {
   });
 
   it('takes the longest RTO of the failed services and marks the breaches', () => {
-    const w = whatIf(g, m, [C('iam-oneke'), C('seaweedfs-oneke')]);
+    const w = whatIf(g, m, [comp('iam-oneke'), comp('seaweedfs-oneke')]);
     expect(w.restore).toBe(240);
-    expect(w.margins[0]).toEqual({ ref: P('access'), title: 'Grant access', criticality: 'critical', rto: 60, margin: -180, verdict: 'breach' });
+    expect(w.margins[0]).toEqual({ ref: proc('access'), title: 'Grant access', criticality: 'critical', rto: 60, margin: -180, verdict: 'breach' });
     expect(whatIf(g, m, []).stopped).toEqual([]);
-    expect(whatIf(g, m, [C('python-framework-3-2')]).stopped).toEqual([]);
+    expect(whatIf(g, m, [comp('python-framework-3-2')]).stopped).toEqual([]);
   });
 
   it('builds the body of an exercise', () => {
-    const w = whatIf(g, m, [C('seaweedfs-oneke')]);
+    const w = whatIf(g, m, [comp('seaweedfs-oneke')]);
     expect(exerciseBody('occar', w, '  first drill ')).toEqual({
       namespace: 'occar',
-      failed: [C('seaweedfs-oneke')],
-      processes: [{ ref: P('repair'), result: 'no-margin', marginMinutes: 0 }],
+      failed: [comp('seaweedfs-oneke')],
+      processes: [{ ref: proc('repair'), result: 'no-margin', marginMinutes: 0 }],
       note: 'first drill',
     });
     expect(exerciseBody('occar', w, ' ').note).toBeUndefined();
