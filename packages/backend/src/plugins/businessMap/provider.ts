@@ -128,7 +128,7 @@ export class BusinessMapEntityProvider implements EntityProvider {
     const { entities, skipped } = providerEntities(files, this.options);
     for (const s of skipped) this.logger.warn(`business-map provider: left out ${s.path}: ${s.reason}`);
     await this.connection.applyMutation({ type: 'full', entities: entities.map(entity => ({ entity, locationKey: LOCATION_KEY })) });
-    this.logger.info(`business-map provider: ${entities.length} entities from ${files.length} files of ${this.options.repo}@${this.options.branch} (GraphQL: the tree + the changed files in batches of 100)${skipped.length ? `, ${skipped.length} left out` : ''}`);
+    this.logger.info(`business-map provider: ${entities.length} entities from ${files.length} files of ${this.options.repo}@${this.options.branch} (GraphQL: the tree + the changed files in batches of 50)${skipped.length ? `, ${skipped.length} left out` : ''}`);
     return 'applied';
   }
 }

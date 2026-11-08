@@ -31,8 +31,12 @@ const textQuery = (oids: string[]) =>
   `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${oids
     .map((oid, i) => `b${i}: object(oid: "${oid}") { ... on Blob { text isTruncated } }`)
     .join(' ')} } }`;
-const BATCH = 100;
-const PARALLEL = 3;
+const BATCH = 50;
+/** GitHub gives up on a heavy GraphQL query with 502/504: the query is tried again, a batch of texts split in two. */
+const SLOW = [502, 503, 504];
+const RETRIES = 2;
+class GitHubTimeoutError extends Error {}
+const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** The text of each blob already read, by its id: a run reads only the files that changed since the one before. */
 const texts = new Map<string, string>();
@@ -61,12 +65,25 @@ async function readOne(src: FolderSource, path: string, fetchFn: typeof fetch): 
   return res.text();
 }
 
+/** The pause before trying a query again, in ms (0 in the tests). */
+let retryPause = 2000;
+export const setRetryPause = (ms: number) => {
+  retryPause = ms;
+};
+
 async function graphql<T>(src: FolderSource, query: string, variables: Record<string, string>, what: string, fetchFn: typeof fetch): Promise<T> {
-  const res = await fetchFn('https://api.github.com/graphql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headersOf(src.token) },
-    body: JSON.stringify({ query, variables }),
-  });
+  const post = () =>
+    fetchFn('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headersOf(src.token) },
+      body: JSON.stringify({ query, variables }),
+    });
+  let res = await post();
+  for (let i = 0; i < RETRIES && SLOW.includes(res.status); i++) {
+    await pause(retryPause * (i + 1));
+    res = await post();
+  }
+  if (SLOW.includes(res.status)) throw new GitHubTimeoutError(`GitHub answered ${res.status} reading ${src.repo}/${what}`);
   if (!res.ok) {
     const limit = limited(res);
     if (limit) throw limit;
@@ -82,7 +99,7 @@ async function graphql<T>(src: FolderSource, query: string, variables: Record<st
 
 /**
  * The .yaml files of a folder (depth 1) or of its subfolders (depth 2), [] when the folder does not exist: one query
- * for the tree, then the text of the files not read before in batches of BATCH (a run with no change is one query).
+ * for the tree, then the text of the files not read before in batches of BATCH, one after another (a run with no change is one query).
  * Throws GitHubRateLimitError when GitHub limits the token, Error for anything else.
  */
 export async function readFolder(src: FolderSource, folder: string, depth: 1 | 2, fetchFn: typeof fetch = fetch): Promise<FolderFile[]> {
@@ -102,15 +119,24 @@ export async function readFolder(src: FolderSource, folder: string, depth: 1 | 2
   const batches: string[][] = [];
   for (let i = 0; i < missing.length; i += BATCH) batches.push(missing.slice(i, i + BATCH));
   const tooBig = new Set<string>();
-  const readBatch = async (oids: string[]) => {
-    const got = await graphql<{ repository?: Record<string, Blob | null> | null }>(src, textQuery(oids), { owner, name }, folder, fetchFn);
+  const readBatch = async (oids: string[]): Promise<void> => {
+    let got: { repository?: Record<string, Blob | null> | null };
+    try {
+      got = await graphql<typeof got>(src, textQuery(oids), { owner, name }, folder, fetchFn);
+    } catch (e) {
+      if (!(e instanceof GitHubTimeoutError) || oids.length === 1) throw e;
+      const half = Math.ceil(oids.length / 2);
+      await readBatch(oids.slice(0, half));
+      await readBatch(oids.slice(half));
+      return;
+    }
     oids.forEach((oid, i) => {
       const b = got?.repository?.[`b${i}`];
       if (b && !b.isTruncated && typeof b.text === 'string') texts.set(oid, b.text);
       else tooBig.add(oid);
     });
   };
-  for (let i = 0; i < batches.length; i += PARALLEL) await Promise.all(batches.slice(i, i + PARALLEL).map(readBatch));
+  for (const b of batches) await readBatch(b);
 
   const out: FolderFile[] = [];
   for (const f of found) {
