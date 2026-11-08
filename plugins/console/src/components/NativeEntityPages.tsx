@@ -16,6 +16,7 @@ import { MONO } from '../theme/consoleTheme';
 import { openApiOperations } from './EntityBuild';
 import { Method } from './ui-portal';
 import { classify } from './classify';
+import { type Instance, businessServiceView, isBusinessService } from './businessService';
 import { ClassicFrame } from './ClassicFrame';
 import { EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow } from './ui';
 
@@ -61,6 +62,16 @@ function useEntities(refs: string[]): Entity[] | undefined {
 const RefLink = ({ refStr, label }: { refStr: string; label?: string }) => <Link to={consoleRefPath(refStr)}>{label ?? parseEntityRef(refStr).name}</Link>;
 const titleOf = (e: Entity) => e.metadata.title ?? e.metadata.name;
 
+/** What an entity is: business application or service, development service, else its kind. */
+const KindCell = ({ e }: { e: Entity }) => {
+  const { t } = useI18n();
+  const k = classify(e);
+  if (k === 'business' && e.kind === 'System') return <Pill tone="pos" plain>{t('native.bs.pill')}</Pill>;
+  if (k === 'business') return <Pill tone="pos" plain>{t('cat.businessApp')}</Pill>;
+  if (k === 'development') return <Pill plain>{t('ent.development')}</Pill>;
+  return <>{e.kind}</>;
+};
+
 /** A table of catalog entities: name (console link), kind, type and lifecycle. */
 const EntityTable = ({ items, compact }: { items: Entity[]; compact?: boolean }) => {
   const { t } = useI18n();
@@ -87,7 +98,9 @@ const EntityTable = ({ items, compact }: { items: Entity[]; compact?: boolean })
                 </Typography>
               )}
             </TableCell>
-            <TableCell>{classify(e) === 'business' ? <Pill tone="pos" plain>{t('cat.businessApp')}</Pill> : e.kind}</TableCell>
+            <TableCell>
+              <KindCell e={e} />
+            </TableCell>
             {!compact && <TableCell>{String(e.spec?.type ?? '—')}</TableCell>}
             {!compact && <TableCell>{String(e.spec?.lifecycle ?? '—')}</TableCell>}
           </TableRow>
@@ -255,7 +268,10 @@ const GroupPage = ({ entity }: { entity: Entity }) => {
   const byKind = useMemo(() => {
     const m = new Map<string, Entity[]>();
     for (const e of owned ?? []) {
-      const k = classify(e) === 'business' ? t('cat.businessApps') : `${e.kind}${e.spec?.type ? ` · ${String(e.spec.type)}` : ''}`;
+      const what = classify(e);
+      let k = `${e.kind}${e.spec?.type ? ` · ${String(e.spec.type)}` : ''}`;
+      if (what === 'business') k = e.kind === 'System' ? t('native.bs.many') : t('cat.businessApps');
+      else if (what === 'development') k = t('cat.development');
       m.set(k, [...(m.get(k) ?? []), e]);
     }
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
@@ -319,6 +335,52 @@ const GroupPage = ({ entity }: { entity: Entity }) => {
 
 /* ---------------- System ---------------- */
 
+/** The instances of a business service, pro first: stage, instance and the platform blocks it declares. */
+const InstanceTable = ({ instances }: { instances: Instance[] }) => {
+  const { t } = useI18n();
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>{t('native.bs.stage')}</TableCell>
+          <TableCell>{t('native.bs.instance')}</TableCell>
+          <TableCell>{t('native.bs.blocks')}</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {instances.map(i => (
+          <TableRow key={stringifyEntityRef(i.entity)} hover>
+            <TableCell>
+              <Pill tone={i.stage === 'pro' ? 'pos' : 'neu'} plain>
+                {i.stage}
+              </Pill>
+            </TableCell>
+            <TableCell>
+              <Link to={consoleRefPath(stringifyEntityRef(i.entity))} style={{ fontWeight: 500 }}>
+                {titleOf(i.entity)}
+              </Link>
+              <Typography variant="caption" color="text.secondary" component="div">
+                {String(i.entity.spec?.lifecycle ?? '')}
+              </Typography>
+            </TableCell>
+            <TableCell>
+              {i.blocks.length
+                ? i.blocks.map(b => (
+                    <Box key={stringifyEntityRef(b)} component="span" sx={{ mr: 0.75, display: 'inline-block', mb: 0.5 }}>
+                      <Link to={consoleRefPath(stringifyEntityRef(b))}>
+                        <Pill plain>{b.metadata.annotations?.['refresquito.io/platform-block'] ?? titleOf(b)}</Pill>
+                      </Link>
+                    </Box>
+                  ))
+                : '—'}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
 const SystemPage = ({ entity }: { entity: Entity }) => {
   const { t } = useI18n();
   const parts = useEntities(related(entity, 'hasPart'));
@@ -327,20 +389,33 @@ const SystemPage = ({ entity }: { entity: Entity }) => {
   const of = (kind: string) => (parts ?? []).filter(e => e.kind.toLowerCase() === kind);
   const comps = of('component');
   const biz = comps.filter(e => classify(e) === 'business');
+  const view = useMemo(() => businessServiceView(parts ?? []), [parts]);
+  const business = isBusinessService(entity, view);
+  // a business service lists its application and instances apart; the tables below keep the rest of its parts
+  const rest = (kind: string) => (business ? view.others.filter(e => e.kind.toLowerCase() === kind) : of(kind));
   return (
     <>
       <TitleRow
         crumbs={[[t('nav.portal'), '/console'], [t('native.system'), '/console'], [titleOf(entity)]]}
         title={titleOf(entity)}
-        pills={<Pill plain>{t('native.system')}</Pill>}
+        pills={<Pill plain tone={business ? 'pos' : undefined}>{business ? t('native.bs.pill') : t('native.system')}</Pill>}
         sub={entity.metadata.description}
       />
       <Kpis
-        items={[
-          { label: t('native.system.components'), value: parts ? comps.length : '…', note: parts ? t('native.system.business', { n: biz.length }) : undefined },
-          { label: 'APIs', value: parts ? of('api').length : '…' },
-          { label: t('native.system.resources'), value: parts ? of('resource').length : '…' },
-        ]}
+        items={
+          business
+            ? [
+                { label: t('native.bs.application'), value: parts ? view.applications.length : '…' },
+                { label: t('native.bs.instances'), value: parts ? view.instances.length : '…', note: view.instances.map(i => i.stage).join(' · ') || undefined },
+                { label: t('native.bs.blocks'), value: parts ? view.instances.reduce((n, i) => n + i.blocks.length, 0) : '…' },
+                { label: 'APIs', value: parts ? of('api').length : '…' },
+              ]
+            : [
+                { label: t('native.system.components'), value: parts ? comps.length : '…', note: parts ? t('native.system.business', { n: biz.length }) : undefined },
+                { label: 'APIs', value: parts ? of('api').length : '…' },
+                { label: t('native.system.resources'), value: parts ? of('resource').length : '…' },
+              ]
+        }
       />
       <Section title={t('native.about')}>
         <Facts
@@ -351,14 +426,24 @@ const SystemPage = ({ entity }: { entity: Entity }) => {
           ]}
         />
       </Section>
+      {business && parts && (
+        <>
+          <Section title={t('native.bs.application')} meta={t('native.count', { n: view.applications.length })} flush>
+            {view.applications.length ? <EntityTable items={view.applications} /> : <EmptyState title={t('native.bs.noApplication')} />}
+          </Section>
+          <Section title={t('native.bs.instances')} meta={t('native.count', { n: view.instances.length })} flush>
+            {view.instances.length ? <InstanceTable instances={view.instances} /> : <EmptyState title={t('native.bs.noInstances')} />}
+          </Section>
+        </>
+      )}
       {[
         ['component', t('native.system.components')],
         ['api', 'APIs'],
         ['resource', t('native.system.resources')],
       ].map(([kind, title]) =>
-        of(kind).length ? (
-          <Section key={kind} title={title} meta={t('native.count', { n: of(kind).length })} flush>
-            <EntityTable items={of(kind)} />
+        rest(kind).length ? (
+          <Section key={kind} title={title} meta={t('native.count', { n: rest(kind).length })} flush>
+            <EntityTable items={rest(kind)} />
           </Section>
         ) : null,
       )}
