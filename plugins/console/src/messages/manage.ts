@@ -39,4 +39,5 @@ export const MANAGE: Messages = {
     es: 'Ningún fichero de aplicación lo declara: se hizo a mano o antes de Manage. Asígnalo a una aplicación para cambiarlo desde aquí.',
   },
   'mng.viaPr': { en: 'Changes go through a pull request in refresquito-services.', es: 'Los cambios van por pull request en refresquito-services.' },
+  'mng.viaPrApp': { en: 'Changes go through a pull request in the repository of the application.', es: 'Los cambios van por pull request en el repositorio de la aplicación.' },
 };

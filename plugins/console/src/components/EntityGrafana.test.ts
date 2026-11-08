@@ -12,7 +12,7 @@ describe('grafanaUrl', () => {
     const u = grafanaUrl('http://grafana.refresquito.com/', 'support-dev-logs', {
       range: '6h', theme: 'dark', kiosk: true, level: 'error', container: '', search: 'timeout',
     });
-    expect(u.startsWith('http://grafana.refresquito.com/d/support-dev-logs?kiosk&')).toBe(true);
+    expect(u.startsWith('http://grafana.refresquito.com/d/support-dev-logs?kiosk&_dash.hideTimePicker&_dash.hideVariables&_dash.hideLinks&')).toBe(true);
     const q = new URLSearchParams(u.split('?')[1]);
     expect(q.get('from')).toBe('now-6h');
     expect(q.get('to')).toBe('now');

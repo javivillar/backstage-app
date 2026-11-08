@@ -63,6 +63,8 @@ export type Kind = {
   /** read only: nothing of git is joined (no object of /api/manage) */
   readOnly?: boolean;
   noEdit?: boolean;
+  /** its pull requests go to the application's own repository (its files there), not to refresquito-services */
+  inAppRepo?: boolean;
   /** remove is not offered (the product cannot tear it down yet) */
   noDelete?: boolean;
   /** a note above the table */
@@ -155,6 +157,7 @@ export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
           owner={mode.platform ? { kind: 'platform' } : undefined}
           platform={mode.platform}
           idFromOwner={!mode.platform && kind.idFromOwner}
+          inAppRepo={kind.inAppRepo}
           onDone={done}
           onCancel={() => setMode(undefined)}
         />
@@ -173,6 +176,7 @@ export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
         owner={d.owner}
         platform={d.owner.kind === 'platform'}
         current={{ ...(kind.values ? kind.values(d) : d.spec), name: d.id }}
+        inAppRepo={kind.inAppRepo}
         onDone={done}
         onCancel={() => setMode(undefined)}
       />
@@ -265,20 +269,21 @@ export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
 };
 
 /** The tabs of a Manage page, each a kind of object. */
-export const ManageTabs = ({ kinds, label }: { kinds: Kind[]; label: string }) => {
+export const ManageTabs = ({ kinds, label, extra = [] }: { kinds: Kind[]; label: string; extra?: Array<{ label: string; element: ReactNode }> }) => {
   const [tab, setTab] = useState(0);
   const k = kinds[Math.min(tab, kinds.length - 1)];
+  const more = tab >= kinds.length ? extra[tab - kinds.length] : undefined;
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
       <Box role="tablist" aria-label={label} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
-        {kinds.map((x, i) => (
-          <Button key={x.label} role="tab" aria-selected={tab === i} onClick={() => setTab(i)}
+        {[...kinds.map(x => x.label), ...extra.map(x => x.label)].map((l, i) => (
+          <Button key={l} role="tab" aria-selected={tab === i} onClick={() => setTab(i)}
             sx={{ borderRadius: 0, textTransform: 'none', color: tab === i ? 'text.primary' : 'text.secondary', borderBottom: 2, borderColor: tab === i ? rq.blue : 'transparent', mb: '-1px' }}>
-            {x.label}
+            {l}
           </Button>
         ))}
       </Box>
-      <ManageObjectsView key={`${k.service}/${k.object}/${k.label}`} kind={k} />
+      {more ? more.element : <ManageObjectsView key={`${k.service}/${k.object}/${k.label}`} kind={k} />}
     </Box>
   );
 };

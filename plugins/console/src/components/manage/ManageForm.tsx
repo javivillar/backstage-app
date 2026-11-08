@@ -27,6 +27,7 @@ export const ManageForm = ({
   owner: fixedOwner,
   platform,
   idFromOwner,
+  inAppRepo,
   onDone,
   onCancel,
 }: {
@@ -43,6 +44,8 @@ export const ManageForm = ({
   platform?: boolean;
   /** one object per application (its gateway API, its data product…): on create, its name is the application's */
   idFromOwner?: boolean;
+  /** the pull request goes to the application's own repository (not refresquito-services) */
+  inAppRepo?: boolean;
   onDone?: (a: ChangeAnswer) => void;
   onCancel?: () => void;
 }) => {
@@ -161,7 +164,7 @@ export const ManageForm = ({
             {t('mng.cancel')}
           </Button>
         )}
-        <Typography variant="caption" color="text.secondary">{t('mng.viaPr')}</Typography>
+        <Typography variant="caption" color="text.secondary">{t(inAppRepo ? 'mng.viaPrApp' : 'mng.viaPr')}</Typography>
       </Box>
     </Box>
   );
