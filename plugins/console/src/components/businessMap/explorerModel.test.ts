@@ -110,10 +110,10 @@ describe('filters, open rows and pages', () => {
   });
   it('the CSV of the rows, with the BOM for Excel and quoted cells', () => {
     const csv = explorerCsv(filterRows(rows, f({ text: 'fleet' })));
-    const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
+    const lines = csv.replace(/^\uFEFF/, '').trim().split('\r\n');
     expect(lines[0]).toBe('Level,Type,ID,Title,Description,Criticality,Criticality inherited,RPO,RTO,Check,Applications,Owner,Match');
     expect(lines[3]).toBe('3,process,6.3.1,repair,Repair the fleet,critical,,15m,4h,gap,shop,a-team,yes');
-    expect(csv.startsWith('﻿')).toBe(true);
+    expect(csv.startsWith('\uFEFF')).toBe(true);
     expect(explorerCsv([{ ...rows[0], title: 'A, "B"', match: true }]).split('\r\n')[1]).toContain('"A, ""B"""');
   });
 });

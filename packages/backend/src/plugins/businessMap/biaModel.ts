@@ -85,7 +85,8 @@ export function biaWorkbook(graph: ContinuityGraph, defaults: CriticalityDefault
     const domain = domains.get(p.domain);
     const root = rootOf(p.domain);
     const w = spec.workaround as { manual?: unknown; maxDuration?: unknown } | undefined;
-    const workaround = typeof w?.manual === 'boolean' ? (w.manual ? 'yes' : 'no') : '';
+    let workaround = '';
+    if (typeof w?.manual === 'boolean') workaround = w.manual ? 'yes' : 'no';
     const apps = graph.children(p.ref).filter(c => !c.startsWith('businessprocess:') && !c.startsWith('domain:'));
     const cells: Record<Column, string> = {
       ID: e ? processId(e) : p.name,
@@ -305,9 +306,9 @@ function normalised(field: string, v: unknown): unknown {
   return v;
 }
 
-const workaroundText = (v: unknown) => {
+function workaroundText(v: unknown): string {
   if (!v || typeof v !== 'object') return '(none)';
   const w = v as { manual?: unknown; maxDuration?: unknown };
   if (typeof w.manual !== 'boolean') return '(none)';
   return `${w.manual ? 'yes' : 'no'}${typeof w.maxDuration === 'string' ? `, up to ${w.maxDuration}` : ''}`;
-};
+}

@@ -193,5 +193,5 @@ export function explorerCsv(rows: FilteredRow[]): string {
       .map(csvCell)
       .join(','),
   );
-  return `﻿${[head.join(','), ...lines].join('\r\n')}\r\n`;
+  return `\uFEFF${[head.join(','), ...lines].join('\r\n')}\r\n`;
 }
