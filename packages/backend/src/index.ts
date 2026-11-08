@@ -33,6 +33,7 @@ import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backe
 import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-backend';
 import { businessMapCatalogModule } from './plugins/businessMap/catalogModule';
 import { businessMapPlugin } from './plugins/businessMap/plugin';
+import { businessMapScaffolderModule } from './plugins/businessMap/scaffolderModule';
 
 const backend = createBackend();
 
@@ -104,6 +105,10 @@ backend.add(alfrescoScaffolderModule);
 // Activepieces self-service scaffolder actions (project create/rename/delete
 // + member/role management) — see plugins/activepieces-backend.
 backend.add(activepiecesScaffolderModule);
+
+// Business map: import a business model (APQC PCF, the Refresquito template, an own layout) and adopt a reference
+// model, written as YAML into the workspace for a pull request (plugins/businessMap/scaffolderModule.ts)
+backend.add(businessMapScaffolderModule);
 
 // Roadie scaffolder modules
 backend.add(import('@roadiehq/scaffolder-backend-module-utils'));
