@@ -148,6 +148,15 @@ export function appsOf(entities: Entity[], lines: Line[]): AppRow[] {
   return [...rows.values()].map(r => ({ ...r, blocks: r.blocks.sort() })).sort((a, b) => a.application.localeCompare(b.application));
 }
 
+/** the newer lines of its framework than the one it runs in a stage (at least 1 for a line the catalog no longer keeps) */
+export function behindOf(app: AppRow, stage: Stage, lines: Line[]): number {
+  const v = app.lines[stage];
+  if (!v) return 0;
+  const own = lines.filter(l => l.framework === app.framework);
+  const newer = own.filter(l => compareLines(l.line, v) > 0).length;
+  return own.some(l => l.line === v) ? newer : Math.max(1, newer);
+}
+
 export function statusOf(app: AppRow, stage: Stage, lines: Line[], today: string): Status {
   const v = app.lines[stage];
   if (!v) return { kind: 'absent' };
@@ -155,9 +164,7 @@ export function statusOf(app: AppRow, stage: Stage, lines: Line[], today: string
   const current = own.find(l => l.line === v);
   const daysLeft = current?.supportedUntil ? Math.max(0, daysBetween(today, current.supportedUntil)) : undefined;
   if (daysLeft !== undefined && daysLeft < ENDING_DAYS) return { kind: 'ending', daysLeft };
-  const newer = own.filter(l => compareLines(l.line, v) > 0).length;
-  // a line the catalog no longer keeps is out of support: behind even with no newer line known
-  const behind = current ? newer : Math.max(1, newer);
+  const behind = behindOf(app, stage, lines);
   const s: Status = behind ? { kind: 'behind', behind } : { kind: 'latest' };
   if (daysLeft !== undefined) s.daysLeft = daysLeft;
   return s;
