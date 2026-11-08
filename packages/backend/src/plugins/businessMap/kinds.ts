@@ -4,9 +4,11 @@ import { CatalogProcessor, CatalogProcessorEmit, LocationSpec, processingResult 
 /**
  * The kinds of the business map (apiVersion refresquito.io/v1alpha1): BusinessProcess and ReferenceModel. Their
  * schemas, and the processor that validates them and emits their relations:
- *   BusinessProcess  ownedBy/ownerOf its owner, partOf/hasPart its Domain, dependsOn/dependencyOf each entry
+ *   BusinessProcess  ownedBy/ownerOf its owner, partOf/hasPart its Domain, dependsOn/dependencyOf each entry, and,
+ *                    for a sub-process, partOf/hasPart its parent process (spec.parentProcess)
  * Owner and dependsOn without a namespace are in `default` (the Groups and the business services live there, while a
- * process lives in a customer namespace); the domain without a namespace is in the process's own namespace.
+ * process lives in a customer namespace); the domain and the parent process without a namespace are in the
+ * process's own namespace. A sub-process may leave out its criticality: it inherits the one of its parent.
  */
 
 export const API_VERSION = 'refresquito.io/v1alpha1';
@@ -26,14 +28,30 @@ export const businessProcessSchema = {
         kind: { enum: ['BusinessProcess'] },
         spec: {
           type: 'object',
-          required: ['owner', 'domain', 'criticality'],
+          required: ['owner', 'domain'],
+          // a top process says its criticality; a sub-process may inherit it from its parent
+          if: { not: { required: ['parentProcess'] } },
+          then: { required: ['criticality'] },
           properties: {
             owner: { type: 'string', minLength: 1 },
             domain: { type: 'string', minLength: 1 },
+            parentProcess: { type: 'string', minLength: 1 },
             criticality: { enum: ['critical', 'important', 'standard'] },
             rpo: { type: 'string', pattern: DURATION },
             rto: { type: 'string', pattern: DURATION },
             retention: { type: 'string', pattern: DURATION },
+            // the business impact analysis: maximum tolerable period of disruption, and the manual way to go on
+            mtpd: { type: 'string', pattern: DURATION },
+            workaround: {
+              type: 'object',
+              required: ['manual'],
+              additionalProperties: false,
+              properties: {
+                manual: { type: 'boolean' },
+                maxDuration: { type: 'string', pattern: DURATION },
+                note: { type: 'string' },
+              },
+            },
             classification: { type: 'string', minLength: 1 },
             dependsOn: { type: 'array', items: { type: 'string', minLength: 1 } },
           },
@@ -85,7 +103,7 @@ export type BusinessMapRelation = { source: Ref; type: string; target: Ref };
 export function relationsOf(entity: Entity): BusinessMapRelation[] {
   if (entity.apiVersion !== API_VERSION || entity.kind !== 'BusinessProcess') return [];
   const self = getCompoundEntityRef(entity);
-  const spec = (entity.spec ?? {}) as { owner?: string; domain?: string; dependsOn?: string[] };
+  const spec = (entity.spec ?? {}) as { owner?: string; domain?: string; parentProcess?: string; dependsOn?: string[] };
   const out: BusinessMapRelation[] = [];
   const both = (target: string | undefined, context: { defaultKind: string; defaultNamespace: string }, outgoing: string, incoming: string) => {
     if (!target) return;
@@ -95,6 +113,7 @@ export function relationsOf(entity: Entity): BusinessMapRelation[] {
   };
   both(spec.owner, { defaultKind: 'Group', defaultNamespace: 'default' }, 'ownedBy', 'ownerOf');
   both(spec.domain, { defaultKind: 'Domain', defaultNamespace: self.namespace }, 'partOf', 'hasPart');
+  both(spec.parentProcess, { defaultKind: 'BusinessProcess', defaultNamespace: self.namespace }, 'partOf', 'hasPart');
   for (const d of spec.dependsOn ?? []) both(d, { defaultKind: 'System', defaultNamespace: 'default' }, 'dependsOn', 'dependencyOf');
   return out;
 }

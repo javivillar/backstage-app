@@ -5,8 +5,9 @@ import type { SheetRow } from './sheets';
 
 /**
  * The importer of business models (docs/business-map.md): the rows of a spreadsheet (APQC PCF, the Refresquito
- * template or a customer's own layout) become Domains (business-area), subdomains and BusinessProcesses of a customer
- * namespace, one YAML file each in catalog/business-map/<namespace>/ of refresquito-services. Pure: the scaffolder
+ * template or a customer's own layout) become Domains (business-area), subdomains, BusinessProcesses and their
+ * sub-processes (a BusinessProcess with spec.parentProcess: APQC levels 4 and 5, or any row under a process of an own
+ * model) of a customer namespace, one YAML file each in catalog/business-map/<namespace>/ of refresquito-services. Pure: the scaffolder
  * actions read the file, the catalog and the current files, and write what this answers.
  *
  * Reimport: entities are matched by their original ID (apqc.org/pcf-id or refresquito.io/model-id). A field changed
@@ -19,15 +20,31 @@ import type { SheetRow } from './sheets';
  * never commit APQC content anywhere (not even as a test fixture): the fixtures of the tests are made up.
  */
 
-export type Source = 'apqc' | 'template' | 'own';
-export const FIELDS = ['id', 'title', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
+/** Where a model comes from; bia is the sheet of a business impact analysis, which only updates (biaModel.ts). */
+export type Source = 'apqc' | 'template' | 'own' | 'bia';
+export const FIELDS = ['id', 'title', 'description', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
 type Field = (typeof FIELDS)[number] | 'elementId';
 /** Which column holds each field: a header name, or a column letter (A, B, AA). */
 export type Mapping = Partial<Record<Field, string>>;
 export type ValueMapping = { criticality?: Record<string, string> };
 export type Issue = { row?: number; message: string };
-export type Change = { kind: 'new' | 'changed' | 'review'; id: string; title: string; what: string };
-export type Counts = { domains: number; subdomains: number; new: number; changed: number; gone: number; unchanged: number };
+/** What an entity of the model is: a level-1 domain, a subdomain, a process, or a sub-process (under a process). */
+export type EntityType = 'domain' | 'subdomain' | 'process' | 'subprocess';
+/**
+ * One line of the preview: type and level (1 = a level-1 domain), root (the ID of its level-1 domain, to filter by)
+ * and description are there when known (an entity gone from the file has no level nor root).
+ */
+export type Change = { kind: 'new' | 'changed' | 'review'; id: string; title: string; what: string; type?: EntityType; level?: number; root?: string; description?: string };
+export type Counts = {
+  domains: number;
+  subdomains: number;
+  processes: number;
+  subprocesses: number;
+  new: number;
+  changed: number;
+  gone: number;
+  unchanged: number;
+};
 
 export const API_VERSION = 'refresquito.io/v1alpha1';
 export const UNASSIGNED = 'group:default/unassigned';
@@ -47,13 +64,15 @@ export const A = {
 
 /** The header names each source finds by itself (a mapping given in the form wins). */
 export const DEFAULT_COLUMNS: Record<Source, Mapping> = {
-  // the layout of the PCF spreadsheets: hierarchy number, element number, name
-  apqc: { id: 'Hierarchy ID', elementId: 'PCF ID', title: 'Name' },
+  // the layout of the PCF spreadsheets: hierarchy number, element number, name, and the description when the sheet
+  // has one (its header differs between editions: any of these, "|" separates the candidates)
+  apqc: { id: 'Hierarchy ID', elementId: 'PCF ID', title: 'Name', description: 'Description|Element Description|Definition' },
   template: {
-    id: 'ID', parent: 'Parent', title: 'Title', owner: 'Owner', criticality: 'Criticality',
+    id: 'ID', parent: 'Parent', title: 'Title', description: 'Description', owner: 'Owner', criticality: 'Criticality',
     rpo: 'RPO', rto: 'RTO', retention: 'Retention', applications: 'Applications',
   },
   own: {},
+  bia: { id: 'ID' },
 };
 
 /** An entity to be, before it has a name: what the file (or a copied model) says of it. */
@@ -61,7 +80,14 @@ export type Draft = {
   key: string;
   kind: 'Domain' | 'BusinessProcess';
   title: string;
+  description?: string;
+  /** Of a Domain: its parent Domain; of a process: its Domain; of a sub-process: its parent process. */
   parentKey?: string;
+  /** A sub-process: its parent is a process (parentKey), its domain that of its top process. */
+  sub?: boolean;
+  /** The level in the model (1 = a level-1 domain) and the ID of its level-1 domain, for the preview. */
+  level?: number;
+  root?: string;
   row?: number;
   annotations: Record<string, string>;
   owner: string;
@@ -70,6 +96,12 @@ export type Draft = {
   rto?: string;
   retention?: string;
   dependsOn?: string[];
+  /**
+   * The tracked fields the file says something of (a non-empty cell; the structure always). On a reimport only these
+   * are compared: an empty cell or a column the file has not never overrides what the portal or a BIA wrote.
+   * Undefined (an adopted model): every field.
+   */
+  given?: string[];
   /** Fields copied as they are (from an adopted model: classification, process key). */
   extra?: { annotations?: Record<string, string>; spec?: Record<string, unknown> };
 };
@@ -123,6 +155,13 @@ export function keyOf(annotations: Record<string, string> | undefined): string |
 /** Where a field is in the sheet: header name first (case and spaces ignored), then a column letter. */
 function columnIndex(header: string[], spec: string | undefined): number | undefined {
   if (!spec) return undefined;
+  if (spec.includes('|')) {
+    for (const one of spec.split('|')) {
+      const i = columnIndex(header, one);
+      if (i !== undefined && !/^[A-Z]{1,3}$/.test(one.trim())) return i;
+    }
+    return undefined;
+  }
   const want = spec.trim().toLowerCase().replace(/\s+/g, ' ');
   const i = header.findIndex(h => h.trim().toLowerCase().replace(/\s+/g, ' ') === want);
   if (i >= 0) return i;
@@ -265,21 +304,24 @@ export function parseRows(rows: SheetRow[], o: ParseOptions): Parsed {
   valid = valid.filter(i => depth.get(i.id)! >= 0);
   const hasChildren = new Set(valid.map(i => i.parent).filter((p): p is string => !!p));
 
-  // what each row becomes
-  const kindOf = new Map<string, 'domain' | 'subdomain' | 'process' | 'ignored'>();
-  for (const i of valid) {
+  // what each row becomes, parents first: APQC 1 domain, 2 subdomain, 3 process, 4 and below sub-processes; an own
+  // model: a row without parent is a domain, under a domain a subdomain if it has children (else a process), under a
+  // subdomain a process, and anything under a process a sub-process
+  const kindOf = new Map<string, EntityType>();
+  const rootOf = new Map<string, string>();
+  for (const i of [...valid].sort((x, y) => depth.get(x.id)! - depth.get(y.id)!)) {
     const d = depth.get(i.id)!;
-    let k: 'domain' | 'subdomain' | 'process' | 'ignored' = 'ignored';
+    const up = i.parent ? kindOf.get(i.parent) : undefined;
+    let k: EntityType;
     if (d === 0) k = 'domain';
-    else if (o.source === 'apqc') {
-      if (d === 1) k = 'subdomain';
-      else if (d === 2) k = 'process';
-    } else if (d === 1) k = hasChildren.has(i.id) ? 'subdomain' : 'process';
-    else if (d === 2 && kindOf.get(i.parent!) === 'subdomain') k = 'process';
+    else if (up === 'process' || up === 'subprocess') k = 'subprocess';
+    else if (o.source === 'apqc') k = d === 1 ? 'subdomain' : 'process';
+    else if (up === 'domain') k = hasChildren.has(i.id) ? 'subdomain' : 'process';
+    else k = 'process';
     kindOf.set(i.id, k);
+    // the ID of the level-1 domain as the file writes it (APQC: 1.0)
+    rootOf.set(i.id, i.parent ? rootOf.get(i.parent) ?? i.parent : i.cells.id || i.id);
   }
-  const ignored = valid.filter(i => kindOf.get(i.id) === 'ignored').length;
-  if (ignored) warnings.push({ message: `${ignored} rows below the level of a process are left out (the detail of a process is its BPMN).` });
 
   const family = keyFamily(o.source);
   const versionKey = o.source === 'apqc' ? A.pcfVersion : A.modelVersion;
@@ -300,14 +342,15 @@ export function parseRows(rows: SheetRow[], o: ParseOptions): Parsed {
     if (m === undefined) warnings.push({ row: i.row, message: `${i.id}: ${f} "${raw}" is not a duration (15m, 4h, 30y): left out.` });
     return m === undefined ? undefined : formatDuration(m);
   };
-  const criticalityOf = (i: Item): Criticality => {
+  // a sub-process without its own criticality inherits the one of its parent (none written)
+  const criticalityOf = (i: Item, sub: boolean): Criticality | undefined => {
     const raw = i.cells.criticality ?? '';
-    if (!raw) return 'standard';
+    if (!raw) return sub ? undefined : 'standard';
     const map = o.valueMapping?.criticality ?? {};
     const found = map[raw] ?? Object.entries(map).find(([k]) => k.trim().toLowerCase() === raw.toLowerCase())?.[1] ?? raw.toLowerCase();
     if (CRITICALITIES.includes(found as Criticality)) return found as Criticality;
-    warnings.push({ row: i.row, message: `${i.id}: the criticality "${raw}" is none of ${CRITICALITIES.join(', ')}: imported as standard.` });
-    return 'standard';
+    warnings.push({ row: i.row, message: `${i.id}: the criticality "${raw}" is none of ${CRITICALITIES.join(', ')}: ${sub ? 'it inherits that of its parent' : 'imported as standard'}.` });
+    return sub ? undefined : 'standard';
   };
   const applicationsOf = (i: Item) => {
     const out: string[] = [];
@@ -323,7 +366,6 @@ export function parseRows(rows: SheetRow[], o: ParseOptions): Parsed {
   const drafts: Draft[] = [];
   for (const i of valid) {
     const k = kindOf.get(i.id)!;
-    if (k === 'ignored') continue;
     const annotations: Record<string, string> = {};
     if (family === 'apqc') {
       annotations[A.pcfId] = i.cells.id ?? i.id;
@@ -331,9 +373,16 @@ export function parseRows(rows: SheetRow[], o: ParseOptions): Parsed {
     } else annotations[A.modelId] = i.id;
     if (o.version) annotations[versionKey] = o.version;
     const parentKey = i.parent ? keyOf(family === 'apqc' ? { [A.pcfElementId]: byId.get(i.parent)!.elementId ?? '', [A.pcfId]: i.parent } : { [A.modelId]: i.parent }) : undefined;
-    const d: Draft = { key: keyOf(annotations)!, kind: k === 'process' ? 'BusinessProcess' : 'Domain', title: i.title, parentKey, row: i.row, annotations, owner: ownerOf(i) };
-    if (k === 'process') {
-      d.criticality = criticalityOf(i);
+    const isProcess = k === 'process' || k === 'subprocess';
+    const d: Draft = { key: keyOf(annotations)!, kind: isProcess ? 'BusinessProcess' : 'Domain', title: i.title, parentKey, row: i.row, annotations, owner: ownerOf(i) };
+    if (i.cells.description) d.description = i.cells.description;
+    const fromFile = { owner: 'owner', criticality: 'criticality', rpo: 'rpo', rto: 'rto', retention: 'retention', applications: 'dependsOn', description: 'description' } as const;
+    d.given = ['title', 'subdomainOf', 'domain', 'parentProcess', ...Object.entries(fromFile).filter(([c]) => i.cells[c as Field]).map(([, f]) => f)];
+    d.level = depth.get(i.id)! + 1;
+    d.root = rootOf.get(i.id);
+    if (k === 'subprocess') d.sub = true;
+    if (isProcess) {
+      d.criticality = criticalityOf(i, k === 'subprocess');
       d.rpo = durationOf(i, 'rpo');
       d.rto = durationOf(i, 'rto');
       d.retention = durationOf(i, 'retention');
@@ -354,7 +403,8 @@ export type ModelEntity = {
 
 /**
  * Drafts copied from the entities of a model already in the catalog (adopt a reference model, or keep the support
- * categories of one): the level-1 Domains whose ID or name is in `roots`, their subdomains and processes.
+ * categories of one): the level-1 Domains whose ID or name is in `roots`, their subdomains, processes and
+ * sub-processes (each under its parent process).
  */
 export function copyDrafts(entities: ModelEntity[], roots: string[], o: { owner?: string; from: string }): Draft[] {
   const domains = entities.filter(e => e.kind === 'Domain');
@@ -369,13 +419,13 @@ export function copyDrafts(entities: ModelEntity[], roots: string[], o: { owner?
   const keyFor = (e: ModelEntity) => keyOf(e.metadata.annotations) ?? `name:${e.metadata.name}`;
   const owner = o.owner ? normRef(o.owner, 'group') : undefined;
   const out: Draft[] = [];
-  const take = (e: ModelEntity, kind: Draft['kind'], parentName?: string) => {
+  const take = (e: ModelEntity, kind: Draft['kind'], parentName?: string, parentProcess?: ModelEntity) => {
     const a = e.metadata.annotations ?? {};
     const annotations: Record<string, string> = {};
     for (const k of [A.pcfId, A.pcfElementId, A.pcfVersion, A.modelId, A.modelVersion]) if (a[k]) annotations[k] = a[k];
     annotations[A.adoptedFrom] = o.from;
     const extraAnnotations = Object.fromEntries(Object.entries(a).filter(([k]) => k === 'refresquito.io/process-key'));
-    const parent = parentName ? byName.get(parentName) : undefined;
+    const parent = parentProcess ?? (parentName ? byName.get(parentName) : undefined);
     const spec = e.spec ?? {};
     const d: Draft = {
       key: keyFor(e),
@@ -386,8 +436,12 @@ export function copyDrafts(entities: ModelEntity[], roots: string[], o: { owner?
       owner: owner ?? (typeof spec.owner === 'string' ? normRef(spec.owner, 'group') : UNASSIGNED),
       extra: { annotations: extraAnnotations, spec: typeof spec.classification === 'string' ? { classification: spec.classification } : {} },
     };
+    if (e.metadata.description) d.description = String(e.metadata.description);
+    if (parentProcess) d.sub = true;
     if (kind === 'BusinessProcess') {
-      d.criticality = CRITICALITIES.includes(spec.criticality as Criticality) ? (spec.criticality as Criticality) : 'standard';
+      // a sub-process without its own criticality keeps inheriting it
+      if (CRITICALITIES.includes(spec.criticality as Criticality)) d.criticality = spec.criticality as Criticality;
+      else if (!parentProcess) d.criticality = 'standard';
       for (const f of ['rpo', 'rto', 'retention'] as const) if (typeof spec[f] === 'string') d[f] = spec[f] as string;
       d.dependsOn = Array.isArray(spec.dependsOn) ? (spec.dependsOn as string[]).map(r => normRef(r, 'system')) : [];
     }
@@ -395,9 +449,27 @@ export function copyDrafts(entities: ModelEntity[], roots: string[], o: { owner?
   };
   for (const e of level1.filter(x => picked.has(x.metadata.name))) take(e, 'Domain');
   for (const e of subs) take(e, 'Domain', nameOf(e.spec?.subdomainOf, e.metadata.namespace));
-  for (const e of entities.filter(x => x.kind === 'BusinessProcess')) {
-    const parent = nameOf(e.spec?.domain, e.metadata.namespace);
-    if (parent && picked.has(parent)) take(e, 'BusinessProcess', parent);
+  const processes = entities.filter(x => x.kind === 'BusinessProcess');
+  const procByName = new Map(processes.map(e => [e.metadata.name, e]));
+  const parentProcessOf = (e: ModelEntity) =>
+    typeof e.spec?.parentProcess === 'string' ? procByName.get(normRef(e.spec.parentProcess, 'businessprocess', e.metadata.namespace ?? 'default').split('/')[1]) : undefined;
+  // the top process of each, to know whether it is in the picked categories
+  const topOf = (e: ModelEntity) => {
+    let at = e;
+    for (let n = 0; n < 20; n++) {
+      const up = parentProcessOf(at);
+      if (!up) break;
+      at = up;
+    }
+    return at;
+  };
+  for (const e of processes) {
+    const top = topOf(e);
+    const parent = nameOf(top.spec?.domain, top.metadata.namespace);
+    if (!parent || !picked.has(parent)) continue;
+    const up = parentProcessOf(e);
+    if (up) take(e, 'BusinessProcess', undefined, up);
+    else take(e, 'BusinessProcess', parent);
   }
   return out;
 }
@@ -427,20 +499,23 @@ export type PlanOptions = {
   model?: ModelEntity;
 };
 
-type Tracked = 'title' | 'owner' | 'subdomainOf' | 'domain' | 'criticality' | 'rpo' | 'rto' | 'retention' | 'dependsOn';
-const DOMAIN_FIELDS: Tracked[] = ['title', 'owner', 'subdomainOf'];
-const PROCESS_FIELDS: Tracked[] = ['title', 'owner', 'domain', 'criticality', 'rpo', 'rto', 'retention', 'dependsOn'];
+type Tracked = 'title' | 'description' | 'owner' | 'subdomainOf' | 'domain' | 'parentProcess' | 'criticality' | 'rpo' | 'rto' | 'retention' | 'dependsOn';
+const DOMAIN_FIELDS: Tracked[] = ['title', 'owner', 'subdomainOf', 'description'];
+const PROCESS_FIELDS: Tracked[] = ['title', 'owner', 'domain', 'criticality', 'rpo', 'rto', 'retention', 'dependsOn', 'parentProcess', 'description'];
+/** Fields added later: hashed only when they have a value, so the hashes of older imports stay the same. */
+const LATER = new Set<Tracked>(['description', 'parentProcess']);
 /** Fields the portal edits: without a hash (a hand-made or adopted entity), their current value stays. */
-const PORTAL = new Set<Tracked>(['owner', 'criticality', 'rpo', 'rto', 'retention', 'dependsOn']);
+const PORTAL = new Set<Tracked>(['owner', 'criticality', 'rpo', 'rto', 'retention', 'dependsOn', 'description']);
 
 function getField(e: ModelEntity, f: Tracked): unknown {
-  return f === 'title' ? e.metadata.title : e.spec?.[f];
+  if (f === 'title' || f === 'description') return e.metadata[f];
+  return e.spec?.[f];
 }
 
 function setField(e: ModelEntity, f: Tracked, v: unknown) {
-  if (f === 'title') {
-    if (v === undefined) delete e.metadata.title;
-    else e.metadata.title = v as string;
+  if (f === 'title' || f === 'description') {
+    if (v === undefined || v === '') delete e.metadata[f];
+    else e.metadata[f] = v as string;
     return;
   }
   e.spec = e.spec ?? {};
@@ -454,6 +529,7 @@ function norm(f: Tracked, v: unknown, ns: string): string {
   if (f === 'dependsOn') return Array.isArray(v) ? v.map(x => normRef(String(x), 'system')).sort().join(',') : '';
   if (f === 'owner') return normRef(String(v), 'group');
   if (f === 'domain' || f === 'subdomainOf') return normRef(String(v), 'domain', ns);
+  if (f === 'parentProcess') return normRef(String(v), 'businessprocess', ns);
   return String(v);
 }
 
@@ -461,7 +537,10 @@ const short = (s: string) => createHash('sha1').update(s).digest('hex').slice(0,
 
 export function hashesOf(e: ModelEntity, ns: string): string {
   const fields = e.kind === 'Domain' ? DOMAIN_FIELDS : PROCESS_FIELDS;
-  return fields.map(f => `${f}:${short(norm(f, getField(e, f), ns))}`).join(',');
+  return fields
+    .filter(f => !LATER.has(f) || norm(f, getField(e, f), ns) !== '')
+    .map(f => `${f}:${short(norm(f, getField(e, f), ns))}`)
+    .join(',');
 }
 
 function readHashes(s: string | undefined): Map<string, string> | undefined {
@@ -469,10 +548,10 @@ function readHashes(s: string | undefined): Map<string, string> | undefined {
   return new Map(s.split(',').map(p => p.split(':') as [string, string]));
 }
 
-const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') || '(none)' : String(v ?? '(none)'));
+export const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') || '(none)' : String(v ?? '(none)'));
 
 /** Parse the YAML documents of the current files. */
-function readCurrent(files: CurrentFile[]) {
+export function readCurrent(files: CurrentFile[]) {
   return files.map(f => ({
     path: f.path,
     docs: parseAllDocuments(f.text)
@@ -481,10 +560,10 @@ function readCurrent(files: CurrentFile[]) {
   }));
 }
 
-const render = (docs: ModelEntity[]) => docs.map(d => stringify(d, { lineWidth: 0 })).join('---\n');
+export const render = (docs: ModelEntity[]) => docs.map(d => stringify(d, { lineWidth: 0 })).join('---\n');
 
 /** An entity in the order a person reads it. */
-function tidy(e: ModelEntity): ModelEntity {
+export function tidy(e: ModelEntity): ModelEntity {
   const { name, namespace, title, annotations, ...rest } = e.metadata;
   const metadata: ModelEntity['metadata'] = { name };
   if (namespace) metadata.namespace = namespace;
@@ -514,22 +593,45 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     }
   }
   const changes: Change[] = [];
-  const counts: Counts = { domains: 0, subdomains: 0, new: 0, changed: 0, gone: 0, unchanged: 0 };
+  const counts: Counts = { domains: 0, subdomains: 0, processes: 0, subprocesses: 0, new: 0, changed: 0, gone: 0, unchanged: 0 };
   const touched = new Set<(typeof files)[number]>();
   const added: Array<{ path: string; entity: ModelEntity }> = [];
   const names = new Map<string, string>();
+  /** The Domain ref of each process drawn (a sub-process: that of its top process). */
+  const domainOf = new Map<string, string>();
   const idOf = (d: Draft) => d.annotations[A.pcfId] ?? d.annotations[A.modelId] ?? d.key;
+  const typeOf = (d: Draft): EntityType => {
+    if (d.kind === 'Domain') return d.parentKey ? 'subdomain' : 'domain';
+    return d.sub ? 'subprocess' : 'process';
+  };
+  const about = (d: Draft): Pick<Change, 'type' | 'level' | 'root' | 'description'> => {
+    const x: Pick<Change, 'type' | 'level' | 'root' | 'description'> = { type: typeOf(d) };
+    if (d.level) x.level = d.level;
+    if (d.root) x.root = d.root;
+    if (d.description) x.description = d.description;
+    return x;
+  };
 
-  // parents first, so a child knows the name of its parent
-  const depthOf = (d: Draft, seen = 0): number => (d.parentKey && seen < 10 ? 1 + depthOf(drafts.find(x => x.key === d.parentKey) ?? { ...d, parentKey: undefined }, seen + 1) : 0);
+  // parents first, so a child knows the name of its parent (thousands of rows: depths computed once)
+  const byDraftKey = new Map(drafts.map(d => [d.key, d]));
+  const depths = new Map<string, number>();
+  const depthOf = (d: Draft): number => {
+    const known = depths.get(d.key);
+    if (known !== undefined) return known;
+    let n = 0;
+    for (let at = d.parentKey ? byDraftKey.get(d.parentKey) : undefined; at && n < 20; at = at.parentKey ? byDraftKey.get(at.parentKey) : undefined) n++;
+    depths.set(d.key, n);
+    return n;
+  };
   const ordered = [...drafts].sort((x, y) => depthOf(x) - depthOf(y));
   const keys = new Set(drafts.map(d => d.key));
 
   for (const d of ordered) {
-    if (d.kind === 'Domain') {
-      if (d.parentKey) counts.subdomains++;
-      else counts.domains++;
-    }
+    const type = typeOf(d);
+    if (type === 'domain') counts.domains++;
+    else if (type === 'subdomain') counts.subdomains++;
+    else if (type === 'process') counts.processes++;
+    else counts.subprocesses++;
     const parentName = d.parentKey ? names.get(d.parentKey) : undefined;
     if (d.parentKey && !parentName) continue; // its parent was left out
     const found = byKey.get(d.key);
@@ -538,6 +640,8 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     if (!name) {
       const base = slug(d.title);
       name = base;
+      // a sub-process named like another takes its ID (stable whatever the order of the rows); the rest as before
+      if (d.sub && used.has(name)) name = `${base.slice(0, 50).replace(/-+$/, '')}-${slug(idOf(d))}`;
       for (let n = 2; used.has(name); n++) name = `${base.slice(0, 56)}-${n}`;
       used.add(name);
     }
@@ -546,19 +650,30 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     // what the file says, as an entity
     const domainSpec: Record<string, unknown> = { type: 'business-area', owner: d.owner };
     if (parentName) domainSpec.subdomainOf = `domain:${ns}/${parentName}`;
+    let processSpec: Record<string, unknown> = {};
+    if (d.kind === 'BusinessProcess') {
+      const domain = d.sub ? domainOf.get(d.parentKey!) ?? '' : `domain:${ns}/${parentName}`;
+      domainOf.set(d.key, domain);
+      processSpec = { owner: d.owner, domain };
+      if (d.sub) processSpec.parentProcess = `businessprocess:${ns}/${parentName}`;
+      if (d.criticality) processSpec.criticality = d.criticality;
+      else if (!d.sub) processSpec.criticality = 'standard';
+      processSpec = { ...processSpec, ...(d.extra?.spec ?? {}) };
+    }
     const fresh: ModelEntity = {
       apiVersion: d.kind === 'Domain' ? 'backstage.io/v1alpha1' : API_VERSION,
       kind: d.kind,
       metadata: { name, namespace: ns, title: d.title, annotations: { ...(d.extra?.annotations ?? {}), ...d.annotations } },
-      spec: d.kind === 'Domain' ? domainSpec : { owner: d.owner, domain: `domain:${ns}/${parentName}`, criticality: d.criticality ?? 'standard', ...(d.extra?.spec ?? {}) },
+      spec: d.kind === 'Domain' ? domainSpec : processSpec,
     };
+    setField(fresh, 'description', d.description);
     if (d.kind === 'BusinessProcess') for (const f of ['rpo', 'rto', 'retention', 'dependsOn'] as const) setField(fresh, f, d[f]);
     const hash = hashesOf(fresh, ns);
 
     if (!match) {
       fresh.metadata.annotations![A.hash] = hash;
       counts.new++;
-      changes.push({ kind: 'new', id: idOf(d), title: d.title, what: d.kind === 'Domain' ? `new ${d.parentKey ? 'subdomain' : 'domain'} ${name}` : `new process ${name}` });
+      changes.push({ kind: 'new', id: idOf(d), title: d.title, what: `new ${type === 'subprocess' ? 'sub-process' : type} ${name}`, ...about(d) });
       added.push({ path: `${o.dir}/${d.kind === 'Domain' ? 'domain' : 'process'}-${name}.yaml`, entity: tidy(fresh) });
       continue;
     }
@@ -567,12 +682,18 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     const stored = readHashes(e.metadata.annotations?.[A.hash]);
     const applied: string[] = [];
     for (const f of d.kind === 'Domain' ? DOMAIN_FIELDS : PROCESS_FIELDS) {
+      if (d.given && !d.given.includes(f)) continue; // the file says nothing of it
       const now = getField(e, f);
       const next = getField(fresh, f);
       if (norm(f, now, ns) === norm(f, next, ns)) continue;
-      const edited = stored ? stored.get(f) !== short(norm(f, now, ns)) : PORTAL.has(f) && norm(f, now, ns) !== '';
+      // a field the last import did not hash (empty then, or added later) was edited when it has a value now
+      const before = stored?.get(f);
+      let edited: boolean;
+      if (!stored) edited = PORTAL.has(f) && norm(f, now, ns) !== '';
+      else if (before === undefined && LATER.has(f)) edited = norm(f, now, ns) !== '';
+      else edited = before !== short(norm(f, now, ns));
       if (edited) {
-        changes.push({ kind: 'review', id: idOf(d), title: d.title, what: `${f} edited in the portal: kept ${show(now)} (the file says ${show(next)})` });
+        changes.push({ kind: 'review', id: idOf(d), title: d.title, what: `${f} edited in the portal: kept ${show(now)} (the file says ${show(next)})`, ...about(d) });
       } else {
         setField(e, f, next);
         applied.push(`${f}: ${show(now)} → ${show(next)}`);
@@ -594,7 +715,7 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
     e.metadata.annotations = a;
     if (applied.length) {
       counts.changed++;
-      changes.push({ kind: 'changed', id: idOf(d), title: d.title, what: applied.join('; ') });
+      changes.push({ kind: 'changed', id: idOf(d), title: d.title, what: applied.join('; '), ...about(d) });
     } else if (!changes.some(c => c.kind === 'review' && c.id === idOf(d))) counts.unchanged++;
     if (applied.length || hashChanged) touched.add(match.file);
   }
@@ -607,7 +728,10 @@ export function plan(drafts: Draft[], current: CurrentFile[], o: PlanOptions): P
       if (e.metadata.annotations?.[A.deprecated]) continue;
       e.metadata.annotations = { ...(e.metadata.annotations ?? {}), [A.deprecated]: o.today };
       touched.add(file);
-      changes.push({ kind: 'review', id: k.replace(/^(apqc:e:|apqc:|model:)/, ''), title: e.metadata.title ?? e.metadata.name, what: 'no longer in the file: kept and marked deprecated' });
+      let type: EntityType = e.spec?.parentProcess ? 'subprocess' : 'process';
+      if (e.kind === 'Domain') type = e.spec?.subdomainOf ? 'subdomain' : 'domain';
+      const id = e.metadata.annotations?.[A.pcfId] ?? e.metadata.annotations?.[A.modelId] ?? k.replace(/^(apqc:e:|apqc:|model:)/, '');
+      changes.push({ kind: 'review', id, title: e.metadata.title ?? e.metadata.name, what: 'no longer in the file: kept and marked deprecated', type });
     }
   }
 

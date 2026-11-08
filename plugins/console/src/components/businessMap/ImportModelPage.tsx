@@ -11,11 +11,12 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { Pill, TitleRow, type Tone } from '../ui';
@@ -23,8 +24,11 @@ import { useTemplateTask } from '../templateTask';
 import {
   cardsOf,
   type Change,
+  type ChangeFilter,
   csvHeaders,
   emptyImport,
+  ENTITY_TYPES,
+  filterChanges,
   firstBadStep,
   hasProblems,
   IMPORT_SOURCES,
@@ -36,12 +40,15 @@ import {
   type Issue,
   MAPPING_FIELDS,
   namespacesOf,
+  NO_FILTER,
+  PAGE_SIZES,
+  pageOf,
   type Preview,
   previewBody,
   previewKey,
   type PreviewState,
   REQUIRED_MAPPING,
-  shownChanges,
+  rootsOf,
   withFileName,
 } from './businessMapFormsModel';
 import { CRITICALITIES } from './businessMapModel';
@@ -71,7 +78,17 @@ const readAs = (file: File, how: 'url' | 'text') =>
 const PreviewView = ({ preview, namespace, skipErrors, onSkip }: { preview: Preview; namespace: string; skipErrors: boolean; onSkip: (v: boolean) => void }) => {
   const { t } = useI18n();
   const rq = useRq();
-  const { rows, total } = shownChanges(preview.changes);
+  const [filter, setFilter] = useState<ChangeFilter>(NO_FILTER);
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(PAGE_SIZES[0]);
+  const roots = useMemo(() => rootsOf(preview.changes), [preview.changes]);
+  const matching = useMemo(() => filterChanges(preview.changes, filter), [preview.changes, filter]);
+  const shown = pageOf(matching, page, size);
+  const total = preview.changes.length;
+  const refine = (f: Partial<ChangeFilter>) => {
+    setFilter(x => ({ ...x, ...f }));
+    setPage(0);
+  };
   const errors = preview.errors.length;
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
@@ -113,37 +130,95 @@ const PreviewView = ({ preview, namespace, skipErrors, onSkip }: { preview: Prev
           ))}
         </Box>
       )}
-      {total > 0 ? (
+      {total > 0 && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 1.25 }} role="search" aria-label={t('bmf.filter')}>
+          <TextField select size="small" label={t('bmf.filter.kind')} value={filter.kind} onChange={e => refine({ kind: e.target.value as ChangeFilter['kind'] })}>
+            <MenuItem value="">{t('bmf.filter.all')}</MenuItem>
+            {(['new', 'changed', 'review'] as const).map(k => (
+              <MenuItem key={k} value={k}>
+                {t(`bmf.kind.${k}`)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField select size="small" label={t('bmf.filter.type')} value={filter.type} onChange={e => refine({ type: e.target.value as ChangeFilter['type'] })}>
+            <MenuItem value="">{t('bmf.filter.all')}</MenuItem>
+            {ENTITY_TYPES.map(k => (
+              <MenuItem key={k} value={k}>
+                {t(`bmf.type.${k}`)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField select size="small" label={t('bmf.filter.root')} value={filter.root} onChange={e => refine({ root: e.target.value })} disabled={!roots.length}>
+            <MenuItem value="">{t('bmf.filter.all')}</MenuItem>
+            {roots.map(r => (
+              <MenuItem key={r.id} value={r.id}>
+                {`${r.id} ${r.title}`}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField size="small" type="search" label={t('bmf.filter.text')} value={filter.text} onChange={e => refine({ text: e.target.value })} />
+        </Box>
+      )}
+      {total > 0 && matching.length > 0 && (
         <Box sx={{ overflowX: 'auto', border: `1px solid ${rq.border}`, borderRadius: '8px' }}>
           <Table size="small" aria-label={t('bmf.changes')}>
             <caption style={{ captionSide: 'top', textAlign: 'left', fontWeight: 600 }}>
-              {total > rows.length ? t('bmf.changes.first', { n: rows.length, total }) : t('bmf.changes.all', { total })}
+              {matching.length < total ? t('bmf.changes.matching', { n: matching.length, total }) : t('bmf.changes.all', { total })}
             </caption>
             <TableHead>
               <TableRow>
                 <TableCell>{t('bmf.change')}</TableCell>
+                <TableCell>{t('bmf.filter.type')}</TableCell>
                 <TableCell>{t('bmf.id')}</TableCell>
                 <TableCell>{t('bmf.process')}</TableCell>
                 <TableCell>{t('bmf.what')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map(c => (
-                <TableRow key={`${c.kind}-${c.id}`}>
+              {shown.rows.map((c, i) => (
+                <TableRow key={`${c.kind}-${c.id}-${i}`}>
                   <TableCell>
                     <Pill tone={CHANGE_TONE[c.kind]} plain>
                       {t(`bmf.kind.${c.kind}`)}
                     </Pill>
                   </TableCell>
-                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{c.id}</TableCell>
-                  <TableCell>{c.title}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{c.type ? t(`bmf.type.${c.type}`) : '—'}</TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap', pl: c.level ? `${16 + 12 * Math.min(c.level - 1, 4)}px` : undefined }}>{c.id}</TableCell>
+                  <TableCell>
+                    {c.title}
+                    {c.description && (
+                      <Typography variant="caption" color="text.secondary" component="div" title={c.description} sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 480 }}>
+                        {c.description}
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>{c.what}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={matching.length}
+            page={shown.page}
+            rowsPerPage={size}
+            rowsPerPageOptions={PAGE_SIZES}
+            onPageChange={(_e, n) => setPage(n)}
+            onRowsPerPageChange={e => {
+              setSize(Number(e.target.value));
+              setPage(0);
+            }}
+            labelRowsPerPage={t('bmf.page.size')}
+            labelDisplayedRows={({ from, to, count }) => t('bmf.page.shown', { from, to, count })}
+          />
         </Box>
-      ) : (
+      )}
+      {total > 0 && matching.length === 0 && (
+        <Typography variant="body2" color="text.secondary">
+          {t('bmf.filter.none')}
+        </Typography>
+      )}
+      {total === 0 && (
         <Typography variant="body2" color="text.secondary">
           {t('bmf.preview.nothing', { namespace })}
         </Typography>
@@ -275,6 +350,12 @@ export const ImportModelPage = () => {
           );
         })}
       </Box>
+      {form.source === 'bia' && (
+        <Alert severity="info">
+          <b>{t('bmf.bia.cycle.title')}</b> {t('bmf.bia.cycle')}{' '}
+          <Link to={`/console/business-map${form.namespace ? `?ns=${encodeURIComponent(form.namespace)}` : ''}`}>{t('bmf.bia.download')}</Link>
+        </Alert>
+      )}
       <Box sx={{ border: `2px dashed ${problem('file') ? rq.negative : rq.border}`, borderRadius: '8px', p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minWidth: 0 }}>
           <Box aria-hidden sx={{ width: 36, height: 44, borderRadius: '6px', bgcolor: rq.dataSoft, color: rq.data, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 10, fontWeight: 600 }}>
@@ -304,8 +385,12 @@ export const ImportModelPage = () => {
           onInputChange={(_, v) => set({ namespace: v.trim() })}
           renderInput={p => <TextField {...p} required label={t('bmf.namespace')} error={!!problem('namespace')} helperText={problem('namespace') ?? t('bmf.namespace.hint')} />}
         />
-        <RefPicker label={t('bmf.defaultOwner')} items={groups.items} loading={groups.loading} value={form.owner} onChange={v => set({ owner: v })} help={t('bmf.defaultOwner.hint')} />
-        <RefPicker label={t('bmf.keepFrom')} items={models.items} loading={models.loading} value={form.keepFrom} onChange={v => set({ keepFrom: v })} help={t('bmf.keepFrom.hint')} />
+        {form.source !== 'bia' && (
+          <>
+            <RefPicker label={t('bmf.defaultOwner')} items={groups.items} loading={groups.loading} value={form.owner} onChange={v => set({ owner: v })} help={t('bmf.defaultOwner.hint')} />
+            <RefPicker label={t('bmf.keepFrom')} items={models.items} loading={models.loading} value={form.keepFrom} onChange={v => set({ keepFrom: v })} help={t('bmf.keepFrom.hint')} />
+          </>
+        )}
         {form.source === 'apqc' && (
           <>
             <TextField size="small" label={t('bmf.industry')} value={form.industry} onChange={e => set({ industry: e.target.value })} error={!!problem('industry')} helperText={problem('industry') ?? t('bmf.industry.hint')} />

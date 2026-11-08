@@ -51,9 +51,10 @@ export function slugOf(title: string): string {
 
 // ---------------------------------------------------------------- import
 
-export type ImportSource = 'apqc' | 'template' | 'own';
-export const IMPORT_SOURCES: ImportSource[] = ['apqc', 'template', 'own'];
-export const MAPPING_FIELDS = ['id', 'title', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
+/** bia: the sheet of a business impact analysis, filled by the business owners: it only updates processes there. */
+export type ImportSource = 'apqc' | 'template' | 'own' | 'bia';
+export const IMPORT_SOURCES: ImportSource[] = ['apqc', 'template', 'own', 'bia'];
+export const MAPPING_FIELDS = ['id', 'title', 'description', 'parent', 'level', 'owner', 'criticality', 'rpo', 'rto', 'retention', 'applications'] as const;
 export type MappingField = (typeof MAPPING_FIELDS)[number];
 export const REQUIRED_MAPPING: MappingField[] = ['id', 'title'];
 export const IMPORT_STEPS = ['source', 'mapping', 'preview'] as const;
@@ -139,8 +140,9 @@ export function previewBody(form: ImportForm): PreviewBody | undefined {
   const body: PreviewBody = { source: form.source, file: form.file, namespace: form.namespace };
   if (form.fileName) body.fileName = form.fileName;
   if (form.sheet.trim()) body.sheet = form.sheet.trim();
-  if (form.owner) body.owner = form.owner;
-  if (form.keepFrom) body.keepFrom = form.keepFrom;
+  // the analysis only updates: no default owner, no categories kept from a model
+  if (form.owner && form.source !== 'bia') body.owner = form.owner;
+  if (form.keepFrom && form.source !== 'bia') body.keepFrom = form.keepFrom;
   if (form.source === 'apqc') {
     if (form.industry.trim()) body.industry = form.industry.trim();
     if (form.version.trim()) body.version = form.version.trim();
@@ -162,9 +164,16 @@ export function previewKey(body: PreviewBody): string {
 }
 
 export type Issue = { row?: number; message: string };
-export type Change = { kind: 'new' | 'changed' | 'review'; id: string; title: string; what: string };
-export type Counts = { domains: number; subdomains: number; new: number; changed: number; gone: number; unchanged: number };
-export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[] };
+/** What an entity of the model is (the backend says it in each change). */
+export type EntityType = 'domain' | 'subdomain' | 'process' | 'subprocess';
+export const ENTITY_TYPES: EntityType[] = ['domain', 'subdomain', 'process', 'subprocess'];
+/** A line of the preview; type, level (1 = a level-1 domain), root (the ID of its level-1 domain) and description
+ *  when the backend knows them. */
+export type Change = { kind: 'new' | 'changed' | 'review'; id: string; title: string; what: string; type?: EntityType; level?: number; root?: string; description?: string };
+/** processes / subprocesses: from the backend that imports sub-processes (absent from an older one). */
+export type Counts = { domains: number; subdomains: number; processes?: number; subprocesses?: number; new: number; changed: number; gone: number; unchanged: number };
+/** compact: an .xlsx, its sheet read as a small CSV data URL, what the template gets instead of the workbook. */
+export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[]; compact?: string };
 /** The preview of one request (key) as the page holds it. */
 export type PreviewState = { key: string; state: 'loading' | 'done' | 'failed'; preview?: Preview; error?: string };
 
@@ -207,12 +216,20 @@ export function importBlocker(form: ImportForm, preview: PreviewState | undefine
   return undefined;
 }
 
+/** The compact sheet of the preview, when it is the preview of these values. */
+function compactOf(form: ImportForm, preview: PreviewState | undefined): string | undefined {
+  const body = previewBody(form);
+  return body && preview?.key === previewKey(body) ? preview.preview?.compact : undefined;
+}
+
 /** The values of the template business-model-import: its parameters, page by page. */
 export function importValues(form: ImportForm, preview: PreviewState | undefined): Record<string, unknown> {
   const v: Record<string, unknown> = {
     source: form.source,
-    file: form.file ?? '',
-    sheet: form.sheet.trim(),
+    // the sheet of an .xlsx as the preview read it (a small CSV that names the sheet): a workbook in base64 can pass the
+    // 10 MB the scaffolder takes
+    file: compactOf(form, preview) ?? form.file ?? '',
+    sheet: compactOf(form, preview) ? '' : form.sheet.trim(),
     namespace: form.namespace,
     skipErrors: form.skipErrors,
     // the value of the form field BusinessModelPreview of the classic form: a short summary of the preview
@@ -220,8 +237,8 @@ export function importValues(form: ImportForm, preview: PreviewState | undefined
       ? { state: preview.state, key: preview.key, errors: preview.preview?.errors.length ?? 0, warnings: preview.preview?.warnings.length ?? 0 }
       : {},
   };
-  if (form.owner) v.owner = form.owner;
-  if (form.keepFrom) v.keepFrom = form.keepFrom;
+  if (form.owner && form.source !== 'bia') v.owner = form.owner;
+  if (form.keepFrom && form.source !== 'bia') v.keepFrom = form.keepFrom;
   if (form.source === 'apqc') {
     v.industry = form.industry.trim();
     v.version = form.version.trim();
@@ -240,6 +257,7 @@ export type Card = { value: string; key: string; vars?: Record<string, number>; 
 export function cardsOf(c: Counts): Card[] {
   return [
     { value: String(c.domains), key: 'bmf.card.domains', vars: { n: c.subdomains } },
+    ...(c.processes === undefined ? [] : [{ value: String(c.processes), key: 'bmf.card.processes', vars: { n: c.subprocesses ?? 0 } }]),
     { value: `+ ${c.new}`, key: 'bmf.card.new', positive: c.new > 0 },
     { value: `~ ${c.changed}`, key: 'bmf.card.changed' },
     { value: `− ${c.gone}`, key: 'bmf.card.gone' },
@@ -247,11 +265,42 @@ export function cardsOf(c: Counts): Card[] {
   ];
 }
 
-/** The changes shown in the table: the reviews and changes first (what needs reading), then the new ones; at most n. */
-export function shownChanges(changes: Change[], n = 25): { rows: Change[]; total: number } {
-  const order: Record<Change['kind'], number> = { review: 0, changed: 1, new: 2 };
-  const rows = [...changes].sort((a, b) => order[a.kind] - order[b.kind]).slice(0, n);
-  return { rows, total: changes.length };
+/** The filters of the table of changes: '' is all. */
+export type ChangeFilter = { kind: '' | Change['kind']; type: '' | EntityType; root: string; text: string };
+export const NO_FILTER: ChangeFilter = { kind: '', type: '', root: '', text: '' };
+export const PAGE_SIZES = [25, 50, 100];
+
+const KIND_ORDER: Record<Change['kind'], number> = { review: 0, changed: 1, new: 2 };
+
+/**
+ * The changes that pass the filters, the reviews and changes first (what needs reading), then the new ones, each
+ * group in the order of the file; text matches the ID, the title or the description, ignoring case and accents.
+ */
+export function filterChanges(changes: Change[], f: ChangeFilter): Change[] {
+  const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const text = fold(f.text.trim());
+  return changes
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => (!f.kind || c.kind === f.kind) && (!f.type || c.type === f.type) && (!f.root || c.root === f.root))
+    .filter(({ c }) => !text || fold(`${c.id} ${c.title} ${c.description ?? ''}`).includes(text))
+    .sort((a, b) => KIND_ORDER[a.c.kind] - KIND_ORDER[b.c.kind] || a.i - b.i)
+    .map(({ c }) => c);
+}
+
+/** One page of a list: the page asked for, moved back to the last one when the list got shorter. */
+export function pageOf<T>(rows: T[], page: number, size: number): { rows: T[]; page: number } {
+  const last = Math.max(0, Math.ceil(rows.length / size) - 1);
+  const at = Math.min(Math.max(0, page), last);
+  return { rows: rows.slice(at * size, at * size + size), page: at };
+}
+
+/** The level-1 domains of the changes, for the filter: their ID and title, in the order of the file. */
+export function rootsOf(changes: Change[]): Array<{ id: string; title: string }> {
+  const titles = new Map<string, string>();
+  for (const c of changes) if (c.type === 'domain' && !titles.has(c.id)) titles.set(c.id, c.title);
+  const ids: string[] = [];
+  for (const c of changes) if (c.root && !ids.includes(c.root)) ids.push(c.root);
+  return ids.map(id => ({ id, title: titles.get(id) ?? id }));
 }
 
 // ---------------------------------------------------------------- adopt

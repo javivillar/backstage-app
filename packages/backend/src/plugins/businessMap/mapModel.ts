@@ -1,5 +1,7 @@
 import {
   type CheckElement,
+  issuesOf,
+  type RequirementIssue,
   checkProcess,
   type ContinuityGraph,
   type Criticality,
@@ -19,6 +21,8 @@ import {
 /**
  * The pages of the business map, without Express: GET /map (the domains and processes of a customer, each checked),
  * GET /impact (the processes above an element, or who runs on a framework line) and the links of GET /engine.
+ * The map lists every process, sub-processes too (each with its parent and its sub-processes): the views of the
+ * console draw the top processes and reach the sub-processes from the page of their parent.
  * Pure: the route gives it the graph of the catalog.
  *
  * The result of a process (or of one of its business services) sums up the check of its chain: a gap if any element
@@ -28,8 +32,21 @@ import {
 export type ElementGap = { element: string; field: 'rpo' | 'rto'; needs: string; delivers: string };
 export type MapDomain = { ref: string; title: string; description?: string; pcfId?: string; modelId?: string; parent?: string };
 export type MapServiceCheck = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: Result; gaps: ElementGap[] };
-export type Origin = 'default' | 'override';
-export type MapRequirement = { rpo: string | null; rto: string | null; retention: string | null; ha?: boolean; from: { rpo: Origin; rto: Origin } };
+/** Where a value of the requirement comes from: the default of the criticality, the process, or a parent process. */
+export type Origin = 'default' | 'override' | 'inherited';
+export type Workaround = { manual: boolean; maxDuration?: string; note?: string };
+/** mtpd and workaround (the business impact analysis) only when the process or a parent says them. */
+export type MapRequirement = {
+  rpo: string | null;
+  rto: string | null;
+  retention: string | null;
+  ha?: boolean;
+  mtpd?: string;
+  workaround?: Workaround;
+  from: { rpo: Origin; rto: Origin; mtpd?: Origin; workaround?: Origin };
+};
+/** The fields a sub-process takes from its parent chain. */
+export type InheritedField = 'criticality' | 'rpo' | 'rto' | 'mtpd' | 'retention' | 'workaround' | 'dependsOn';
 export type MapProcess = {
   ref: string;
   name: string;
@@ -37,6 +54,14 @@ export type MapProcess = {
   title: string;
   description?: string;
   domain: string;
+  /** A sub-process: its parent process (ref). */
+  parent?: string;
+  /** The direct sub-processes (refs), [] when none. */
+  subprocesses: string[];
+  /** A sub-process: what it takes from its parent chain (absent when nothing). */
+  inherited?: InheritedField[];
+  /** Something wrong in the requirement itself (an RTO above the MTPD); absent when nothing. */
+  issues?: RequirementIssue[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -154,6 +179,16 @@ function domainsOf(all: MapEntity[], namespace: string, pointed: Set<string>): M
     .sort((x, y) => compareIds(x.pcfId ?? x.modelId, y.pcfId ?? y.modelId) || x.title.localeCompare(y.title));
 }
 
+/** spec.workaround as the map gives it; undefined when it is not one. */
+export function readWorkaround(v: unknown): Workaround | undefined {
+  if (!v || typeof v !== 'object' || typeof (v as Workaround).manual !== 'boolean') return undefined;
+  const w = v as Record<string, unknown>;
+  const out: Workaround = { manual: w.manual as boolean };
+  if (str(w.maxDuration)) out.maxDuration = String(w.maxDuration);
+  if (str(w.note)) out.note = String(w.note);
+  return out;
+}
+
 /** One process of the map, checked down its chain. */
 export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: CriticalityDefaults): MapProcess {
   const ref = refOf(e);
@@ -166,7 +201,7 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
   const check = checkProcess(graph, ref);
   const elements = check?.elements ?? [];
   const byRef = new Map(elements.map(el => [el.ref, el]));
-  const dependsOn = graph.children(ref);
+  const dependsOn = graph.dependencies(ref);
   const services: MapServiceCheck[] = dependsOn.map(dep => {
     const target = graph.entity(dep);
     const sub = [dep, ...(graph.counts(dep) ? graph.chain(dep) : [])].map(r => byRef.get(r)).filter((x): x is CheckElement => !!x);
@@ -176,15 +211,30 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     if (own?.tier) s.tier = own.tier;
     return s;
   });
+  const retention = graph.inherited(ref, 'retention');
+  const origin = (f: 'rpo' | 'rto'): Origin => {
+    if (parseDuration(spec[f]) !== undefined) return 'override';
+    return parseDuration(graph.inherited(ref, f)) === undefined ? 'default' : 'inherited';
+  };
   const requirement: MapRequirement = {
     rpo: fmt(need?.rpo),
     rto: fmt(need?.rto),
-    retention: fmt(parseDuration(spec.retention)) ?? str(spec.retention) ?? null,
-    from: {
-      rpo: parseDuration(spec.rpo) === undefined ? 'default' : 'override',
-      rto: parseDuration(spec.rto) === undefined ? 'default' : 'override',
-    },
+    retention: fmt(parseDuration(retention)) ?? str(retention) ?? null,
+    from: { rpo: origin('rpo'), rto: origin('rto') },
   };
+  const hasOwn = (f: string) => {
+    const v = spec[f];
+    return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
+  };
+  if (need?.mtpd !== undefined) {
+    requirement.mtpd = formatDuration(need.mtpd);
+    requirement.from.mtpd = hasOwn('mtpd') ? 'override' : 'inherited';
+  }
+  const workaround = readWorkaround(graph.inherited(ref, 'workaround'));
+  if (workaround) {
+    requirement.workaround = workaround;
+    requirement.from.workaround = hasOwn('workaround') ? 'override' : 'inherited';
+  }
   const ha = defaults[criticality]?.ha;
   if (ha !== undefined) requirement.ha = ha;
   const dataProducts = [...new Set(elements.map(el => graph.entity(el.ref)?.metadata.annotations?.[A.dataProduct]).filter((x): x is string => !!x))];
@@ -194,6 +244,7 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     namespace: ns,
     title: titleOf(e, ref),
     domain: str(spec.domain) ? normRef(String(spec.domain), 'domain', ns) : '',
+    subprocesses: graph.subprocesses(ref),
     criticality,
     requirement,
     dependsOn,
@@ -203,6 +254,16 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     dataProducts,
   };
   if (e.metadata.description) p.description = e.metadata.description;
+  const parent = graph.parentProcess(ref);
+  if (parent) {
+    p.parent = parent;
+    const fields: InheritedField[] = ['criticality', 'rpo', 'rto', 'mtpd', 'retention', 'workaround'];
+    const inherited: InheritedField[] = fields.filter(f => !hasOwn(f) && graph.inherited(ref, f) !== undefined);
+    if (!graph.children(ref).some(c => !c.startsWith('businessprocess:')) && dependsOn.length) inherited.push('dependsOn');
+    if (inherited.length) p.inherited = inherited;
+  }
+  const issues = need ? issuesOf(need) : [];
+  if (issues.length) p.issues = issues;
   if (str(spec.owner)) p.owner = normRef(String(spec.owner), 'group', 'default');
   if (str(spec.classification)) p.classification = String(spec.classification);
   if (a[A.pcfId]) p.pcfId = a[A.pcfId];
@@ -309,7 +370,7 @@ function lineServices(graph: ContinuityGraph, lines: string[]): LineService[] {
     if (!groups.has(s)) groups.set(s, new Set());
     groups.get(s)!.add(i);
   }
-  const processes = graph.processes();
+  const processes = graph.listedProcesses();
   const out: LineService[] = [];
   for (const [svc, onLine] of groups) {
     // every instance of the service (not only those on these lines): to see how far each migration is
@@ -393,7 +454,7 @@ export function impactOf(graph: ContinuityGraph, entityRef: string): ImpactAnswe
   const got = graph.delivers(ref);
   const processes: ImpactProcess[] = [];
   if (graph.counts(ref)) {
-    for (const p of graph.processes()) {
+    for (const p of graph.listedProcesses()) {
       const need = graph.need(p);
       const row = impactRow(graph, p);
       if (!need || !row || !graph.chain(p).includes(ref)) continue;

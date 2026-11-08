@@ -15,16 +15,39 @@ export type CriticalityDefaults = Partial<Record<Criticality, { rpo?: string; rt
 export type ElementGap = { element: string; field: 'rpo' | 'rto'; needs: string; delivers: string };
 export type MapDomain = { ref: string; title: string; description?: string; pcfId?: string; modelId?: string; parent?: string };
 export type MapService = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: CheckResult; gaps: ElementGap[] };
-export type Origin = 'default' | 'override';
-export type MapRequirement = { rpo: Duration; rto: Duration; retention: Duration; ha?: boolean; from: { rpo: Origin; rto: Origin } };
+/** Where a value of the requirement comes from: the criticality's default, the process itself, or a parent process. */
+export type Origin = 'default' | 'override' | 'inherited';
+/** The manual way to go on while the systems are down (business impact analysis). */
+export type Workaround = { manual: boolean; maxDuration?: string; note?: string };
+/** mtpd and workaround only when the process (or a parent) says them. */
+export type MapRequirement = {
+  rpo: Duration;
+  rto: Duration;
+  retention: Duration;
+  ha?: boolean;
+  mtpd?: string;
+  workaround?: Workaround;
+  from: { rpo: Origin; rto: Origin; mtpd?: Origin; workaround?: Origin };
+};
+/** Something wrong in a requirement itself: an RTO above the MTPD. */
+export type RequirementIssue = { key: 'rto-above-mtpd'; rto: string; mtpd: string };
+export type InheritedField = 'criticality' | 'rpo' | 'rto' | 'mtpd' | 'retention' | 'workaround' | 'dependsOn';
 export type MapProcess = {
   ref: string;
   name: string;
   namespace: string;
   title: string;
   description?: string;
-  /** the Domain (or subdomain) it belongs to */
+  /** the Domain (or subdomain) it belongs to (a sub-process: that of its top process) */
   domain: string;
+  /** a sub-process (APQC level 4 and below): its parent process */
+  parent?: string;
+  /** its direct sub-processes ([] or absent when none) */
+  subprocesses?: string[];
+  /** a sub-process: what it takes from its parent chain */
+  inherited?: InheritedField[];
+  /** an RTO above the MTPD */
+  issues?: RequirementIssue[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -89,7 +112,7 @@ export type CheckElement = {
   gap?: Array<{ field: 'rpo' | 'rto'; needs: string; delivers: string }>;
 };
 /** GET /api/business-map/processes/:namespace/:name/check */
-export type ProcessCheck = { process: string; requirement: { criticality: Criticality; rpo: Duration; rto: Duration; from: string[] }; elements: CheckElement[] };
+export type ProcessCheck = { process: string; requirement: { criticality: Criticality; rpo: Duration; rto: Duration; from: string[] }; elements: CheckElement[]; issues?: RequirementIssue[] };
 
 type Loaded<T> = { loading: boolean; data?: T; error?: string };
 
@@ -122,6 +145,12 @@ function useBusinessMapGet<T>(path: string | undefined): Loaded<T> & { reload: (
   const reload = useCallback(() => setTick(n => n + 1), []);
   return { ...state, reload };
 }
+
+/**
+ * The map as the views draw it (map, heat map, glass, matrix): the top processes only; the sub-processes are reached
+ * from the page of their parent.
+ */
+export const topProcesses = (map: MapData): MapData => ({ ...map, processes: map.processes.filter(p => !p.parent) });
 
 /** The map of a customer (the first one when namespace is empty). */
 export const useBusinessMap = (namespace?: string) =>

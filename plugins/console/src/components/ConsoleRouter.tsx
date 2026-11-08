@@ -30,6 +30,7 @@ import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
 import { BusinessMapPage } from './businessMap/BusinessMapPage';
+import { BusinessExplorerPage } from './businessMap/ExplorerPage';
 import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
 import { BusinessGlassPage } from './businessMap/GlassPage';
 import { BusinessMatrixPage } from './businessMap/MatrixPage';
@@ -101,6 +102,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/monitoring" element={<MonitoringPage />} />
         <Route path="/business-map" element={<BusinessMapPage />} />
+        <Route path="/business-map/explorer" element={<BusinessExplorerPage />} />
         <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
         <Route path="/business-map/glass" element={<BusinessGlassPage />} />
         <Route path="/business-map/matrix" element={<BusinessMatrixPage />} />

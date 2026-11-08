@@ -1,10 +1,11 @@
 import { type Entity } from '@backstage/catalog-model';
 import { createApiRef, discoveryApiRef, fetchApiRef, type OAuthApi, useApi, useApiHolder } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
-import { useEffect, useMemo, useState } from 'react';
-import { type MapData, useBusinessMap } from '../../businessMap';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type MapData, useBusinessMap, topProcesses } from '../../businessMap';
 import { useNamespaceCosts } from '../../costs';
 import { type AppOverview, useClusterOverview } from '../../overview';
+import type { Health } from '../depsModel';
 import { healthOf } from '../EntityDependencies';
 import { useCustomer } from './BusinessMapTabs';
 import { type BusinessGraph, businessGraph } from './glassModel';
@@ -31,7 +32,12 @@ export type BusinessData = {
   loading: boolean;
   error?: string;
   map?: MapData;
+  /** the map with the sub-processes too (the Glass draws them when a process is open) */
+  full?: MapData;
   graph?: BusinessGraph;
+  /** the catalog under the processes (as read for the glass), and the health of an element */
+  catalog: Entity[];
+  health: (e: Entity) => { tone: Health; label: string };
   /** the cluster overview could be read (health) */
   healthKnown: boolean;
   healthLoading: boolean;
@@ -55,11 +61,22 @@ export function useBusinessData(namespace?: string): BusinessData {
     };
   }, [catalog]);
   const apps = useMemo(() => ov.data?.apps ?? [], [ov.data]);
-  const graph = useMemo(
-    () => (map.data ? businessGraph(map.data, entities.items, e => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps)) : undefined),
-    [map.data, entities.items, apps],
-  );
-  return { loading: map.loading || entities.loading, error: map.error ?? entities.error, map: map.data, graph, healthKnown: !!ov.data, healthLoading: ov.loading, apps };
+  // the dashboards draw the top processes; a sub-process is in the page of its parent
+  const top = useMemo(() => (map.data ? topProcesses(map.data) : undefined), [map.data]);
+  const health = useCallback((e: Entity) => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps), [apps]);
+  const graph = useMemo(() => (top ? businessGraph(top, entities.items, health) : undefined), [top, entities.items, health]);
+  return {
+    loading: map.loading || entities.loading,
+    error: map.error ?? entities.error,
+    map: top,
+    full: map.data,
+    graph,
+    catalog: entities.items,
+    health,
+    healthKnown: !!ov.data,
+    healthLoading: ov.loading,
+    apps,
+  };
 }
 
 /** the Keycloak sign-in of the app (plugin keycloak: id auth.keycloak-oidc), looked up by id so the console needs no new dependency */

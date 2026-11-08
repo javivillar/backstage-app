@@ -2,7 +2,9 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { Router } from 'express';
 import { checkProcess, ContinuityGraph, continuityOf, type MapEntity, readDefaults } from './continuityModel';
+import { biaWorkbook } from './biaModel';
 import { buildMap, engineLinks, impactOf } from './mapModel';
+import { writeXlsx } from './sheets';
 import { createExercisesRouter } from './exercisesRouter';
 import { createPreviewRouter } from './previewRouter';
 
@@ -18,6 +20,9 @@ import { createPreviewRouter } from './previewRouter';
  *       the domains and processes of one customer, each checked (the map, the heat map and the matrix read it)
  *   GET /api/business-map/impact?entity=<ref>   { entity, role, delivers, processes, support?, services? }: the
  *       processes that depend on an element, strictest first; for a framework line or a development service, who runs on it
+ *   GET /api/business-map/bia?namespace=<customer>[&domain=<level-1 domain name>][&level=3|all]   the .xlsx of the
+ *       business impact analysis: one row per process (level=all adds the sub-processes) with its current values,
+ *       and a Guide sheet; the business owners fill it and it comes back through the import (source bia)
  *   GET /api/business-map/engine?key=<process key>   { baseUrl?, cockpitUrl?, tasklistUrl?, definitionUrl? }: the
  *       links into the process engine (Operaton) for the BPMN of a process
  *
@@ -26,14 +31,30 @@ import { createPreviewRouter } from './previewRouter';
  */
 
 /** What the routes read of the catalog: the processes and every System, Component and Resource. */
-const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'spec.type', 'spec.criticality', 'spec.rpo', 'spec.rto', 'relations'];
+// spec.parentProcess and what a sub-process inherits (retention, mtpd, workaround) are read too: a sub-process takes
+// them from its parent chain
+const FIELDS = [
+  'kind',
+  'metadata.name',
+  'metadata.namespace',
+  'metadata.title',
+  'metadata.annotations',
+  'spec.type',
+  'spec.criticality',
+  'spec.rpo',
+  'spec.rto',
+  'spec.mtpd',
+  'spec.retention',
+  'spec.workaround',
+  'spec.parentProcess',
+  'relations',
+];
 /** What the pages read besides: the Domains and ReferenceModels too, with what the map shows of each. */
 const MAP_FIELDS = [
   ...FIELDS,
   'metadata.description',
   'spec.owner',
   'spec.domain',
-  'spec.retention',
   'spec.classification',
   'spec.subdomainOf',
   'spec.lifecycle',
@@ -43,6 +64,7 @@ const MAP_FIELDS = [
   'spec.namespace',
 ];
 const REF = /^[a-z0-9]+:[a-z0-9._-]+\/[a-z0-9._-]+$/i;
+const NAME = /^[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?$/;
 const KEY = /^[A-Za-z0-9._-]{1,255}$/;
 
 export const businessMapPlugin = createBackendPlugin({
@@ -152,6 +174,30 @@ export const businessMapPlugin = createBackendPlugin({
               return;
             }
             res.json(impactOf(await mapGraphFor(credentials), entity));
+          } catch (e) {
+            logger.warn(`business-map: ${(e as Error).message}`);
+            res.status(502).json({ error: (e as Error).message });
+          }
+        });
+
+        router.get('/bia', async (req, res) => {
+          try {
+            const credentials = await httpAuth.credentials(req, { allow: ['user'] });
+            const namespace = typeof req.query.namespace === 'string' ? req.query.namespace : '';
+            const domain = typeof req.query.domain === 'string' && req.query.domain ? req.query.domain : undefined;
+            const level = req.query.level === 'all' ? 'all' : '3';
+            if (!NAME.test(namespace) || (domain !== undefined && !NAME.test(domain))) {
+              res.status(400).json({ error: 'namespace (and domain, when given) are names: lowercase letters, digits and "-".' });
+              return;
+            }
+            const book = biaWorkbook(await mapGraphFor(credentials), defaults, { namespace, domain, level });
+            if (!book) {
+              res.status(404).json({ error: `${namespace} has no business processes.` });
+              return;
+            }
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${book.file}"`);
+            res.send(writeXlsx(book.sheets));
           } catch (e) {
             logger.warn(`business-map: ${(e as Error).message}`);
             res.status(502).json({ error: (e as Error).message });

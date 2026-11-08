@@ -126,3 +126,56 @@ describe('checkProcess', () => {
     expect(checkProcess(graph(), 'businessprocess:customer/nothing')).toBeUndefined();
   });
 });
+
+describe('sub-processes', () => {
+  // repair → plan (says nothing of its own) → plan-fast (its own RPO); plan-alone has its own dependency
+  const subs: MapEntity[] = [
+    ...ENTITIES,
+    {
+      kind: 'BusinessProcess',
+      metadata: { name: 'plan', namespace: 'customer' },
+      spec: { domain: 'after-sales', parentProcess: 'repair' },
+      relations: [rel('partOf', 'businessprocess:customer/repair')],
+    },
+    {
+      kind: 'BusinessProcess',
+      metadata: { name: 'plan-fast', namespace: 'customer' },
+      spec: { domain: 'after-sales', parentProcess: 'businessprocess:customer/plan', rpo: '5m' },
+      relations: [rel('partOf', 'businessprocess:customer/plan')],
+    },
+  ];
+  // the parent's side of the relation, as the catalog writes it
+  subs[0] = { ...subs[0], relations: [...(subs[0].relations ?? []), rel('hasPart', 'businessprocess:customer/plan')] };
+  const g = () => new ContinuityGraph(subs, DEFAULTS);
+  it('inherit criticality, RPO/RTO and dependencies from their parents', () => {
+    expect(g().lineage('businessprocess:customer/plan-fast')).toEqual(['businessprocess:customer/plan-fast', 'businessprocess:customer/plan', 'businessprocess:customer/repair']);
+    expect(g().need('businessprocess:customer/plan')).toEqual({ criticality: 'critical', rpo: 15, rto: 240 });
+    expect(g().need('businessprocess:customer/plan-fast')).toEqual({ criticality: 'critical', rpo: 5, rto: 240 });
+    expect(g().chain('businessprocess:customer/plan')).toEqual(g().chain('businessprocess:customer/repair'));
+    expect(g().subprocesses('businessprocess:customer/repair')).toEqual(['businessprocess:customer/plan']);
+  });
+  it('the parent chain does not take its sub-processes as dependencies', () => {
+    expect(g().dependencies('businessprocess:customer/repair')).toEqual(['system:default/shop']);
+  });
+  it('are checked down their inherited chain', () => {
+    const c = checkProcess(g(), 'businessprocess:customer/plan-fast')!;
+    expect(c.requirement).toEqual({ criticality: 'critical', rpo: '5m', rto: '4h', from: ['businessprocess:customer/plan-fast'] });
+    expect(c.elements.find(e => e.ref === 'component:default/shop-oneke')!.gap).toEqual([{ field: 'rpo', needs: '5m', delivers: '15m' }]);
+  });
+  it('the processes above an element: the top ones and the sub-processes that say something of their own', () => {
+    expect(g().listedProcesses().sort()).toEqual(['businessprocess:customer/invoice', 'businessprocess:customer/plan-fast', 'businessprocess:customer/repair']);
+    expect(continuityOf(g(), 'component:default/shop-oneke').requirement!.rpo).toBe('5m');
+  });
+});
+
+describe('the business impact analysis in the check', () => {
+  const bia = (spec: Record<string, unknown>): MapEntity[] =>
+    ENTITIES.map(e => (e.metadata.name === 'repair' && e.kind === 'BusinessProcess' ? { ...e, spec: { ...e.spec, ...spec } } : e));
+  it('says when the RTO is above the MTPD', () => {
+    const c = checkProcess(new ContinuityGraph(bia({ mtpd: '2h' }), DEFAULTS), 'businessprocess:customer/repair')!;
+    expect(c.issues).toEqual([{ key: 'rto-above-mtpd', rto: '4h', mtpd: '2h' }]);
+    expect(checkProcess(new ContinuityGraph(bia({ mtpd: '8h' }), DEFAULTS), 'businessprocess:customer/repair')!.issues).toBeUndefined();
+    expect(checkProcess(graph(), 'businessprocess:customer/repair')!.issues).toBeUndefined();
+  });
+});
+

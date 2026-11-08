@@ -6,6 +6,7 @@ import { useRq } from '../../theme/consoleTheme';
 /** The views of the business map; each keeps the customer picked (?ns=) when moving to another. */
 export const BUSINESS_MAP_VIEWS: Array<{ key: string; path: string }> = [
   { key: 'bm.view.map', path: '/console/business-map' },
+  { key: 'bm.view.explorer', path: '/console/business-map/explorer' },
   { key: 'bm.view.heat', path: '/console/business-map/heat' },
   { key: 'bm.view.glass', path: '/console/business-map/glass' },
   { key: 'bm.view.matrix', path: '/console/business-map/matrix' },
@@ -24,7 +25,7 @@ export function useCustomer(): [string | undefined, (ns: string) => void] {
   return [ns, set];
 }
 
-/** Map · Heat map · Glass · Matrix: the view tabs on every business map page. */
+/** Map · Explorer · Heat map · Glass · Matrix: the view tabs on every business map page. */
 export const BusinessMapTabs = () => {
   const { t } = useI18n();
   const rq = useRq();

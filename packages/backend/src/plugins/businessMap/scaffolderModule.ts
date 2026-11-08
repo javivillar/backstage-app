@@ -1,9 +1,10 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { coreServices, createBackendModule } from '@backstage/backend-plugin-api';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { createTemplateAction, scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
 import { copyDrafts, type CurrentFile, plan } from './importModel';
+import { GitHubFiles } from '../clusterVms';
 import { currentFiles, dirOf, type ImportDeps, type ImportInput, modelFromCatalog, NAMESPACE, prepare, previewOf } from './prepareImport';
 
 /**
@@ -11,7 +12,8 @@ import { currentFiles, dirOf, type ImportDeps, type ImportInput, modelFromCatalo
  *   refresquito:business-model:preview  what an import would do, without writing anything
  *   refresquito:business-model:import   writes catalog/business-map/<namespace>/*.yaml into the workspace
  *   refresquito:business-model:adopt    copies level-1 categories of a ReferenceModel into a customer namespace
- * The next step of the template publishes the workspace as a pull request on refresquito-services. The current files
+ *   refresquito:business-model:pull-request  the files written, as ONE commit and a pull request on refresquito-services
+ * (publish:github:pull-request makes a request per file, too slow for thousands of entities). The current files
  * of the namespace are read from its main branch (the GitHub token of the backend) for the reimport rules. What they read
  * and plan is prepareImport.ts, shared with the route POST /api/business-map/import/preview (previewRouter.ts).
  */
@@ -35,13 +37,13 @@ function createImportLikeAction(deps: Deps, write: boolean) {
       : 'Reads a business model file (APQC PCF, the Refresquito template or an own layout) and says what an import would do. Writes nothing.',
     schema: {
       input: {
-        source: z => z.enum(['apqc', 'template', 'own']).describe('apqc, the Refresquito template, or an own layout'),
+        source: z => z.enum(['apqc', 'template', 'own', 'bia']).describe('apqc, the Refresquito template, an own layout, or bia (the filled sheet of a business impact analysis: updates only)'),
         file: z => z.string().describe('The uploaded file, a data URL (base64)'),
         fileName: z => z.string().optional(),
         sheet: z => z.union([z.string(), z.number()]).optional().describe('The sheet of an .xlsx, by name or number'),
         namespace: z => z.string().describe('The customer namespace (e.g. occar-a400m)'),
         owner: z => z.string().optional().describe('Owner of the domains and of the processes without one'),
-        mapping: z => z.record(z.string()).optional().describe('Column (header name or letter) of id, title, parent, level, owner, criticality, rpo, rto, retention, applications'),
+        mapping: z => z.record(z.string()).optional().describe('Column (header name or letter) of id, title, description, parent, level, owner, criticality, rpo, rto, retention, applications'),
         valueMapping: z => z.object({ criticality: z.record(z.string()).optional() }).optional(),
         keepFrom: z => z.string().optional().describe('A ReferenceModel whose support categories to keep'),
         industry: z => z.string().optional(),
@@ -79,7 +81,7 @@ export const createImportAction = (deps: Deps) => createImportLikeAction(deps, t
 export function createAdoptAction(deps: Deps) {
   return createTemplateAction({
     id: 'refresquito:business-model:adopt',
-    description: 'Copies level-1 categories of a ReferenceModel (their subdomains and processes) into a customer namespace, keeping apqc.org/pcf-id.',
+    description: 'Copies level-1 categories of a ReferenceModel (their subdomains, processes and sub-processes) into a customer namespace, keeping apqc.org/pcf-id.',
     schema: {
       input: {
         model: z => z.string().describe('The ReferenceModel (referencemodel:default/<name>)'),
@@ -105,6 +107,43 @@ export function createAdoptAction(deps: Deps) {
   });
 }
 
+/** The pull request of what import or adopt wrote: every file of catalog/business-map/<namespace>/ in one commit. */
+export function createPullRequestAction(deps: Deps) {
+  return createTemplateAction({
+    id: 'refresquito:business-model:pull-request',
+    description: 'Opens a pull request on refresquito-services with the files of catalog/business-map/<namespace>/ of the workspace, in one commit.',
+    schema: {
+      input: {
+        namespace: z => z.string().describe('The customer namespace'),
+        branchName: z => z.string().describe('Prefix of the branch (a suffix makes it unique)'),
+        title: z => z.string(),
+        description: z => z.string().optional(),
+      },
+      output: {
+        remoteUrl: z => z.string(),
+        pullRequestNumber: z => z.number(),
+      },
+    },
+    async handler(ctx) {
+      const { input } = ctx;
+      if (!NAMESPACE.test(input.namespace)) throw new Error(`${input.namespace} is not a namespace (lowercase letters, digits and "-").`);
+      const dir = dirOf(input.namespace);
+      const names = (await readdir(join(ctx.workspacePath, dir))).filter(n => /\.ya?ml$/.test(n));
+      if (!names.length) throw new Error(`Nothing written in ${dir}: nothing to propose.`);
+      const changes = await Promise.all(names.map(async n => ({ path: `${dir}/${n}`, text: await readFile(join(ctx.workspacePath, dir, n), 'utf8') })));
+      const token = deps.config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
+      const repo = deps.config.getOptionalString('businessMap.repo') ?? deps.config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services';
+      const gh = new GitHubFiles(repo, deps.config.getOptionalString('businessMap.branch') ?? 'main', token);
+      const branch = `${input.branchName.replace(/[^A-Za-z0-9._/-]/g, '-')}-${Date.now().toString(36)}`;
+      ctx.logger.info(`business model ${input.namespace}: ${changes.length} files in one commit on ${repo} ${branch}`);
+      const pr = await gh.pullRequestInOneCommit(branch, input.title, input.description ?? '', changes);
+      ctx.output('remoteUrl', pr.url);
+      ctx.output('pullRequestNumber', pr.number);
+      ctx.logger.info(`business model ${input.namespace}: pull request #${pr.number} ${pr.url}`);
+    },
+  });
+}
+
 export const businessMapScaffolderModule = createBackendModule({
   pluginId: 'scaffolder',
   moduleId: 'business-map',
@@ -113,7 +152,7 @@ export const businessMapScaffolderModule = createBackendModule({
       deps: { scaffolder: scaffolderActionsExtensionPoint, config: coreServices.rootConfig, catalog: catalogServiceRef },
       async init({ scaffolder, config, catalog }) {
         const deps = { config, catalog };
-        scaffolder.addActions(createPreviewAction(deps), createImportAction(deps), createAdoptAction(deps));
+        scaffolder.addActions(createPreviewAction(deps), createImportAction(deps), createAdoptAction(deps), createPullRequestAction(deps));
       },
     });
   },

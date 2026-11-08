@@ -11,6 +11,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Badge } from './Badge';
 import { classify, consoleEntityPath } from './classify';
+import { catalogueCategory, LAYER_INFO } from './depsModel';
 import { rq } from './tokens';
 import { useI18n } from '../i18n';
 import { useRq } from '../theme/consoleTheme';
@@ -89,7 +90,10 @@ const kindBadge = (e: Entity) => {
   const k = classify(e);
   if (k === 'business' && e.kind === 'System') return <Badge label="Business service" bg={rq.biz.bg} fg={rq.biz.fg} />;
   if (k === 'business') return <Badge label="Business application" bg={rq.biz.bg} fg={rq.biz.fg} />;
-  if (k === 'service') return <Badge label="Refresquito service" bg={rq.svc.bg} fg={rq.svc.fg} />;
+  if (k === 'service') {
+    const layer = catalogueCategory(e);
+    return <Badge label={LAYER_INFO[layer && layer !== 'business' ? layer : 'ops'].label} bg={rq.svc.bg} fg={rq.svc.fg} />;
+  }
   if (k === 'development') return <Badge label="Development service" bg={rq.svc.bg} fg={rq.svc.fg} />;
   return <Badge label={e.kind} outlined />;
 };

@@ -8,6 +8,8 @@ import type {
   MapDomain,
   MapProcess,
   ModelSummary,
+  Origin,
+  Workaround,
 } from '../../businessMap';
 
 /**
@@ -88,6 +90,68 @@ export function mapBlocks(map: Pick<MapData, 'domains' | 'processes'>, gapsOnly 
   const lost = shown.filter(p => !byRef.has(p.domain));
   if (lost.length) blocks.push({ subs: [{ processes: lost }], count: lost.length });
   return gapsOnly ? blocks.filter(b => b.count) : blocks;
+}
+
+/** A process with its sub-processes, as the page of a process lists them. */
+export type ProcessNode = { process: MapProcess; children: ProcessNode[] };
+
+/**
+ * The sub-processes of a process as a tree (by their parent), in the order of their IDs; a loop or a missing parent
+ * stops a branch.
+ */
+export function subprocessTree(processes: MapProcess[], ref: string): ProcessNode[] {
+  const byParent = new Map<string, MapProcess[]>();
+  for (const p of processes) {
+    if (!p.parent) continue;
+    if (!byParent.has(p.parent)) byParent.set(p.parent, []);
+    byParent.get(p.parent)!.push(p);
+  }
+  const id = (p: MapProcess) => p.pcfId ?? p.modelId ?? p.title;
+  const order = (a: MapProcess, b: MapProcess) => id(a).localeCompare(id(b), undefined, { numeric: true });
+  const seen = new Set<string>([ref]);
+  const grow = (at: string): ProcessNode[] =>
+    (byParent.get(at) ?? [])
+      .filter(c => !seen.has(c.ref))
+      .sort(order)
+      .map(c => {
+        seen.add(c.ref);
+        return { process: c, children: grow(c.ref) };
+      });
+  return grow(ref);
+}
+
+/** Where a value of the requirement comes from, as the panels say it (the default of the criticality, the process,
+ *  or a parent process). */
+export function originText(t: (k: string, v?: Vars) => string, o: Origin, criticality: string): string {
+  if (o === 'override') return t('bm.from.override');
+  if (o === 'inherited') return t('bm.from.inherited');
+  return t('bm.from.default', { criticality: t(`bm.crit.${criticality}`) });
+}
+
+/** A workaround as a card says it: yes, up to 1d / no / — when the analysis says nothing. */
+export function workaroundText(t: (k: string, v?: Vars) => string, w: Workaround | undefined): string {
+  if (!w) return '—';
+  if (!w.manual) return t('bmp.workaround.no');
+  return w.maxDuration ? t('bmp.workaround.upTo', { d: w.maxDuration }) : t('bmp.workaround.yes');
+}
+
+/** The path of the BIA sheet of a customer (GET /api/business-map/bia), of one level-1 domain (its name) if given. */
+export function biaPath(namespace: string, domain?: string, level: '3' | 'all' = '3'): string {
+  const q = new URLSearchParams({ namespace });
+  if (domain) q.set('domain', domain);
+  if (level === 'all') q.set('level', 'all');
+  return `/bia?${q.toString()}`;
+}
+
+/** How many processes a tree holds. */
+export const treeSize = (nodes: ProcessNode[]): number => nodes.reduce((n, x) => n + 1 + treeSize(x.children), 0);
+
+/** A process and its parents up to its top process, top first (the crumbs of a sub-process). */
+export function parentsOf(processes: MapProcess[], p: MapProcess): MapProcess[] {
+  const byRef = new Map(processes.map(x => [x.ref, x]));
+  const out: MapProcess[] = [];
+  for (let at = p.parent ? byRef.get(p.parent) : undefined; at && !out.includes(at) && at !== p; at = at.parent ? byRef.get(at.parent) : undefined) out.unshift(at);
+  return out;
 }
 
 export type MapStats = { processes: number; critical: number; gaps: number; unowned: number; model?: ModelSummary };

@@ -1,5 +1,5 @@
 import { deflateRawSync } from 'node:zlib';
-import { columnOf, parseCsv, readUpload, readXlsx } from './sheets';
+import { columnOf, parseCsv, readUpload, readXlsx, compactSheet, writeXlsx, crc32, columnName } from './sheets';
 
 /** A tiny zip writer for the tests: deflated entries, CRC left 0 (the reader does not check it). */
 function zip(files: Record<string, string>): Buffer {
@@ -97,3 +97,50 @@ describe('readUpload', () => {
     expect(() => readUpload(`data:application/vnd.ms-excel;base64,${Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0]).toString('base64')}`, 'old.xls')).toThrow('.xls');
   });
 });
+
+describe('compactSheet', () => {
+  it('reads back as the same sheet: its name, row numbers, cells with commas, quotes and line breaks', () => {
+    const sheet = {
+      name: 'Combined',
+      rows: [
+        { n: 1, cells: ['PCF ID', 'Hierarchy ID', 'Name'] },
+        { n: 2, cells: ['10002', '1.0', 'Develop Vision, and "Strategy"'] },
+        { n: 5, cells: ['10017', '1.1.1', ''] },
+        // a cell with a line break takes two lines of the CSV: the rows after it are numbered one more
+        { n: 6, cells: ['10014', '1.1', 'Two\nlines'] },
+      ],
+    };
+    const back = readUpload(compactSheet(sheet, 'PCF Cross Industry.xlsx'));
+    expect(back.format).toBe('csv');
+    expect(back.fileName).toBe('PCF Cross Industry.xlsx');
+    // empty cells at the end of a row are left out
+    const trimmed = sheet.rows.map(r => ({ n: r.n, cells: r.n === 5 ? ['10017', '1.1.1'] : r.cells }));
+    expect(back.sheets).toEqual([{ name: 'Combined', rows: trimmed }]);
+  });
+  it('leaves out the formatted empty cells up to the far right of a sheet', () => {
+    const wide = { name: 'S', rows: [{ n: 1, cells: ['ID', 'Title', ...Array(16000).fill('')] }, { n: 2, cells: ['1.0', 'A', ...Array(16000).fill('')] }] };
+    expect(compactSheet(wide, 'w.xlsx').length).toBeLessThan(200);
+  });
+});
+
+describe('writeXlsx', () => {
+  it('writes a workbook the reader reads back: sheets, cells, empty cells, XML characters', () => {
+    const buf = writeXlsx([
+      { name: 'BIA', header: true, widths: [10, 40], rows: [['ID', 'Process', 'Notes'], ['6.3.2', 'Repair <fast> & "well"', ''], ['6.3.3', '', 'Línea\ndos']] },
+      { name: 'Guide', rows: [['Criticality', 'critical, important, standard']] },
+    ]);
+    const sheets = readXlsx(buf);
+    expect(sheets.map(s => s.name)).toEqual(['BIA', 'Guide']);
+    expect(sheets[0].rows).toEqual([
+      { n: 1, cells: ['ID', 'Process', 'Notes'] },
+      { n: 2, cells: ['6.3.2', 'Repair <fast> & "well"'] },
+      { n: 3, cells: ['6.3.3', '', 'Línea\ndos'] },
+    ]);
+    expect(sheets[1].rows[0].cells[1]).toBe('critical, important, standard');
+  });
+  it('the CRC-32 and the column names', () => {
+    expect(crc32(Buffer.from('123456789'))).toBe(0xcbf43926);
+    expect([columnName(0), columnName(25), columnName(26), columnName(27), columnName(701), columnName(702)]).toEqual(['A', 'Z', 'AA', 'AB', 'ZZ', 'AAA']);
+  });
+});
+

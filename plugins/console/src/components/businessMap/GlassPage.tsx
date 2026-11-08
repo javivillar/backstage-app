@@ -1,6 +1,10 @@
 import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { useMemo, useState } from 'react';
@@ -8,7 +12,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { consoleEntityPath } from '../classify';
 import { GlassBands } from '../DependencyExplorer';
-import { BUSINESS_LAYERS, type DepNodeModel, glassFor, LAYER_INFO, layerY, stackLayout } from '../depsModel';
+import { BUSINESS_LAYERS, buildGraph, type DepNodeModel, glassFor, LAYER_INFO, layerY, stackLayout } from '../depsModel';
 import { choose, EmptyState, Pill, TitleRow, type Tone } from '../ui';
 import { BusinessMapTabs } from './BusinessMapTabs';
 import { type Dot, Legend, NamespacePicker, Segmented, useDots } from './DashboardParts';
@@ -16,6 +20,7 @@ import { useBusinessData, useNamespaceParam } from './dashboardData';
 import {
   affectedBy,
   type BusinessGraph,
+  businessGraph,
   continuityOf,
   criticalityOf,
   deliversOf,
@@ -24,9 +29,11 @@ import {
   healthOfNode,
   litOf,
   needsOf,
+  normRef,
   radiusOf,
   supportOf,
 } from './glassModel';
+import { appMatcher, CRIT_FILTERS, type CritFilter, GLASS_LEVELS, type GlassLevel, glassView, readGlassParams, writeGlassParams } from './glassViewModel';
 
 type GlassLens = 'criticality' | 'continuity' | 'framework' | 'health';
 const GLASS_LENSES: GlassLens[] = ['criticality', 'continuity', 'framework', 'health'];
@@ -38,6 +45,8 @@ const LEGENDS: Record<GlassLens, Array<[Dot, string]>> = {
 };
 const critTone: Record<string, Tone> = { critical: 'neg', important: 'warn', standard: 'neu' };
 const BUSINESS = new Set(['dom', 'proc', 'biz']);
+/** at most this many level-1 domains picked at once (the glass stays readable) */
+const MAX_DOMAINS = 3;
 const cut = (s: string, n = 24) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** the dot of a node under a lens */
@@ -60,6 +69,10 @@ function dotOf(lens: GlassLens, g: BusinessGraph, id: string, now: number): Dot 
  * services and their pro instances, platform and development services, infrastructure). Colour by criticality
  * (inherited down), continuity (a gap flows up), framework support or health; the size of a service is its blast
  * radius. Picking a node lights its chain up and down; the panel lists the processes that stop if it fails.
+ *
+ * A big model (an APQC PCF) is cut down first (glassViewModel): only what is linked to applications, a level of detail
+ * (domains / subdomains / processes; a click on a domain or a process opens it), level-1 domains, criticality and a
+ * search of a process or an application. The view is in the URL, to share it.
  */
 export const BusinessGlassPage = () => {
   const { t } = useI18n();
@@ -68,18 +81,32 @@ export const BusinessGlassPage = () => {
   const muted = theme.palette.text.secondary;
   const paper = theme.palette.background.paper;
   const [namespace, setNamespace] = useNamespaceParam();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const data = useBusinessData(namespace);
+  const ns = data.full?.namespace ?? namespace ?? '';
+  const opts = useMemo(() => readGlassParams(params, ns), [params, ns]);
+  const setOpts = (o: Partial<typeof opts>) => setParams(writeGlassParams(params, { ...opts, ...o }), { replace: true });
+  const [search, setSearch] = useState(opts.search);
+  // the catalog alone, for the search of an application anywhere in a chain
+  const catalogGraph = useMemo(() => buildGraph(data.catalog, data.health), [data.catalog, data.health]);
+  const appMatch = useMemo(
+    () => (data.full ? appMatcher(data.full, catalogGraph.nodes.map(n => ({ id: n.id, label: n.label, name: n.entity.metadata.name })), catalogGraph.links, opts.search) : undefined),
+    [data.full, catalogGraph, opts.search],
+  );
+  const view = useMemo(
+    () => (data.full ? glassView(data.full, { ...opts, appMatch }, (kind, n) => t(`bmd.glass.group.${kind}`, { n })) : undefined),
+    [data.full, opts, appMatch, t],
+  );
+  const graph = useMemo(() => (view ? businessGraph(view.map, data.catalog, data.health) : undefined), [view, data.catalog, data.health]);
   const [lens, setLens] = useState<GlassLens>('criticality');
   const [picked, setPicked] = useState<string | null | undefined>();
   const [now] = useState(() => Date.now());
-  const { graph } = data;
   const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS) : new Map<string, { x: number; y: number }>()), [graph]);
 
   const crumbs: Array<[string, string?]> = [[t('nav.portal'), '/console'], [t('bmd.crumb'), '/console/business-map'], [t('bmd.glass.title')]];
   const title = namespace ? `${t('bmd.glass.title')} · ${namespace}` : t('bmd.glass.title');
   if (data.loading) return <Progress />;
-  if (!data.map || !graph) {
+  if (!data.full || !graph || !view) {
     return (
       <Box>
         <TitleRow crumbs={crumbs} title={title} />
@@ -96,13 +123,49 @@ export const BusinessGlassPage = () => {
   const g = glassFor(BUSINESS_LAYERS);
   const box = { x0: -g.halfTop - 80, x1: g.halfTop + 80, y0: g.top - 120, y1: layerY('ext', BUSINESS_LAYERS) + 120 };
   const toggle = (id: string) => setPicked(sel === id ? null : id);
+  const fullProcs = new Map(data.full.processes.map(p => [normRef(p.ref), p]));
+  const openOrClose = (id: string) => {
+    const open = new Set(opts.open);
+    if (open.has(id)) open.delete(id);
+    else open.add(id);
+    setOpts({ open });
+  };
+  /** a click: a folded group opens its domain; a domain, or a process with sub-processes, opens or closes; any picks */
+  const click = (n: DepNodeModel) => {
+    const group = view.groups.get(n.id);
+    if (group?.kind === 'folded') {
+      setOpts({ open: new Set([...opts.open, group.scope]) });
+      return;
+    }
+    if (n.layer === 'dom' && !opts.search) openOrClose(n.id);
+    else if (n.layer === 'proc' && fullProcs.get(n.id)?.subprocesses?.length && !opts.search) openOrClose(n.id);
+    toggle(n.id);
+  };
+  const roots = data.full.domains.filter(d => !d.parent);
+  const folded = [...view.groups.values()].reduce((x, gr) => x + gr.members.length, 0);
+
+  /** a framework line a square; a group of processes a dashed box (without applications: no fill, no edges); else a circle */
+  const shapeOf = (n: DepNodeModel) => {
+    const r = radiusOf(graph, n.id);
+    const fill = dots[dotOf(lens, graph, n.id, now)];
+    const on = n.id === sel;
+    const stroke = on ? theme.palette.secondary.main : paper;
+    const group = view.groups.get(n.id);
+    if (group) {
+      return (
+        <rect x={-r * 1.6} y={-r * 0.8} width={r * 3.2} height={r * 1.6} rx={10} fill={group.kind === 'unlinked' ? paper : fill} stroke={on ? stroke : muted} strokeWidth={on ? 6 : 3} strokeDasharray="10 7" />
+      );
+    }
+    if (n.layer === 'fwk') return <rect x={-r} y={-r} width={2 * r} height={2 * r} rx={12} fill={fill} stroke={stroke} strokeWidth={on ? 6 : 3} />;
+    const opened = opts.open.has(n.id);
+    return <circle r={r} fill={fill} stroke={opened && !on ? muted : stroke} strokeWidth={on ? 6 : 3} strokeDasharray={opened && !on ? '6 5' : undefined} />;
+  };
 
   const node = (n: DepNodeModel) => {
     const p = pos.get(n.id);
     if (!p) return null;
     const r = radiusOf(graph, n.id);
     const dim = !!lit && !lit.has(n.id);
-    const fill = dots[dotOf(lens, graph, n.id, now)];
     const blast = graph.above.get(n.id)?.length ?? 0;
     const on = n.id === sel;
     return (
@@ -113,21 +176,17 @@ export const BusinessGlassPage = () => {
         tabIndex={0}
         aria-pressed={on}
         aria-label={n.label}
-        onClick={() => toggle(n.id)}
+        onClick={() => click(n)}
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            toggle(n.id);
+            click(n);
           }
         }}
         style={{ cursor: 'pointer', outline: 'none' }}
         opacity={dim ? 0.25 : 1}
       >
-        {n.layer === 'fwk' ? (
-          <rect x={-r} y={-r} width={2 * r} height={2 * r} rx={12} fill={fill} stroke={on ? theme.palette.secondary.main : paper} strokeWidth={on ? 6 : 3} />
-        ) : (
-          <circle r={r} fill={fill} stroke={on ? theme.palette.secondary.main : paper} strokeWidth={on ? 6 : 3} />
-        )}
+        {shapeOf(n)}
         {!BUSINESS.has(n.layer) && blast > 0 && (
           <text textAnchor="middle" y={8} fill="#fff" stroke="#000" strokeOpacity={0.35} strokeWidth={3} paintOrder="stroke" style={{ fontWeight: 700, fontSize: 22 }}>
             {blast}
@@ -149,6 +208,42 @@ export const BusinessGlassPage = () => {
       );
     }
     const id = selected.id;
+    const group = view.groups.get(id);
+    if (group) {
+      const members = group.members.map(m => fullProcs.get(m)).filter((p): p is NonNullable<typeof p> => !!p);
+      return (
+        <>
+          <Box>
+            <Box sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>{graph.byId.get(group.scope)?.label ?? ''}</Box>
+            <Typography variant="h6" component="h2">
+              {selected.label}
+            </Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {t(`bmd.glass.group.${group.kind}.text`)}
+          </Typography>
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 0.5, maxHeight: 420, overflowY: 'auto' }}>
+            {members.slice(0, 200).map(p => (
+              <Box component="li" key={p.ref} sx={{ fontSize: 13 }}>
+                <Link to={`/console/entity/${p.namespace}/businessprocess/${p.name}`}>{p.pcfId || p.modelId ? `${p.pcfId ?? p.modelId} ${p.title}` : p.title}</Link>
+              </Box>
+            ))}
+          </Box>
+          {members.length > 200 && (
+            <Typography variant="caption" color="text.secondary">
+              {t('bmd.glass.group.more', { n: members.length - 200 })}
+            </Typography>
+          )}
+          {group.kind === 'unlinked' && (
+            <Box>
+              <Button size="small" variant="outlined" onClick={() => setOpts({ linked: false, open: new Set([...opts.open, group.scope]) })}>
+                {t('bmd.glass.group.showAll')}
+              </Button>
+            </Box>
+          )}
+        </>
+      );
+    }
     const crit = criticalityOf(graph, id);
     const proc = graph.processes.get(id);
     const cont = continuityOf(graph, id);
@@ -222,13 +317,56 @@ export const BusinessGlassPage = () => {
 
   return (
     <Box>
-      <TitleRow crumbs={crumbs} title={title} sub={t('bmd.glass.sub')} actions={<NamespacePicker namespaces={data.map.namespaces} value={namespace} onChange={setNamespace} />} />
+      <TitleRow crumbs={crumbs} title={title} sub={t('bmd.glass.sub')} actions={<NamespacePicker namespaces={data.full.namespaces} value={namespace} onChange={setNamespace} />} />
       <BusinessMapTabs />
+      <Box role="search" aria-label={t('bmd.glass.filters')} sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', alignItems: 'center', py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+        <FormControlLabel control={<Switch checked={opts.linked} onChange={e => setOpts({ linked: e.target.checked })} />} label={t('bmd.glass.linked')} />
+        <Segmented<GlassLevel> label={t('bmd.glass.detail')} options={GLASS_LEVELS.map(k => [k, t(`bmd.glass.detail.${k}`)])} value={opts.level} onChange={v => setOpts({ level: v, open: new Set() })} />
+        <Segmented<CritFilter> label={t('bmd.glass.crit')} options={CRIT_FILTERS.map(k => [k, t(`bmd.glass.crit.${k}`)])} value={opts.critical} onChange={v => setOpts({ critical: v })} />
+        <Box
+          component="form"
+          onSubmit={e => {
+            e.preventDefault();
+            setOpts({ search });
+          }}
+          sx={{ display: 'flex', gap: 1, alignItems: 'center' }}
+        >
+          <TextField size="small" type="search" label={t('bmd.glass.find')} value={search} onChange={e => setSearch(e.target.value)} onBlur={() => search !== opts.search && setOpts({ search })} sx={{ minWidth: 240 }} />
+        </Box>
+        <Box role="group" aria-label={t('bmd.glass.domains')} sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Chip size="small" label={t('bmd.glass.domains.all')} color={opts.domains.size ? 'default' : 'primary'} onClick={() => setOpts({ domains: new Set() })} />
+          {roots.map(d => {
+            const ref = normRef(d.ref);
+            const on = opts.domains.has(ref);
+            const full = !on && opts.domains.size >= MAX_DOMAINS;
+            return (
+              <Chip
+                key={ref}
+                size="small"
+                label={d.pcfId || d.modelId ? `${d.pcfId ?? d.modelId} ${cut(d.title, 28)}` : cut(d.title, 28)}
+                title={full ? t('bmd.glass.domains.max', { n: MAX_DOMAINS }) : d.title}
+                color={on ? 'primary' : 'default'}
+                variant={on ? 'filled' : 'outlined'}
+                disabled={full}
+                onClick={() => {
+                  const next = new Set(opts.domains);
+                  if (on) next.delete(ref);
+                  else next.add(ref);
+                  setOpts({ domains: next });
+                }}
+              />
+            );
+          })}
+        </Box>
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ pt: 1 }}>
+        {t('bmd.glass.status', { n: view.drawn, total: data.full.domains.length + data.full.processes.length, folded })}
+      </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', alignItems: 'center', justifyContent: 'space-between', py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
         <Segmented label={t('bmd.colourBy')} options={GLASS_LENSES.map(k => [k, t(`bmd.glens.${k}`)])} value={lens} onChange={setLens} />
         <Legend items={LEGENDS[lens].map(([d, key]) => ({ bg: dots[d], text: t(key), round: true }))} note={t('bmd.glass.legendNote')} />
       </Box>
-      {!graph.processes.size ? (
+      {!graph.processes.size && !graph.nodes.length ? (
         <EmptyState title={t('bmd.noProcesses')}>{t('bmd.noProcesses.hint')}</EmptyState>
       ) : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start' }}>

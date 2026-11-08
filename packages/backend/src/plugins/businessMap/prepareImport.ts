@@ -2,7 +2,6 @@ import type { BackstageCredentials } from '@backstage/backend-plugin-api';
 import type { Config } from '@backstage/config';
 import type { CatalogService } from '@backstage/plugin-catalog-node';
 import { parseAllDocuments } from 'yaml';
-import { GitHubFiles } from '../clusterVms';
 import {
   A,
   API_VERSION,
@@ -24,7 +23,10 @@ import {
   supportCategories,
   type ValueMapping,
 } from './importModel';
-import { readUpload, type Sheet } from './sheets';
+import { pickBiaSheet, planBia } from './biaModel';
+import { readFolder } from './githubFolder';
+import { compactSheet, readUpload, type Sheet } from './sheets';
+import { resolveUpload, stageUpload } from './uploads';
 
 /**
  * What an import of a business model reads and plans, shared by the scaffolder actions (scaffolderModule.ts:
@@ -53,12 +55,12 @@ export type ImportInput = {
 export type ImportDeps = { config: Config; catalog: CatalogService };
 
 /** The files of a namespace's folder in refresquito-services main ([] when it does not exist yet). */
-export async function currentFiles(config: Config, namespace: string): Promise<CurrentFile[]> {
+export async function currentFiles(config: Config, namespace: string, fetchFn: typeof fetch = fetch): Promise<CurrentFile[]> {
   const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
   const repo = config.getOptionalString('businessMap.repo') ?? config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services';
-  const gh = new GitHubFiles(repo, config.getOptionalString('businessMap.branch') ?? 'main', token);
-  const list = (await gh.list(dirOf(namespace))).filter(f => /\.ya?ml$/.test(f.name));
-  return Promise.all(list.map(async f => ({ path: f.path, text: (await gh.get(f.path)).text })));
+  const branch = config.getOptionalString('businessMap.branch') ?? 'main';
+  // ONE GraphQL query for the whole folder (githubFolder.ts, shared with the entity provider of the catalog)
+  return readFolder({ repo, branch, token }, dirOf(namespace), 1, fetchFn);
 }
 
 const refOf = (e: { kind: string; metadata: { name: string; namespace?: string } }) => `${e.kind}:${e.metadata.namespace ?? 'default'}/${e.metadata.name}`.toLowerCase();
@@ -96,7 +98,8 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     current = await currentFiles(deps.config, input.namespace);
   } catch (e) {
     // an import that cannot see the current files would overwrite them: only the preview goes on
-    if (strict) throw new Error(`Cannot read ${dirOf(input.namespace)} of refresquito-services: ${(e as Error).message}`);
+    // the analysis only updates what is there: without the current files every row would be an error
+    if (strict || input.source === 'bia') throw new Error(`Cannot read ${dirOf(input.namespace)} of refresquito-services: ${(e as Error).message}`);
     warnings.push({ message: `The current files could not be read (${(e as Error).message}): shown as a first import.` });
   }
   const oldModel = current
@@ -115,12 +118,23 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     }
   }
 
-  const upload = readUpload(input.file, input.fileName);
+  const upload = readUpload(resolveUpload(input.file), input.fileName);
   const sheet = pickSheet(upload.sheets, { ...input, mapping });
   const [groups, others] = await Promise.all([
     deps.catalog.getEntities({ filter: { kind: 'group' }, fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
     deps.catalog.getEntities({ filter: [{ kind: 'system' }, { kind: 'component' }, { kind: 'resource' }], fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
   ]);
+  if (input.source === 'bia') {
+    // the analysis only updates what is there: no ReferenceModel, no new entity, nothing marked gone
+    const biaSheet = input.sheet !== undefined && input.sheet !== '' ? sheet : pickBiaSheet(upload.sheets);
+    const b = planBia(biaSheet.rows, current, {
+      namespace: input.namespace,
+      dir: dirOf(input.namespace),
+      knownGroups: new Set(groups.items.map(refOf)),
+      knownEntities: new Set(others.items.map(refOf)),
+    });
+    return { parsed: { drafts: [] as Draft[], errors: b.errors, warnings: b.warnings }, planned: b.planned, warnings: [...warnings, ...b.warnings], upload, sheet: biaSheet };
+  }
   const parsed = parseRows(sheet.rows, {
     source: input.source,
     mapping,
@@ -170,22 +184,30 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     goneFamily: input.source === 'apqc' ? 'apqc' : 'model',
     model,
   });
-  return { parsed, planned, warnings: [...warnings, ...parsed.warnings] };
+  return { parsed, planned, warnings: [...warnings, ...parsed.warnings], upload, sheet };
 }
 
 /** What a preview answers (the outputs of refresquito:business-model:preview and the body of the route). */
-export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[] };
+export type Preview = {
+  counts: Counts;
+  errors: Issue[];
+  warnings: Issue[];
+  changes: Change[];
+  /** What the template gets in place of the file: a reference to the sheet read (compactSheet), held by Backstage. */
+  compact?: string;
+};
 
 /** The preview of an import: nothing is written; the current files that cannot be read are a warning. */
 export async function previewOf(input: ImportInput, deps: ImportDeps, credentials: BackstageCredentials, user: string | undefined): Promise<Preview> {
-  const { parsed, planned, warnings } = await prepare(input, deps, credentials, user, false);
-  return { counts: planned.counts, errors: parsed.errors, warnings, changes: planned.changes };
+  const { parsed, planned, warnings, upload, sheet } = await prepare(input, deps, credentials, user, false);
+  const compact = stageUpload(upload.format === 'xlsx' ? compactSheet(sheet, upload.fileName) : resolveUpload(input.file));
+  return { counts: planned.counts, errors: parsed.errors, warnings, changes: planned.changes, ...(compact ? { compact } : {}) };
 }
 
 /** A bad request body of the preview route (400). */
 export class InputError extends Error {}
 
-const SOURCES: Source[] = ['apqc', 'template', 'own'];
+const SOURCES: Source[] = ['apqc', 'template', 'own', 'bia'];
 const optString = (v: unknown, what: string): string | undefined => {
   if (v === undefined || v === null || v === '') return undefined;
   if (typeof v !== 'string') throw new InputError(`${what} is a string.`);
@@ -209,7 +231,7 @@ const stringMap = (v: unknown, what: string): Record<string, string> | undefined
  */
 export function readImportInput(body: unknown): ImportInput {
   const b = (body ?? {}) as Record<string, unknown>;
-  if (!SOURCES.includes(b.source as Source)) throw new InputError('source is apqc, template or own.');
+  if (!SOURCES.includes(b.source as Source)) throw new InputError('source is apqc, template, own or bia.');
   if (typeof b.file !== 'string' || !b.file) throw new InputError('file is the uploaded file, a data URL.');
   if (typeof b.namespace !== 'string' || !NAMESPACE.test(b.namespace)) throw new InputError('namespace is a namespace (lowercase letters, digits and "-").');
   let sheet: string | number | undefined;

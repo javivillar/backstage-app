@@ -6,6 +6,12 @@
  *
  * Only production counts: an element with refresquito.io/stage other than pro is left out of the chain, and so are the
  * framework lines and development services (they are not run time: no RPO/RTO of theirs is checked).
+ *
+ * A sub-process (spec.parentProcess) inherits from its parent chain what it does not say itself: criticality, rpo,
+ * rto, mtpd, retention, workaround and what it depends on. The check of a process also says when its RTO is above
+ * its MTPD (spec.mtpd, from the business impact analysis): a restore that ends after the business can bear it. The answers that list the processes above an element (continuity, impact)
+ * take the top processes and only the sub-processes that say something of their own, so one service does not list
+ * every activity of a process.
  */
 
 export type Criticality = 'critical' | 'important' | 'standard';
@@ -37,7 +43,9 @@ export type CheckElement = {
   result: Result;
   gap?: Array<{ field: 'rpo' | 'rto'; needs: string; delivers: string }>;
 };
-export type ProcessCheck = { process: string; requirement: Requirement; elements: CheckElement[] };
+/** Something wrong in the requirement itself (not in an element): an RTO above the MTPD. */
+export type RequirementIssue = { key: 'rto-above-mtpd'; rto: string; mtpd: string };
+export type ProcessCheck = { process: string; requirement: Requirement; elements: CheckElement[]; issues?: RequirementIssue[] };
 
 const MINUTE: Record<string, number> = {
   m: 1, min: 1, mins: 1, minute: 1, minutes: 1,
@@ -64,6 +72,15 @@ export function formatDuration(minutes: number): string {
 
 const fmt = (minutes: number | undefined) => (minutes === undefined ? null : formatDuration(minutes));
 
+/** A ref with kind and namespace filled in, lowercase as the catalog writes targetRef. */
+function refFrom(value: string, defaultKind: string, defaultNamespace: string): string {
+  const colon = value.indexOf(':');
+  const kind = colon > 0 ? value.slice(0, colon) : defaultKind;
+  const rest = colon > 0 ? value.slice(colon + 1) : value;
+  const slash = rest.indexOf('/');
+  return (slash >= 0 ? `${kind}:${rest}` : `${kind}:${defaultNamespace}/${rest}`).toLowerCase();
+}
+
 /** The entity reference of an entity, lowercase as the catalog writes targetRef. */
 export function refOf(e: MapEntity): string {
   return `${e.kind}:${e.metadata.namespace ?? 'default'}/${e.metadata.name}`.toLowerCase();
@@ -75,7 +92,7 @@ const KINDS = new Set(['system', 'component', 'resource']);
 const NOT_RUN_TIME = new Set(['framework-line', 'development-service']);
 const NOT_A_SERVICE_SYSTEM = new Set(['network-segment', 'development-services']);
 
-export type Need = { criticality: Criticality; rpo?: number; rto?: number };
+export type Need = { criticality: Criticality; rpo?: number; rto?: number; mtpd?: number };
 
 /** The catalog as a graph: who is under whom along the chain. */
 export class ContinuityGraph {
@@ -128,6 +145,56 @@ export class ContinuityGraph {
     return [...this.nodes.keys()].filter(r => r.startsWith('businessprocess:'));
   }
 
+  /** The parent process of a sub-process (its spec.parentProcess, as a ref), else undefined. */
+  parentProcess(ref: string): string | undefined {
+    const e = this.nodes.get(ref.toLowerCase());
+    const raw = e?.spec?.parentProcess;
+    if (typeof raw !== 'string' || !raw) return undefined;
+    const r = refFrom(raw, 'businessprocess', e!.metadata.namespace ?? 'default');
+    return r === ref.toLowerCase() ? undefined : r;
+  }
+
+  /** A process and its parents up to its top process, nearest first (a loop of parents stops). */
+  lineage(ref: string): string[] {
+    const out = [ref.toLowerCase()];
+    for (let up = this.parentProcess(out[0]); up && !out.includes(up) && this.nodes.has(up); up = this.parentProcess(up)) out.push(up);
+    return out;
+  }
+
+  /** The direct sub-processes of a process. */
+  subprocesses(ref: string): string[] {
+    return this.children(ref).filter(c => c.startsWith('businessprocess:') && this.parentProcess(c) === ref.toLowerCase());
+  }
+
+  /** A spec field of a process, or the nearest of its parents that says it. */
+  inherited(ref: string, field: string): unknown {
+    for (const r of this.lineage(ref)) {
+      const v = this.nodes.get(r)?.spec?.[field];
+      if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length)) return v;
+    }
+    return undefined;
+  }
+
+  /** What a process depends on itself (its dependsOn, not its domain nor its sub-processes); a sub-process without
+   *  any, those of its nearest parent with some. */
+  dependencies(ref: string): string[] {
+    for (const r of this.lineage(ref)) {
+      const own = this.children(r).filter(c => !c.startsWith('businessprocess:'));
+      if (own.length) return own;
+    }
+    return [];
+  }
+
+  /** The processes the answers listing processes above an element take: top processes, and sub-processes that say
+   *  their own criticality, rpo, rto or dependencies. */
+  listedProcesses(): string[] {
+    return this.processes().filter(p => {
+      if (!this.parentProcess(p)) return true;
+      const spec = this.nodes.get(p)?.spec ?? {};
+      return ['criticality', 'rpo', 'rto'].some(f => typeof spec[f] === 'string' && spec[f]) || this.children(p).some(c => !c.startsWith('businessprocess:'));
+    });
+  }
+
   /** Whether an element is part of a continuity chain: run time, production, a System, Component or Resource. */
   counts(ref: string): boolean {
     const e = this.nodes.get(ref);
@@ -146,7 +213,7 @@ export class ContinuityGraph {
     if (known) return known;
     const seen = new Set<string>([key]);
     const out: string[] = [];
-    let level = [...(this.down.get(key) ?? [])];
+    let level = key.startsWith('businessprocess:') ? this.dependencies(key) : [...(this.down.get(key) ?? [])];
     while (level.length) {
       const next: string[] = [];
       for (const ref of level) {
@@ -162,16 +229,18 @@ export class ContinuityGraph {
     return out;
   }
 
-  /** What a process needs: its own rpo/rto, else the default of its criticality. */
+  /** What a process needs: its own rpo/rto (or its nearest parent's), else the default of its criticality (its own,
+   *  else inherited). */
   need(process: string): Need | undefined {
     const e = this.nodes.get(process.toLowerCase());
-    const criticality = e?.spec?.criticality as Criticality | undefined;
+    const criticality = (e ? this.inherited(process, 'criticality') : undefined) as Criticality | undefined;
     if (!e || !criticality || !CRITICALITIES.includes(criticality)) return undefined;
     const d = this.defaults[criticality] ?? {};
     return {
       criticality,
-      rpo: parseDuration(e.spec?.rpo) ?? parseDuration(d.rpo),
-      rto: parseDuration(e.spec?.rto) ?? parseDuration(d.rto),
+      rpo: parseDuration(this.inherited(process, 'rpo')) ?? parseDuration(d.rpo),
+      rto: parseDuration(this.inherited(process, 'rto')) ?? parseDuration(d.rto),
+      ...(parseDuration(this.inherited(process, 'mtpd')) === undefined ? {} : { mtpd: parseDuration(this.inherited(process, 'mtpd')) }),
     };
   }
 
@@ -217,7 +286,7 @@ export function continuityOf(graph: ContinuityGraph, entityRef: string): Continu
   const own = ref.startsWith('businessprocess:') ? graph.need(ref) : undefined;
   if (own) needs.push({ process: ref, need: own });
   else if (graph.counts(ref)) {
-    for (const p of graph.processes()) {
+    for (const p of graph.listedProcesses()) {
       const need = graph.need(p);
       if (need && graph.chain(p).includes(ref)) needs.push({ process: p, need });
     }
@@ -240,6 +309,12 @@ export function continuityOf(graph: ContinuityGraph, entityRef: string): Continu
   };
 }
 
+/** What is wrong in a requirement itself: an RTO longer than the MTPD (the business cannot wait for the restore). */
+export function issuesOf(need: Need): RequirementIssue[] {
+  if (need.rto === undefined || need.mtpd === undefined || need.rto <= need.mtpd) return [];
+  return [{ key: 'rto-above-mtpd', rto: formatDuration(need.rto), mtpd: formatDuration(need.mtpd) }];
+}
+
 /** GET /processes/:namespace/:name/check: every element of the chain of a process, checked. Undefined if no process. */
 export function checkProcess(graph: ContinuityGraph, processRef: string): ProcessCheck | undefined {
   const ref = processRef.toLowerCase();
@@ -260,7 +335,8 @@ export function checkProcess(graph: ContinuityGraph, processRef: string): Proces
     if (gap.length) el.gap = gap;
     return el;
   });
-  return { process: ref, requirement: { criticality: need.criticality, rpo: fmt(need.rpo), rto: fmt(need.rto), from: [ref] }, elements };
+  const issues = issuesOf(need);
+  return { process: ref, requirement: { criticality: need.criticality, rpo: fmt(need.rpo), rto: fmt(need.rto), from: [ref] }, elements, ...(issues.length ? { issues } : {}) };
 }
 
 /** businessMap.criticality read from a plain object (the app-config), anything malformed left out. */

@@ -4,11 +4,13 @@ import Button from '@mui/material/Button';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
+import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { type MapData, type MapProcess, useBusinessMap } from '../../businessMap';
+import { type MapData, type MapProcess, type Origin, topProcesses, useBusinessMap } from '../../businessMap';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { EmptyState, Facts, Id, Kpis, TitleRow } from '../ui';
+import { BiaDownload } from './BiaDownload';
 import { BusinessMapTabs, useCustomer } from './BusinessMapTabs';
 import {
   adoptModelUrl,
@@ -21,13 +23,15 @@ import {
   mapStats,
   nameOf,
   newProcessUrl,
+  originText,
   UNASSIGNED,
 } from './businessMapModel';
 import { CritPill, ResultPill } from './parts';
 
 const ownerName = (p: Pick<MapProcess, 'owner'>) => (p.owner && p.owner !== UNASSIGNED ? nameOf(p.owner) : undefined);
 
-/** One process of the map as a card: title, criticality and its RPO / RTO, the check and the owner. */
+/** One process of the map as a card: title, criticality and its RPO / RTO, the check and the owner (the description
+ *  as its tooltip, and how many sub-processes it has). */
 const ProcessCard = ({ p, on, onPick }: { p: MapProcess; on: boolean; onPick: () => void }) => {
   const { t } = useI18n();
   const rq = useRq();
@@ -37,6 +41,7 @@ const ProcessCard = ({ p, on, onPick }: { p: MapProcess; on: boolean; onPick: ()
       type="button"
       onClick={onPick}
       aria-pressed={on}
+      title={p.description}
       sx={{
         all: 'unset',
         boxSizing: 'border-box',
@@ -65,6 +70,7 @@ const ProcessCard = ({ p, on, onPick }: { p: MapProcess; on: boolean; onPick: ()
         <ResultPill result={p.result} gaps={p.gaps} />
         <Box component="span" sx={{ fontSize: 12, color: rq.muted }}>
           {ownerName(p) ?? t('bm.noOwner')}
+          {p.subprocesses?.length ? ` · ${t('bm.subprocesses.count', { n: p.subprocesses.length })}` : ''}
         </Box>
       </Box>
     </Box>
@@ -76,7 +82,7 @@ const ProcessPanel = ({ p }: { p?: MapProcess }) => {
   const { t } = useI18n();
   const rq = useRq();
   if (!p) return <Typography color="text.secondary">{t('bm.pick')}</Typography>;
-  const from = (o: 'default' | 'override') => (o === 'override' ? t('bm.from.override') : t('bm.from.default', { criticality: t(`bm.crit.${p.criticality}`) }));
+  const from = (o: Origin) => originText(t, o, p.criticality);
   const id = p.pcfId ? `PCF ${p.pcfId}` : p.modelId;
   return (
     <Box sx={{ display: 'grid', gap: 1.5 }}>
@@ -88,6 +94,11 @@ const ProcessPanel = ({ p }: { p?: MapProcess }) => {
         <Typography variant="h5" component="h2">
           {p.title}
         </Typography>
+        {p.description && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {p.description}
+          </Typography>
+        )}
       </Box>
       <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
         <CritPill value={p.criticality} />
@@ -102,6 +113,7 @@ const ProcessPanel = ({ p }: { p?: MapProcess }) => {
           ['RTO', <>{p.requirement.rto ?? '—'} <Typography component="span" variant="caption" color="text.secondary">{from(p.requirement.from.rto)}</Typography></>],
           [t('bm.retention'), p.requirement.retention ?? '—'],
           ['BPMN', p.processKey ? <Id>{p.processKey}</Id> : '—'],
+          [t('bm.subprocesses'), p.subprocesses?.length ? t('bm.subprocesses.count', { n: p.subprocesses.length }) : '—'],
         ]}
       />
       <Typography sx={{ fontSize: 12, fontWeight: 600, color: rq.muted }}>{t('bm.dependsOn')}</Typography>
@@ -198,7 +210,10 @@ export const BusinessMapPage = () => {
   const rq = useRq();
   const [ns, setNs] = useCustomer();
   const [params, setParams] = useSearchParams();
-  const { loading, data, error } = useBusinessMap(ns);
+  const loaded = useBusinessMap(ns);
+  const { loading, error } = loaded;
+  // the map draws the top processes; the sub-processes are in the page of their parent
+  const data = useMemo(() => (loaded.data ? topProcesses(loaded.data) : undefined), [loaded.data]);
   const gapsOnly = params.get('show') === 'gaps';
   const set = (k: string, v?: string) => {
     const next = new URLSearchParams(params);
@@ -214,6 +229,7 @@ export const BusinessMapPage = () => {
   const actions = (
     <>
       <BusinessMapTabs />
+      <BiaDownload namespace={customer} domains={data?.domains ?? []} />
       <Button variant="outlined" size="small" component={Link} to={importModelUrl(customer)}>
         {t('bm.import')}
       </Button>

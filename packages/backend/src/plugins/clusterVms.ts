@@ -131,6 +131,35 @@ export class GitHubFiles {
     return { number: made.number, url: made.html_url };
   }
 
+  /**
+   * A pull request with all its files in ONE commit (git data API: one tree with the contents inline, one commit, the
+   * branch, the pull request): five requests whatever the number of files. The contents API (pullRequest) makes a
+   * commit per file, and GitHub limits content creation to some 500 requests an hour: an import of thousands of files
+   * would take hours. A text of null deletes the file.
+   */
+  async pullRequestInOneCommit(branch: string, title: string, body: string, changes: FileChange[]): Promise<{ number: number; url: string; branch: string }> {
+    const ref = await this.fetchFn(this.api(`git/ref/heads/${encodeURIComponent(this.branch)}`), { headers: this.headers() });
+    await this.check(ref, `branch ${this.branch}`);
+    const base = ((await ref.json()) as { object: { sha: string } }).object.sha;
+    const commit = await this.fetchFn(this.api(`git/commits/${base}`), { headers: this.headers() });
+    await this.check(commit, `commit ${base}`);
+    const baseTree = ((await commit.json()) as { tree: { sha: string } }).tree.sha;
+    const tree = changes.map(c => (c.text === null ? { path: c.path, mode: '100644', type: 'blob', sha: null } : { path: c.path, mode: '100644', type: 'blob', content: c.text }));
+    const madeTree = await this.send(this.api('git/trees'), 'POST', { base_tree: baseTree, tree });
+    await this.check(madeTree, 'tree');
+    const treeSha = ((await madeTree.json()) as { sha: string }).sha;
+    const madeCommit = await this.send(this.api('git/commits'), 'POST', { message: title, tree: treeSha, parents: [base] });
+    await this.check(madeCommit, 'commit');
+    const commitSha = ((await madeCommit.json()) as { sha: string }).sha;
+    await this.check(await this.send(this.api('git/refs'), 'POST', { ref: `refs/heads/${branch}`, sha: commitSha }), `branch ${branch}`);
+    // GitHub refuses a description over 65,536 characters
+    const text = body.length > 60000 ? `${body.slice(0, 60000)}\n\n… (cut: the full list is in the files of this pull request)` : body;
+    const pr = await this.send(this.api('pulls'), 'POST', { title, head: branch, base: this.branch, body: text });
+    await this.check(pr, 'pull request');
+    const made = (await pr.json()) as { number: number; html_url: string };
+    return { number: made.number, url: made.html_url, branch };
+  }
+
   /** The pull requests of the console merged in the last `days` days, newest first (their lifecycle after review). */
   async mergedPulls(days = 7): Promise<ConsolePull[]> {
     const res = await this.fetchFn(this.api(`pulls?state=closed&base=${encodeURIComponent(this.branch)}&sort=updated&direction=desc&per_page=50`), { headers: this.headers() });
