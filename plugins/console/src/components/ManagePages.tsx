@@ -24,6 +24,7 @@ import { GraviteePage } from './manage/GraviteePage';
 import { IamPage } from './manage/IamPage';
 import { ProcessesPage } from './manage/ProcessesPage';
 import { SupersetPage } from './manage/SupersetPage';
+import { MonitoringPage } from './manage/MonitoringPage';
 
 export type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
@@ -231,6 +232,15 @@ export const MANAGE_SERVICES: ManageService[] = [
       { label: 'Datasets', plugin: 'superset-manager', path: '/datasets', title: r => String(r.name), open: (r, host) => (r.id ? `${host('superset')}/explore/?datasource_type=table&datasource_id=${enc(r.id)}` : undefined), columns: [{ key: 'name', label: 'Dataset' }, { key: 'connection', label: 'Connection' }, { key: 'kind', label: 'Kind' }] },
       { label: 'Connections', plugin: 'superset-manager', path: '/connections', title: r => String(r.name), open: (_, host) => `${host('superset')}/databaseview/list/`, columns: [{ key: 'name', label: 'Connection' }, { key: 'backend', label: 'Database' }, { key: 'owners', label: 'Owners', render: r => list(r.owners) || '—' }] },
     ],
+  },
+  {
+    id: 'grafana',
+    label: 'Monitoring',
+    product: 'Grafana',
+    app: 'observability-oneke',
+    sub: 'Monitoring of the applications: their dashboards in Grafana, what Prometheus and Loki keep of them.',
+    home: host => host('grafana'),
+    page: MonitoringPage,
   },
   {
     id: 'camunda',

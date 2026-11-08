@@ -90,6 +90,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/gravitee': ApiIcon,
   '/console/datahub': DatasetIcon,
   '/console/superset': InsightsIcon,
+  '/console/grafana': DashboardIcon,
   '/console/camunda': AccountTreeIcon,
   '/console/seaweedfs': Inventory2Icon,
   '/console/alfresco': DescriptionIcon,

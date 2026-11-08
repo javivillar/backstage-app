@@ -3,7 +3,7 @@
  * person typed into the spec of POST /api/manage/changes, with the checks that can be made in the browser. The backend
  * checks again (manageModel.ts): this only spares a round trip.
  */
-export type FieldKind = 'text' | 'list' | 'boolean' | 'select';
+export type FieldKind = 'text' | 'list' | 'boolean' | 'select' | 'textarea';
 export type Field = {
   key: string;
   label: string;
@@ -18,7 +18,12 @@ export type Field = {
   createOnly?: boolean;
   /** only for objects of the platform, or only for those of an application */
   only?: 'platform' | 'application';
+  /** shown (checked and sent) only when the other values say so, e.g. the pasted JSON only for an import */
+  when?: (values: Values) => boolean;
 };
+
+/** Whether a field applies to these values (its `when`). */
+export const shownFor = (f: Field, values: Values) => !f.when || f.when(values);
 
 /** The fields that apply to an owner (all of them while no owner is picked). */
 export const fieldsFor = (fields: Field[], owner?: { kind: string }) => fields.filter(f => !f.only || !owner || f.only === owner.kind);
@@ -63,6 +68,7 @@ export function fieldErrors(fields: Field[], values: Values, creating: boolean):
   const out: Record<string, string> = {};
   for (const f of fields) {
     if (f.createOnly && !creating) continue;
+    if (!shownFor(f, values)) continue;
     const v = values[f.key];
     if (f.kind === 'boolean') continue;
     const s = String(v ?? '').trim();
@@ -85,6 +91,7 @@ export function specFrom(fields: Field[], values: Values, creating: boolean, cur
   const spec: Record<string, unknown> = {};
   for (const f of fields) {
     if (f.createOnly && !creating) continue;
+    if (!shownFor(f, values)) continue;
     const v = values[f.key];
     let out: unknown;
     if (f.kind === 'boolean') out = v === true;

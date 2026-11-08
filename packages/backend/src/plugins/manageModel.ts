@@ -93,6 +93,23 @@ export type Handler = {
    * the platform file for the platform. Without it the route answers 501 for this kind.
    */
   declared?(doc: Document, owner: Owner): Declared[];
+  /**
+   * A kind of object that is a whole file of the application's own repository (its target is { repo: 'app' }), not
+   * YAML of the app-of-apps: apply() and declared() are not used for it.
+   */
+  files?: RepoFiles;
+};
+
+/** The files of one kind of object in the repository of an application (e.g. its dashboards in platform/monitoring/). */
+export type RepoFiles = {
+  /** the folder, listed for GET /declared */
+  dir: string;
+  /** the file of an object */
+  path(id: string): string;
+  /** the new text of the file (null: deleted) from the request and what it has now (undefined: not there); throws ChangeError */
+  change(req: ChangeRequest & { id: string }, current: string | undefined): { text: string | null; summary: string };
+  /** a file of the folder as Declared; undefined when it is not one of these objects */
+  declared(name: string, text: string | undefined): Declared | undefined;
 };
 
 /** An object as git declares it: its name, its fields (state left out) and whether it is a tombstone. */
