@@ -63,7 +63,30 @@ export type Handler = {
   validate(action: ManageAction, spec: Record<string, unknown>): string[];
   /** edits the document in place and says what it touched; throws ChangeError 404/409 */
   apply(doc: Document, req: ChangeRequest & { id: string }, touched: Touched): void;
+  /**
+   * What a file declares of this kind of object (GET /api/manage/declared): an application's file for an application,
+   * the platform file for the platform. Without it the route answers 501 for this kind.
+   */
+  declared?(doc: Document, owner: Owner): Declared[];
 };
+
+/** An object as git declares it: its name, its fields (state left out) and whether it is a tombstone. */
+export type Declared = { id: string; spec: Record<string, unknown>; gone: boolean };
+
+/** The entries of a list of named objects at a path of a file, as Declared (a bare name or a mapping with name). */
+export function entriesOf(doc: Document, path: string[]): Declared[] {
+  const l = doc.getIn(path);
+  if (!isSeq(l)) return [];
+  return l.items.flatMap(it => {
+    const v = (it as { toJSON?: () => unknown })?.toJSON ? (it as { toJSON: () => unknown }).toJSON() : it;
+    if (typeof v === 'string') return [{ id: v, spec: { name: v }, gone: false }];
+    if (v && typeof v === 'object' && typeof (v as { name?: unknown }).name === 'string') {
+      const { state, ...spec } = v as Record<string, unknown>;
+      return [{ id: (v as { name: string }).name, spec, gone: state === 'absent' }];
+    }
+    return [];
+  });
+}
 
 const HANDLERS = new Map<string, Handler>();
 const key = (service: string, object: string) => `${service}/${object}`;
@@ -352,6 +375,7 @@ registerHandler({
     const b = block(doc, 's3', touched);
     editList(doc, list(doc, b, 'buckets', touched), req.action, req.id, {}, true);
   },
+  declared: (doc, owner) => entriesOf(doc, owner.kind === 'platform' ? ['manage', 'buckets'] : ['platform', 's3', 'buckets']),
 });
 
 registerHandler({
@@ -372,4 +396,5 @@ registerHandler({
     }
     editList(doc, list(doc, block(doc, 'dms', touched), 'sites', touched), req.action, req.id, fields, false);
   },
+  declared: (doc, owner) => entriesOf(doc, owner.kind === 'platform' ? ['manage', 'sites'] : ['platform', 'dms', 'sites']),
 });

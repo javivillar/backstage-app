@@ -1,4 +1,4 @@
-import { applyChange, ChangeError, handlerFor, lineDiff, type ChangeRequest } from './manageModel';
+import { applyChange, ChangeError, handlerFor, lineDiff, parse, type ChangeRequest } from './manageModel';
 
 const FILE = `# Petshop — the example application
 name: petshop
@@ -92,6 +92,17 @@ describe('Manage through git: the edit of an application file', () => {
     expect(second).toContain(first.trimEnd());
     expect(second).toMatch(/name: other/);
     expect(run(plat({ action: 'delete', id: 'shared' }), second).text).toMatch(/name: shared, state: absent/);
+  });
+
+  it('lists what a file declares, tombstones marked', () => {
+    const text = run(req({ action: 'delete', id: 'files' }), run(req({ spec: { name: 'evidence' } })).text).text;
+    const app = { kind: 'application' as const, name: 'petshop' };
+    expect(handlerFor('seaweedfs', 'bucket').declared!(parse(text), app)).toEqual([
+      { id: 'files', spec: { name: 'files' }, gone: true },
+      { id: 'evidence', spec: { name: 'evidence' }, gone: false },
+    ]);
+    expect(handlerFor('alfresco', 'site').declared!(parse(FILE), app)).toEqual([{ id: 'documents', spec: { name: 'documents', users: ['javi'] }, gone: false }]);
+    expect(handlerFor('alfresco', 'site').declared!(parse('name: x\n'), app)).toEqual([]);
   });
 
   it('shows the change as a diff', () => {

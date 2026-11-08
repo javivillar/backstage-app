@@ -80,6 +80,12 @@ function useLoad<T>(path: string): Loaded<T> {
 
 /** The applications (and the platform) of the application picker. */
 export const useManageOwners = () => useLoad<OwnerView[]>('/owners');
+/** An object as git declares it (GET /declared): who it belongs to, its fields, whether it is being removed. */
+export type DeclaredObject = { owner: ManageOwner; id: string; spec: Record<string, unknown>; gone: boolean };
+/** What git declares of one kind of object of a service, in every application file and in the platform file. */
+export const useManageDeclared = (service: string, object: string) =>
+  useLoad<DeclaredObject[]>(`/declared?service=${encodeURIComponent(service)}&object=${encodeURIComponent(object)}`);
+
 /** The open Manage pull requests of a service. */
 export const useManagePending = (service: string) => useLoad<PendingChange[]>(`/pending?service=${encodeURIComponent(service)}`);
 

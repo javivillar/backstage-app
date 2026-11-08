@@ -3,7 +3,7 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import express, { Router } from 'express';
 import { mayAct, ownsEntity } from './clusterActions';
 import { GitHubFiles, PR_PREFIX } from './clusterVms';
-import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner } from './manageModel';
+import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner, parse } from './manageModel';
 
 /**
  * Manage through git (refresquito-services MANAGE-GITOPS-DESIGN.md): the console's Manage pages change the objects of
@@ -17,6 +17,9 @@ import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lin
  *   GET  /api/manage/pending[?service=] [{ number, title, url, service, object, id, owner }]: the open pull requests
  *        of Manage, so the pages show "pending change #n" on an object
  *   GET  /api/manage/handlers          [{ service, object, label }]: what Manage can change today
+ *   GET  /api/manage/declared?service=&object=  [{ owner, id, spec, gone }]: what git declares of that kind of object,
+ *        in every application file and in the platform file, without reading the product (to prefill an edit, to say
+ *        which live objects Manage may change, and for the drift view); read at most once a minute
  *
  * Who may ask: the owner team of the application (spec.owner of its production instance in the catalog) or the groups
  * of console.actions.groups (default backstage-admin); objects of the platform only those groups. Approval is in
@@ -176,6 +179,41 @@ export default createBackendPlugin({
             const pull = await services.pullRequest(slugOf({ ...r, id }), `Manage: ${summary}`, pullBody({ ...r, id }, w.user, target.path, diff), [{ path: target.path, text }]);
             logger.info(`manage: ${summary} by ${w.user}: pull request #${pull.number}`);
             res.json({ pull, file: target.path, diff, summary });
+          } catch (e) {
+            fail(res, e);
+          }
+        });
+
+        // the files of the applications (and the platform files), read at most once a minute: /declared asks for all
+        const APPS = 'bootstrap/app-of-apps/apps';
+        let cache: { at: number; files: Map<string, string | undefined> } = { at: 0, files: new Map() };
+        const read = async (path: string) => {
+          if (Date.now() - cache.at > 60_000) cache = { at: Date.now(), files: new Map() };
+          if (!cache.files.has(path)) cache.files.set(path, await services.get(path).then(f => f.text, () => undefined));
+          return cache.files.get(path);
+        };
+        router.get('/declared', async (req, res) => {
+          try {
+            await httpAuth.credentials(req, { allow: ['user'] });
+            const h = handlerFor(String(req.query.service ?? ''), String(req.query.object ?? ''));
+            if (!h.declared) throw new ChangeError(501, `Manage cannot list what git declares of ${h.object} of ${h.service} yet.`);
+            const out: Array<{ owner: Owner; id: string; spec: Record<string, unknown>; gone: boolean }> = [];
+            const files = (await services.list(APPS)).filter(f => /^[a-z0-9-]+\.ya?ml$/.test(f.name));
+            for (const f of files) {
+              const text = await read(f.path);
+              if (!text) continue;
+              const owner: Owner = { kind: 'application', name: f.name.replace(/\.ya?ml$/, '') };
+              for (const d of h.declared(parse(text), owner)) out.push({ owner, ...d });
+            }
+            let platformPath: string | undefined;
+            try {
+              platformPath = h.target({ kind: 'platform' }).path;
+            } catch {
+              platformPath = undefined; // a kind of object that only applications have
+            }
+            const platformText = platformPath ? await read(platformPath) : undefined;
+            if (platformText) for (const d of h.declared(parse(platformText), { kind: 'platform' })) out.push({ owner: { kind: 'platform' }, ...d });
+            res.json(out);
           } catch (e) {
             fail(res, e);
           }
