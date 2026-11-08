@@ -38,12 +38,14 @@ export function foldersOf(groups: Array<{ name: string; members: string[] }>, ap
 const Members = ({ group, members }: { group: string; members?: string[] }) => {
   const { lang } = useI18n();
   if (!members) return <Typography variant="body2" color="text.secondary">—</Typography>;
-  const shown = members.slice(0, 4).join(', ');
+  const more = members.length > 4 ? ` +${members.length - 4}` : '';
+  const none = lang === 'es' ? 'sin miembros' : 'no members';
+  const shown = members.length === 0 ? none : `${members.slice(0, 4).join(', ')}${more}`;
   return (
     <Box sx={{ display: 'grid', gap: 0.25 }}>
       <Box component={Link} to={`/console/entity/default/group/${encodeURIComponent(group)}`} sx={{ fontFamily: 'monospace', fontSize: 12.5 }}>{group}</Box>
       <Typography variant="caption" color="text.secondary">
-        {members.length === 0 ? (lang === 'es' ? 'sin miembros' : 'no members') : `${shown}${members.length > 4 ? ` +${members.length - 4}` : ''}`}
+        {shown}
       </Typography>
     </Box>
   );
