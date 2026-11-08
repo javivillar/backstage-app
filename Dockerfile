@@ -12,6 +12,13 @@ RUN find packages \! -name "package.json" -mindepth 2 -maxdepth 2 -exec rm -rf {
 # Stage 2 - Install dependencies and build packages
 FROM node:22-bookworm-slim AS build
 
+# native modules (isolated-vm…) are compiled when their prebuilt binary cannot be downloaded from GitHub releases
+# (those downloads answered 504 to the runners on 2026-11-08): the same tools as the final stage
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends python3 g++ build-essential
+
 USER node
 WORKDIR /app
 
