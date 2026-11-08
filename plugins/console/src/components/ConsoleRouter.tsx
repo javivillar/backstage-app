@@ -37,6 +37,9 @@ import { ImportModelPage } from './businessMap/ImportModelPage';
 import { AdoptModelPage } from './businessMap/AdoptModelPage';
 import { ProcessFormPage } from './businessMap/ProcessFormPage';
 import { DataContinuityPage } from './businessMap/DataContinuityPage';
+import { FrameworksPage } from './frameworks/FrameworksPage';
+import { FrameworkLinePage } from './frameworks/FrameworkLinePage';
+import { HeatmapPage } from './frameworks/HeatmapPage';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
@@ -108,6 +111,9 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/business-map/process/edit/:namespace/:name" element={<ProcessFormPage mode="edit" />} />
         <Route path="/data-continuity" element={<DataContinuityPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
+        <Route path="/frameworks" element={<FrameworksPage />} />
+        <Route path="/frameworks/:line" element={<FrameworkLinePage />} />
+        <Route path="/heatmap" element={<HeatmapPage />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         <Route path="/continuity" element={<ContinuityPage />} />
         <Route path="/continuity/:service" element={<ContinuityServicePage />} />
