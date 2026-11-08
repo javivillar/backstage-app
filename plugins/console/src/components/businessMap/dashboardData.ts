@@ -2,11 +2,11 @@ import { type Entity } from '@backstage/catalog-model';
 import { createApiRef, discoveryApiRef, fetchApiRef, type OAuthApi, useApi, useApiHolder } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { type MapData, useBusinessMap } from '../../businessMap';
 import { useNamespaceCosts } from '../../costs';
 import { type AppOverview, useClusterOverview } from '../../overview';
 import { healthOf } from '../EntityDependencies';
+import { useCustomer } from './BusinessMapTabs';
 import { type BusinessGraph, businessGraph } from './glassModel';
 import { criticalOf, type HeatSources, imagesOf, incidentsOf } from './heatmapModel';
 
@@ -19,17 +19,8 @@ import { criticalOf, type HeatSources, imagesOf, incidentsOf } from './heatmapMo
 const FIELDS = ['kind', 'metadata', 'spec.type', 'spec.owner', 'spec.system', 'spec.lifecycle', 'relations'];
 
 /** ?namespace= of the URL: the customer the business map shows */
-export function useNamespaceParam(): [string | undefined, (ns: string) => void] {
-  const [params, setParams] = useSearchParams();
-  const ns = params.get('namespace') ?? undefined;
-  const set = (value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set('namespace', value);
-    else next.delete('namespace');
-    setParams(next, { replace: true });
-  };
-  return [ns, set];
-}
+/** The customer (namespace) of the views, kept in ?ns= across the Map, Heat map, Glass and Matrix (BusinessMapTabs). */
+export const useNamespaceParam = useCustomer;
 
 const argoApp = (e: Entity, apps: AppOverview[]) => {
   const name = e.metadata.name.replace(/-oneke$/, '');
