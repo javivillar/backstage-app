@@ -189,7 +189,7 @@ const MapBar = ({ map, gapsOnly, onGaps, onCustomer }: { map: MapData; gapsOnly:
 };
 
 /**
- * Portal › Business map: the business processes of each customer by domain and subdomain, whether the platform under
+ * Business management › Business continuity (the business map): the business processes of each customer by domain and subdomain, whether the platform under
  * them meets their continuity requirement, and the way to change them (templates, by pull request). The customer
  * and the selected process are in the URL (?ns=&process=).
  */

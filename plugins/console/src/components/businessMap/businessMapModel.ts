@@ -11,16 +11,16 @@ import type {
 } from '../../businessMap';
 
 /**
- * Portal › Business map, without React: how the map groups domains, subdomains and processes, the links to the
- * templates (no direct writes: every change is a pull request), the texts of a gap and of how to close it, and the
+ * Portal › Business continuity (the business map), without React: how the map groups domains, subdomains and processes, the links to the
+ * forms of the templates (no direct writes: every change is a pull request), the texts of a gap and of how to close it, and the
  * framework support of a line. The pages (BusinessMapPage, BusinessProcessPage, ImpactTab) only draw this.
  */
 
 export const CRITICALITIES: Criticality[] = ['critical', 'important', 'standard'];
 /** The owner an import gives a process whose owner is no group of the catalog. */
 export const UNASSIGNED = 'group:default/unassigned';
-const TEMPLATES = '/console/create/templates/default';
-const DURATION = /^[0-9]+(m|h|d|y)$/;
+/** The console forms of the templates of the business map (ImportModelPage, AdoptModelPage, ProcessFormPage). */
+const FORMS = '/console/business-map';
 
 export type Vars = Record<string, string | number>;
 export type Text = { key: string; vars?: Vars };
@@ -45,36 +45,20 @@ export function toMinutes(v: string | null | undefined): number | undefined {
   return m ? Number(m[1]) * MINUTES[m[2]] : undefined;
 }
 
-const withForm = (template: string, form: Record<string, unknown>) => {
-  const filled = Object.fromEntries(Object.entries(form).filter(([, v]) => v !== undefined && v !== ''));
-  return Object.keys(filled).length ? `${TEMPLATES}/${template}?formData=${encodeURIComponent(JSON.stringify(filled))}` : `${TEMPLATES}/${template}`;
+const withQuery = (path: string, query: Record<string, string | undefined>) => {
+  const q = new URLSearchParams(Object.entries(query).filter((e): e is [string, string] => !!e[1]));
+  const text = q.toString();
+  return text ? `${path}?${text}` : path;
 };
 
-/** New business process, in a domain when one is given. */
-export const newProcessUrl = (domain?: string) => withForm('business-process-new', { domain });
-/** Import business model, for a customer when one is given. */
-export const importModelUrl = (namespace?: string) => withForm('business-model-import', { namespace });
-/** Adopt reference model, for a customer when one is given. */
-export const adoptModelUrl = (namespace?: string) => withForm('business-model-adopt', { namespace });
-
-/** Edit business process, prefilled with what the process has now (only its own overrides, not the defaults). */
-export function editProcessUrl(p: MapProcess): string {
-  const r = p.requirement;
-  const own = (v: string | null, origin: 'default' | 'override') => (origin === 'override' && v && DURATION.test(v) ? v : undefined);
-  return withForm('business-process-edit', {
-    process: p.ref,
-    title: p.title,
-    description: p.description,
-    domain: p.domain || undefined,
-    owner: p.owner,
-    processKey: p.processKey,
-    criticality: p.criticality,
-    rpo: own(r.rpo, r.from.rpo),
-    rto: own(r.rto, r.from.rto),
-    retention: r.retention && DURATION.test(r.retention) ? r.retention : undefined,
-    dependsOn: p.dependsOn.length ? p.dependsOn : undefined,
-  });
-}
+/** New business process (the console form of the template business-process-new), in a domain when one is given. */
+export const newProcessUrl = (domain?: string) => withQuery(`${FORMS}/process/new`, { domain });
+/** Import business model (the console form of business-model-import), for a customer when one is given. */
+export const importModelUrl = (namespace?: string) => withQuery(`${FORMS}/import`, { ns: namespace });
+/** Adopt reference model (the console form of business-model-adopt), for a customer when one is given. */
+export const adoptModelUrl = (namespace?: string) => withQuery(`${FORMS}/adopt`, { ns: namespace });
+/** Edit business process (the console form of business-process-edit): it reads the process from the catalog. */
+export const editProcessUrl = (p: Pick<MapProcess, 'ref'>) => `${FORMS}/process/edit/${encodeURIComponent(namespaceOf(p.ref))}/${encodeURIComponent(nameOf(p.ref))}`;
 
 /** A domain of the map with its subdomains; `domain` undefined holds what sits on the domain itself. */
 export type SubBlock = { domain?: MapDomain; processes: MapProcess[] };

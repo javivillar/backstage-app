@@ -33,6 +33,10 @@ import { BusinessMapPage } from './businessMap/BusinessMapPage';
 import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
 import { BusinessGlassPage } from './businessMap/GlassPage';
 import { BusinessMatrixPage } from './businessMap/MatrixPage';
+import { ImportModelPage } from './businessMap/ImportModelPage';
+import { AdoptModelPage } from './businessMap/AdoptModelPage';
+import { ProcessFormPage } from './businessMap/ProcessFormPage';
+import { DataContinuityPage } from './businessMap/DataContinuityPage';
 import { NewAppWizard } from './NewAppWizard';
 import { PortalHome } from './PortalHome';
 import { PortalApisPage, PortalDocsPage, PortalQualityPage, ResolutionGroupsPage } from './PortalIndexes';
@@ -97,6 +101,12 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
         <Route path="/business-map/glass" element={<BusinessGlassPage />} />
         <Route path="/business-map/matrix" element={<BusinessMatrixPage />} />
+        {/* the templates of the business map as console forms (no Scaffolder page) */}
+        <Route path="/business-map/import" element={<ImportModelPage />} />
+        <Route path="/business-map/adopt" element={<AdoptModelPage />} />
+        <Route path="/business-map/process/new" element={<ProcessFormPage mode="new" />} />
+        <Route path="/business-map/process/edit/:namespace/:name" element={<ProcessFormPage mode="edit" />} />
+        <Route path="/data-continuity" element={<DataContinuityPage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/images" element={<ImageCatalogPage />} />
         <Route path="/continuity" element={<ContinuityPage />} />

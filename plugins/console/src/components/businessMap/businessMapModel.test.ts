@@ -4,7 +4,9 @@ import {
   closeAdvice,
   compareVersions,
   consolePath,
+  adoptModelUrl,
   editProcessUrl,
+  importModelUrl,
   gapText,
   impactSummary,
   lineProgress,
@@ -84,28 +86,15 @@ describe('mapStats', () => {
   });
 });
 
-describe('links to the templates', () => {
-  it('opens New without form data, and Edit prefilled with the overrides only', () => {
-    expect(newProcessUrl()).toBe('/console/create/templates/default/business-process-new');
-    const p = proc('take', 'domain:customer/orders', {
-      requirement: { rpo: '15m', rto: '1h', retention: '30y', from: { rpo: 'default', rto: 'override' } },
-      dependsOn: ['system:default/shop'],
-      processKey: 'take-order',
-    });
-    const url = editProcessUrl(p);
-    expect(url.startsWith('/console/create/templates/default/business-process-edit?formData=')).toBe(true);
-    const form = JSON.parse(decodeURIComponent(url.split('formData=')[1]));
-    expect(form).toEqual({
-      process: 'businessprocess:customer/take',
-      title: 'take',
-      domain: 'domain:customer/orders',
-      owner: 'group:default/team',
-      processKey: 'take-order',
-      criticality: 'standard',
-      rto: '1h',
-      retention: '30y',
-      dependsOn: ['system:default/shop'],
-    });
+describe('links to the forms of the templates', () => {
+  it('opens the console forms: New in a domain, Import and Adopt for a customer, Edit by the ref of the process', () => {
+    expect(newProcessUrl()).toBe('/console/business-map/process/new');
+    expect(newProcessUrl('domain:customer/orders')).toBe('/console/business-map/process/new?domain=domain%3Acustomer%2Forders');
+    expect(importModelUrl()).toBe('/console/business-map/import');
+    expect(importModelUrl('occar-a400m')).toBe('/console/business-map/import?ns=occar-a400m');
+    expect(adoptModelUrl('occar-a400m')).toBe('/console/business-map/adopt?ns=occar-a400m');
+    const p = proc('take', 'domain:customer/orders', { processKey: 'take-order' });
+    expect(editProcessUrl(p)).toBe('/console/business-map/process/edit/customer/take');
   });
   it('builds console paths of refs', () => {
     expect(consolePath('businessprocess:customer/take')).toBe('/console/entity/customer/businessprocess/take');
