@@ -15,6 +15,7 @@ and framework lines. The same group has **Data continuity** (`/console/data-cont
 ```
 business domain        Domain, spec.type business-area            e.g. occar-a400m/service-after-sales
  → business process     BusinessProcess (refresquito.io/v1alpha1)   e.g. Manage repair and maintenance
+   ⤷ sub-processes      BusinessProcess with spec.parentProcess      APQC levels 4-5 (activities, tasks)
   → business service     System, spec.type business-service         e.g. petstore (its specification in refresquito-specs)
    → business application Component, spec.type business-application  the application's repository
     → instances           Component, spec.type application-instance  <app>[-<stage>]-oneke, one per environment
@@ -73,14 +74,31 @@ spec:
   classification: occar-restricted
   dependsOn: [system:default/maintenance, system:default/documents]
 ---
+# a sub-process: it inherits from its parent chain whatever it does not say (criticality, rpo, rto, retention,
+# dependsOn); spec.domain is the domain of its top process
+apiVersion: refresquito.io/v1alpha1
+kind: BusinessProcess
+metadata:
+  name: plan-a-repair
+  namespace: occar-a400m
+  title: Plan a repair
+  description: Decide when and where the aircraft is repaired.
+  annotations: { apqc.org/pcf-id: "6.3.2.1" }
+spec:
+  owner: group:default/a400m-maintenance
+  domain: service-after-sales
+  parentProcess: manage-repair-and-maintenance   # a BusinessProcess of the same namespace (or a full ref)
+---
 apiVersion: refresquito.io/v1alpha1
 kind: ReferenceModel
 metadata: { name: apqc-aerospace-defense-7-4, title: "APQC PCF · Aerospace & Defense" }
 spec: { source: apqc, industry: aerospace-defense, version: "7.4", namespace: apqc-aerospace-defense }
 ```
 
-The catalog module `business-map` validates them and emits `ownedBy`/`ownerOf`, `partOf`/`hasPart` (Domain) and
-`dependsOn`/`dependencyOf`. The files live in refresquito-services `catalog/business-map/<namespace>/`, one entity per
+The catalog module `business-map` validates them and emits `ownedBy`/`ownerOf`, `partOf`/`hasPart` (Domain, and the
+parent process of a sub-process) and `dependsOn`/`dependencyOf`. A top process must say its criticality; a sub-process
+may leave it out. `metadata.description` is the description of a domain or a process (imported, or written in the
+process form). The files live in refresquito-services `catalog/business-map/<namespace>/`, one entity per
 file (`domain-<name>.yaml`, `process-<name>.yaml`, `reference-model.yaml`), read through the Location `business-map`
 of the app-of-apps catalog; the catalog rules allow these kinds only there. An example customer with made-up data:
 `catalog/business-map/example-customer/`.
@@ -97,19 +115,27 @@ of the app-of-apps catalog; the catalog rules allow these kinds only there. An e
 ### Importing a model
 
 Three sources: **APQC PCF** (the Excel the customer downloaded), the **Refresquito template** (fixed columns: ID,
-parent, title, owner, criticality, RPO, RTO, retention, applications) or the customer's **own spreadsheet** with a
-column mapping (which column is ID, title, parent or level…) and a value mapping (e.g. `Alta → critical`), saved with
+parent, title, description, owner, criticality, RPO, RTO, retention, applications) or the customer's **own spreadsheet**
+with a column mapping (which column is ID, title, description, parent or level…) and a value mapping (e.g. `Alta → critical`), saved with
 the model and reused on the next import. Excel (`.xlsx`) and CSV are read without extra libraries.
 
-APQC levels 1/2/3 become Domain / subdomain / BusinessProcess (levels 4-5 are the detail of a process: BPMN). In an own
-model, a row without parent is a Domain; under a Domain, a subdomain if it has children, else a process.
+APQC levels 1/2/3 become Domain / subdomain / BusinessProcess, and levels 4 and 5 sub-processes (a BusinessProcess
+under its parent, `spec.parentProcess`). The description of each element comes from the PCF's description column when
+the sheet has one (`Description`, `Element Description` or `Definition`). In an own model, a row without parent is a
+Domain; under a Domain, a subdomain if it has children, else a process; under a subdomain a process; anything under a
+process a sub-process. A sub-process without a criticality of its own inherits it (none is written). A sub-process
+named like another entity takes its ID in its name (`plan-a-repair-6-3-2-1`), so names do not depend on the order of
+the rows; the rest keep `-2`, `-3`… as before. The page of a process can still link its BPMN in Operaton.
 
-The form shows a **preview** before anything is written (`POST /api/business-map/import/preview`): counts (new,
-changed, no longer in the file, unchanged), **errors** that stop the import (a parent not in the file, a duplicated
-ID…) and **warnings** (an application not in the catalog, an owner that is no group). Rows with errors can be skipped.
+The form shows a **preview** before anything is written (`POST /api/business-map/import/preview`): counts (domains,
+processes and sub-processes; new, changed, no longer in the file, unchanged), **errors** that stop the import (a parent
+not in the file, a duplicated ID…) and **warnings** (an application not in the catalog, an owner that is no group).
+Rows with errors can be skipped. The table of changes has pages (25, 50 or 100 rows) and filters: the kind of change,
+the type (domain, subdomain, process, sub-process), the level-1 domain, and a search on ID, title or description; the
+description shows under each title.
 
 **Reimport**: entities are matched by their original ID. What a person changed in the portal after the last import
-(owner, applications, overrides) wins over the file, and the pull request lists it; an entity no longer in the file is
+(owner, applications, overrides, description) wins over the file, and the pull request lists it; an entity no longer in the file is
 kept and marked `refresquito.io/deprecated`, never deleted. Each entity keeps per-field hashes of what was imported
 (`refresquito.io/imported-hash`) to tell portal edits from imported values.
 
@@ -119,17 +145,24 @@ PCF files each customer has downloaded under APQC's terms.
 ### Adopting a reference model
 
 A loaded reference model (APQC of an industry) is copied into a customer's namespace: pick the level-1 categories that
-apply, the namespace and the owner group; the copies keep `apqc.org/pcf-id`, so a later version of the model can be
+apply, the namespace and the owner group; their subdomains, processes and sub-processes are copied (each sub-process
+under its parent); the copies keep `apqc.org/pcf-id`, so a later version of the model can be
 compared. An own model needs no adoption: it is imported straight into the customer's namespace (with optionally the
 support categories of a loaded APQC model).
 
 ## The views
 
-- **Map**: the domains of a customer with their subdomains and processes as cards (criticality, RPO/RTO, result of the
-  check, owner); a filter for gaps only; the selected process with its applications and where each value comes from.
-- **Process page**: the requirement (default of its criticality or override), its chain down to the platform services,
-  the check of each element, how to close each gap, its BPMN in Operaton (`refresquito.io/process-key`), its data
-  products.
+- **Map**: the domains of a customer with their subdomains and top processes as cards (criticality, RPO/RTO, result of
+  the check, owner, how many sub-processes; the description as tooltip); a filter for gaps only; the selected process
+  with its description, its applications and where each value comes from. The map, heat map, glass and matrix draw the
+  top processes; the sub-processes are on the page of their parent.
+- **Process page**: its description, the requirement (default of its criticality, override, or inherited from its
+  parent process), its sub-processes as a tree (each with its criticality and check), its chain down to the platform
+  services, the check of each element, how to close each gap, its BPMN in Operaton (`refresquito.io/process-key`), its
+  data products. A sub-process shows its parents in the crumbs and links its parent.
+- The answers that list the processes above a service (continuity, impact) take the top processes and the
+  sub-processes that say something of their own (criticality, RPO, RTO or dependencies), so a service does not list
+  every activity under a process.
 - **Impact on the business** (tab of services, business services, applications and framework lines): the processes
   that depend on it, strictest first, with the check; on a framework line, the business services that still run it in
   each stage and their processes, to plan upgrades.

@@ -4,10 +4,13 @@ import {
   adoptValues,
   cardsOf,
   categoriesOf,
+  type Change,
+  type ChangeFilter,
   csvHeaders,
   domainOptions,
   emptyImport,
   emptyProcess,
+  filterChanges,
   firstBadStep,
   importBlocker,
   importProblems,
@@ -16,14 +19,16 @@ import {
   type LiteEntity,
   mayChangeMap,
   namespacesOf,
+  NO_FILTER,
   normRef,
+  pageOf,
   previewBody,
   previewKey,
   type PreviewState,
   processFormOf,
   processProblems,
   processValues,
-  shownChanges,
+  rootsOf,
   slugOf,
   supportIds,
   withFileName,
@@ -122,7 +127,7 @@ describe('import', () => {
     expect([apqc.industry, apqc.version, apqc.mapping, apqc.preview]).toEqual(['', '7.4', undefined, {}]);
   });
   it('sends the sheet the preview read (compact CSV) instead of the workbook', () => {
-    const f = { ...emptyImport('x1'), file: FILE, source: 'apqc' as const, sheet: '2' };
+    const f = { ...emptyImport('example-customer'), file: FILE, source: 'apqc' as const, sheet: '2' };
     const key = previewKey(previewBody(f)!);
     const counts = { domains: 0, subdomains: 0, new: 0, changed: 0, gone: 0, unchanged: 0 };
     const preview: PreviewState = { key, state: 'done', preview: { counts, errors: [], warnings: [], changes: [], compact: 'data:text/csv;sheet=Combined;base64,QQ==' } };
@@ -130,18 +135,47 @@ describe('import', () => {
     expect(importValues(f, { ...preview, key: 'stale' })).toMatchObject({ file: FILE, sheet: '2' });
   });
   it('orders the changes and makes the cards', () => {
-    const { rows, total } = shownChanges(
+    const rows = filterChanges(
       [
         { kind: 'new', id: '1', title: 'a', what: '' },
         { kind: 'review', id: '2', title: 'b', what: '' },
         { kind: 'changed', id: '3', title: 'c', what: '' },
+        { kind: 'new', id: '4', title: 'd', what: '' },
       ],
-      2,
+      NO_FILTER,
     );
-    expect([rows.map(r => r.id), total]).toEqual([['2', '3'], 3]);
+    expect(rows.map(r => r.id)).toEqual(['2', '3', '1', '4']);
     const cards = cardsOf({ domains: 4, subdomains: 11, new: 9, changed: 6, gone: 2, unchanged: 118 });
     expect(cards.map(c => c.value)).toEqual(['4', '+ 9', '~ 6', '− 2', '118']);
     expect(cards[1].positive).toBe(true);
+    const withProcesses = cardsOf({ domains: 4, subdomains: 11, processes: 30, subprocesses: 200, new: 9, changed: 6, gone: 2, unchanged: 118 });
+    expect(withProcesses.map(c => c.value)).toEqual(['4', '30', '+ 9', '~ 6', '− 2', '118']);
+    expect(withProcesses[1].vars).toEqual({ n: 200 });
+  });
+  it('filters the changes by kind, type, level-1 domain and text, and pages them', () => {
+    const changes: Change[] = [
+      { kind: 'new', id: '1.0', title: 'Develop Vision', what: '', type: 'domain', level: 1, root: '1.0' },
+      { kind: 'new', id: '1.1', title: 'Define the concept', what: '', type: 'subdomain', level: 2, root: '1.0' },
+      { kind: 'new', id: '1.1.1', title: 'Assess the environment', what: '', type: 'process', level: 3, root: '1.0', description: 'Look at the market' },
+      { kind: 'new', id: '1.1.1.1', title: 'Análisis de competencia', what: '', type: 'subprocess', level: 4, root: '1.0' },
+      { kind: 'new', id: '2.0', title: 'Deliver Products', what: '', type: 'domain', level: 1, root: '2.0' },
+      { kind: 'review', id: '9.9', title: 'Gone', what: 'no longer in the file', type: 'process' },
+    ];
+    expect(rootsOf(changes)).toEqual([
+      { id: '1.0', title: 'Develop Vision' },
+      { id: '2.0', title: 'Deliver Products' },
+    ]);
+    const ids = (f: Partial<ChangeFilter>) => filterChanges(changes, { ...NO_FILTER, ...f }).map(c => c.id);
+    expect(ids({ root: '1.0' })).toEqual(['1.0', '1.1', '1.1.1', '1.1.1.1']);
+    expect(ids({ type: 'subprocess' })).toEqual(['1.1.1.1']);
+    expect(ids({ kind: 'review' })).toEqual(['9.9']);
+    expect(ids({ text: 'analisis' })).toEqual(['1.1.1.1']);
+    expect(ids({ text: 'MARKET' })).toEqual(['1.1.1']);
+    expect(ids({ text: '1.1.1' })).toEqual(['1.1.1', '1.1.1.1']);
+    expect(pageOf([1, 2, 3, 4, 5], 1, 2)).toEqual({ rows: [3, 4], page: 1 });
+    // a page past the end (the filter made the list shorter) goes back to the last one
+    expect(pageOf([1, 2, 3], 5, 2)).toEqual({ rows: [3], page: 1 });
+    expect(pageOf([], 3, 25)).toEqual({ rows: [], page: 0 });
   });
 });
 

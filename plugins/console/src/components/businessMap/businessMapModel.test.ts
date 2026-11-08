@@ -14,6 +14,10 @@ import {
   mapStats,
   newProcessUrl,
   nextStep,
+  originText,
+  parentsOf,
+  subprocessTree,
+  treeSize,
   resultLabel,
   strictestOf,
   supportOf,
@@ -156,3 +160,32 @@ describe('framework lines', () => {
     expect(lineProgress([petstore, logistics, fresh], [L])).toEqual({ inPro: 3, moved: 2 });
   });
 });
+
+describe('sub-processes', () => {
+  const top = proc('repair', 'domain:customer/repairs', { pcfId: '6.3.1', subprocesses: ['businessprocess:customer/plan', 'businessprocess:customer/order'] });
+  const plan = proc('plan', 'domain:customer/repairs', { pcfId: '6.3.1.2', parent: top.ref });
+  const order = proc('order', 'domain:customer/repairs', { pcfId: '6.3.1.10', parent: top.ref });
+  const task = proc('task', 'domain:customer/repairs', { pcfId: '6.3.1.2.1', parent: plan.ref });
+  const all = [top, plan, order, task];
+  it('makes the tree under a process, by ID', () => {
+    const tree = subprocessTree(all, top.ref);
+    expect(tree.map(n => n.process.name)).toEqual(['plan', 'order']);
+    expect(tree[0].children.map(n => n.process.name)).toEqual(['task']);
+    expect(subprocessTree(all, task.ref)).toEqual([]);
+    expect(treeSize(tree)).toBe(3);
+  });
+  it('gives the parents of a sub-process, top first', () => {
+    expect(parentsOf(all, task).map(p => p.name)).toEqual(['repair', 'plan']);
+    expect(parentsOf(all, top)).toEqual([]);
+  });
+});
+
+describe('originText', () => {
+  const t = (k: string, v?: Record<string, string | number>) => (v ? `${k}(${Object.values(v).join(',')})` : k);
+  it('says where a value comes from', () => {
+    expect(originText(t, 'override', 'critical')).toBe('bm.from.override');
+    expect(originText(t, 'inherited', 'critical')).toBe('bm.from.inherited');
+    expect(originText(t, 'default', 'critical')).toBe('bm.from.default(bm.crit.critical)');
+  });
+});
+

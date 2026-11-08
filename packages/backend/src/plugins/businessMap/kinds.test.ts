@@ -29,6 +29,22 @@ describe('validation', () => {
   });
 });
 
+describe('sub-processes', () => {
+  it('a sub-process may leave out its criticality; a top process may not', () => {
+    expect(validateBusinessMapEntity(bp({ criticality: undefined, parentProcess: 'manage-repairs-top' }))).toBe(true);
+    expect(() => validateBusinessMapEntity(bp({ criticality: undefined }))).toThrow();
+    expect(() => validateBusinessMapEntity(bp({ parentProcess: '' }))).toThrow();
+  });
+  it('is part of its parent process (in its own namespace by default)', () => {
+    const r = relationsOf(bp({ parentProcess: 'plan-repairs' }));
+    expect(r.filter(x => x.source.name === 'manage-repairs' && x.type === 'partOf').map(x => `${x.target.kind.toLowerCase()}:${x.target.namespace}/${x.target.name}`)).toEqual([
+      'domain:example-customer/after-sales',
+      'businessprocess:example-customer/plan-repairs',
+    ]);
+    expect(r.filter(x => x.source.name === 'plan-repairs').map(x => x.type)).toEqual(['hasPart']);
+  });
+});
+
 describe('relations', () => {
   it('owner and dependsOn default to the namespace default, the domain to its own', () => {
     const r = relationsOf(bp({ owner: 'maintenance', dependsOn: ['petstore', 'component:default/shop-oneke'] }));

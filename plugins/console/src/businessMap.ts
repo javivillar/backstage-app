@@ -15,7 +15,8 @@ export type CriticalityDefaults = Partial<Record<Criticality, { rpo?: string; rt
 export type ElementGap = { element: string; field: 'rpo' | 'rto'; needs: string; delivers: string };
 export type MapDomain = { ref: string; title: string; description?: string; pcfId?: string; modelId?: string; parent?: string };
 export type MapService = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: CheckResult; gaps: ElementGap[] };
-export type Origin = 'default' | 'override';
+/** Where a value of the requirement comes from: the criticality's default, the process itself, or a parent process. */
+export type Origin = 'default' | 'override' | 'inherited';
 export type MapRequirement = { rpo: Duration; rto: Duration; retention: Duration; ha?: boolean; from: { rpo: Origin; rto: Origin } };
 export type MapProcess = {
   ref: string;
@@ -23,8 +24,12 @@ export type MapProcess = {
   namespace: string;
   title: string;
   description?: string;
-  /** the Domain (or subdomain) it belongs to */
+  /** the Domain (or subdomain) it belongs to (a sub-process: that of its top process) */
   domain: string;
+  /** a sub-process (APQC level 4 and below): its parent process */
+  parent?: string;
+  /** its direct sub-processes ([] or absent when none) */
+  subprocesses?: string[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -122,6 +127,12 @@ function useBusinessMapGet<T>(path: string | undefined): Loaded<T> & { reload: (
   const reload = useCallback(() => setTick(n => n + 1), []);
   return { ...state, reload };
 }
+
+/**
+ * The map as the views draw it (map, heat map, glass, matrix): the top processes only; the sub-processes are reached
+ * from the page of their parent.
+ */
+export const topProcesses = (map: MapData): MapData => ({ ...map, processes: map.processes.filter(p => !p.parent) });
 
 /** The map of a customer (the first one when namespace is empty). */
 export const useBusinessMap = (namespace?: string) =>

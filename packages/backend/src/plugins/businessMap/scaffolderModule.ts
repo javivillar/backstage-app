@@ -41,7 +41,7 @@ function createImportLikeAction(deps: Deps, write: boolean) {
         sheet: z => z.union([z.string(), z.number()]).optional().describe('The sheet of an .xlsx, by name or number'),
         namespace: z => z.string().describe('The customer namespace (e.g. occar-a400m)'),
         owner: z => z.string().optional().describe('Owner of the domains and of the processes without one'),
-        mapping: z => z.record(z.string()).optional().describe('Column (header name or letter) of id, title, parent, level, owner, criticality, rpo, rto, retention, applications'),
+        mapping: z => z.record(z.string()).optional().describe('Column (header name or letter) of id, title, description, parent, level, owner, criticality, rpo, rto, retention, applications'),
         valueMapping: z => z.object({ criticality: z.record(z.string()).optional() }).optional(),
         keepFrom: z => z.string().optional().describe('A ReferenceModel whose support categories to keep'),
         industry: z => z.string().optional(),
@@ -79,7 +79,7 @@ export const createImportAction = (deps: Deps) => createImportLikeAction(deps, t
 export function createAdoptAction(deps: Deps) {
   return createTemplateAction({
     id: 'refresquito:business-model:adopt',
-    description: 'Copies level-1 categories of a ReferenceModel (their subdomains and processes) into a customer namespace, keeping apqc.org/pcf-id.',
+    description: 'Copies level-1 categories of a ReferenceModel (their subdomains, processes and sub-processes) into a customer namespace, keeping apqc.org/pcf-id.',
     schema: {
       input: {
         model: z => z.string().describe('The ReferenceModel (referencemodel:default/<name>)'),

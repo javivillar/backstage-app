@@ -2,7 +2,7 @@ import { type Entity } from '@backstage/catalog-model';
 import { createApiRef, discoveryApiRef, fetchApiRef, type OAuthApi, useApi, useApiHolder } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { useEffect, useMemo, useState } from 'react';
-import { type MapData, useBusinessMap } from '../../businessMap';
+import { type MapData, useBusinessMap, topProcesses } from '../../businessMap';
 import { useNamespaceCosts } from '../../costs';
 import { type AppOverview, useClusterOverview } from '../../overview';
 import { healthOf } from '../EntityDependencies';
@@ -55,11 +55,13 @@ export function useBusinessData(namespace?: string): BusinessData {
     };
   }, [catalog]);
   const apps = useMemo(() => ov.data?.apps ?? [], [ov.data]);
+  // the dashboards draw the top processes; a sub-process is in the page of its parent
+  const top = useMemo(() => (map.data ? topProcesses(map.data) : undefined), [map.data]);
   const graph = useMemo(
-    () => (map.data ? businessGraph(map.data, entities.items, e => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps)) : undefined),
-    [map.data, entities.items, apps],
+    () => (top ? businessGraph(top, entities.items, e => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps)) : undefined),
+    [top, entities.items, apps],
   );
-  return { loading: map.loading || entities.loading, error: map.error ?? entities.error, map: map.data, graph, healthKnown: !!ov.data, healthLoading: ov.loading, apps };
+  return { loading: map.loading || entities.loading, error: map.error ?? entities.error, map: top, graph, healthKnown: !!ov.data, healthLoading: ov.loading, apps };
 }
 
 /** the Keycloak sign-in of the app (plugin keycloak: id auth.keycloak-oidc), looked up by id so the console needs no new dependency */

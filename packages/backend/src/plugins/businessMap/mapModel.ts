@@ -19,6 +19,8 @@ import {
 /**
  * The pages of the business map, without Express: GET /map (the domains and processes of a customer, each checked),
  * GET /impact (the processes above an element, or who runs on a framework line) and the links of GET /engine.
+ * The map lists every process, sub-processes too (each with its parent and its sub-processes): the views of the
+ * console draw the top processes and reach the sub-processes from the page of their parent.
  * Pure: the route gives it the graph of the catalog.
  *
  * The result of a process (or of one of its business services) sums up the check of its chain: a gap if any element
@@ -28,7 +30,8 @@ import {
 export type ElementGap = { element: string; field: 'rpo' | 'rto'; needs: string; delivers: string };
 export type MapDomain = { ref: string; title: string; description?: string; pcfId?: string; modelId?: string; parent?: string };
 export type MapServiceCheck = { ref: string; title: string; type?: string; tier?: string; delivers: Delivers | null; result: Result; gaps: ElementGap[] };
-export type Origin = 'default' | 'override';
+/** Where a value of the requirement comes from: the default of the criticality, the process, or a parent process. */
+export type Origin = 'default' | 'override' | 'inherited';
 export type MapRequirement = { rpo: string | null; rto: string | null; retention: string | null; ha?: boolean; from: { rpo: Origin; rto: Origin } };
 export type MapProcess = {
   ref: string;
@@ -37,6 +40,10 @@ export type MapProcess = {
   title: string;
   description?: string;
   domain: string;
+  /** A sub-process: its parent process (ref). */
+  parent?: string;
+  /** The direct sub-processes (refs), [] when none. */
+  subprocesses: string[];
   owner?: string;
   criticality: Criticality;
   requirement: MapRequirement;
@@ -166,7 +173,7 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
   const check = checkProcess(graph, ref);
   const elements = check?.elements ?? [];
   const byRef = new Map(elements.map(el => [el.ref, el]));
-  const dependsOn = graph.children(ref);
+  const dependsOn = graph.dependencies(ref);
   const services: MapServiceCheck[] = dependsOn.map(dep => {
     const target = graph.entity(dep);
     const sub = [dep, ...(graph.counts(dep) ? graph.chain(dep) : [])].map(r => byRef.get(r)).filter((x): x is CheckElement => !!x);
@@ -176,14 +183,16 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     if (own?.tier) s.tier = own.tier;
     return s;
   });
+  const retention = graph.inherited(ref, 'retention');
+  const origin = (f: 'rpo' | 'rto'): Origin => {
+    if (parseDuration(spec[f]) !== undefined) return 'override';
+    return parseDuration(graph.inherited(ref, f)) === undefined ? 'default' : 'inherited';
+  };
   const requirement: MapRequirement = {
     rpo: fmt(need?.rpo),
     rto: fmt(need?.rto),
-    retention: fmt(parseDuration(spec.retention)) ?? str(spec.retention) ?? null,
-    from: {
-      rpo: parseDuration(spec.rpo) === undefined ? 'default' : 'override',
-      rto: parseDuration(spec.rto) === undefined ? 'default' : 'override',
-    },
+    retention: fmt(parseDuration(retention)) ?? str(retention) ?? null,
+    from: { rpo: origin('rpo'), rto: origin('rto') },
   };
   const ha = defaults[criticality]?.ha;
   if (ha !== undefined) requirement.ha = ha;
@@ -194,6 +203,7 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     namespace: ns,
     title: titleOf(e, ref),
     domain: str(spec.domain) ? normRef(String(spec.domain), 'domain', ns) : '',
+    subprocesses: graph.subprocesses(ref),
     criticality,
     requirement,
     dependsOn,
@@ -203,6 +213,8 @@ export function mapProcess(graph: ContinuityGraph, e: MapEntity, defaults: Criti
     dataProducts,
   };
   if (e.metadata.description) p.description = e.metadata.description;
+  const parent = graph.parentProcess(ref);
+  if (parent) p.parent = parent;
   if (str(spec.owner)) p.owner = normRef(String(spec.owner), 'group', 'default');
   if (str(spec.classification)) p.classification = String(spec.classification);
   if (a[A.pcfId]) p.pcfId = a[A.pcfId];
@@ -309,7 +321,7 @@ function lineServices(graph: ContinuityGraph, lines: string[]): LineService[] {
     if (!groups.has(s)) groups.set(s, new Set());
     groups.get(s)!.add(i);
   }
-  const processes = graph.processes();
+  const processes = graph.listedProcesses();
   const out: LineService[] = [];
   for (const [svc, onLine] of groups) {
     // every instance of the service (not only those on these lines): to see how far each migration is
@@ -393,7 +405,7 @@ export function impactOf(graph: ContinuityGraph, entityRef: string): ImpactAnswe
   const got = graph.delivers(ref);
   const processes: ImpactProcess[] = [];
   if (graph.counts(ref)) {
-    for (const p of graph.processes()) {
+    for (const p of graph.listedProcesses()) {
       const need = graph.need(p);
       const row = impactRow(graph, p);
       if (!need || !row || !graph.chain(p).includes(ref)) continue;

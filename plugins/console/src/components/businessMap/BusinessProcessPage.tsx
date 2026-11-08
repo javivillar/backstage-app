@@ -13,13 +13,35 @@ import Typography from '@mui/material/Typography';
 import ArrowForward from '@mui/icons-material/ArrowForward';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 import { Link, useLocation } from 'react-router-dom';
-import { type CheckElement, type MapProcess, useBusinessMap, useEngine, useProcessCheck } from '../../businessMap';
+import { type CheckElement, type MapProcess, type Origin, useBusinessMap, useEngine, useProcessCheck } from '../../businessMap';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { EntityDependenciesContent } from '../EntityDependencies';
 import { EmptyState, Id, Section, TitleRow } from '../ui';
-import { chainColumns, closeAdvice, consolePath, editProcessUrl, gapText, nameOf, UNASSIGNED } from './businessMapModel';
+import { chainColumns, closeAdvice, consolePath, editProcessUrl, gapText, nameOf, originText, parentsOf, type ProcessNode, subprocessTree, treeSize, UNASSIGNED } from './businessMapModel';
 import { CritPill, pair, ResultPill } from './parts';
+
+/** The sub-processes of a process, nested, each a link to its page with its criticality and its check. */
+const SubprocessList = ({ nodes }: { nodes: ProcessNode[] }) => {
+  const rq = useRq();
+  return (
+    <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'grid', gap: 0.5 }}>
+      {nodes.map(n => (
+        <li key={n.process.ref}>
+          <Box component="span" sx={{ display: 'inline-flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(n.process.pcfId || n.process.modelId) && <Id>{n.process.pcfId ?? n.process.modelId}</Id>}
+            <Link to={consolePath(n.process.ref)} style={{ color: rq.ink, fontWeight: 500 }} title={n.process.description}>
+              {n.process.title}
+            </Link>
+            <CritPill value={n.process.criticality} />
+            <ResultPill result={n.process.result} gaps={n.process.gaps} />
+          </Box>
+          {n.children.length > 0 && <SubprocessList nodes={n.children} />}
+        </li>
+      ))}
+    </Box>
+  );
+};
 
 /** One card of the requirement: the value, and where it comes from. */
 const Card = ({ k, v, w }: { k: string; v: string; w?: string }) => {
@@ -177,6 +199,9 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
   const map = useBusinessMap(ns);
   const check = useProcessCheck(ns, entity.metadata.name);
   const p = map.data?.processes.find(x => x.ref === ref);
+  const all = map.data?.processes ?? [];
+  const ancestors = p ? parentsOf(all, p) : [];
+  const tree = p ? subprocessTree(all, p.ref) : [];
   const domain = map.data?.domains.find(d => d.ref === p?.domain);
   const parent = map.data?.domains.find(d => d.ref === domain?.parent);
   const base = consolePath(ref);
@@ -184,14 +209,14 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
   const elements = check.data?.elements ?? [];
   const gapCount = new Set(p?.gaps.map(g => g.element) ?? []).size;
   const advice = closeAdvice(elements);
-  const from = (o: 'default' | 'override' | undefined) =>
-    o === 'override' ? t('bm.from.override') : t('bm.from.default', { criticality: t(`bm.crit.${p?.criticality ?? 'standard'}`) });
+  const from = (o: Origin | undefined) => originText(t, o ?? 'default', p?.criticality ?? 'standard');
   const crumbs: Array<[string, string?]> = [
     [t('nav.portal'), '/console'],
     [t('nav.businessMap'), `/console/business-map?ns=${encodeURIComponent(ns)}`],
     [ns],
     ...(parent ? [[parent.title] as [string]] : []),
     ...(domain ? [[domain.title] as [string]] : []),
+    ...ancestors.map(a => [a.title, consolePath(a.ref)] as [string, string]),
     [entity.metadata.title ?? entity.metadata.name],
   ];
   const owner = p?.owner && p.owner !== UNASSIGNED ? nameOf(p.owner) : undefined;
@@ -227,6 +252,14 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
       />
       <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: -1.5, mb: 2 }}>
         <Id>{ref}</Id>
+        {ancestors.length > 0 && (
+          <>
+            {` · ${t('bmp.subprocessOf')} `}
+            <Link to={consolePath(ancestors[ancestors.length - 1].ref)} style={{ color: rq.ink }}>
+              {ancestors[ancestors.length - 1].title}
+            </Link>
+          </>
+        )}
       </Typography>
       <Box component="nav" aria-label={t('native.sections')} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         {[
@@ -261,6 +294,11 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
               <Card k={t('bmp.classification')} v={p.classification ?? '—'} />
             </Box>
           </Section>
+          {tree.length > 0 && (
+            <Section title={t('bmp.subprocesses')} meta={t('bmp.subprocesses.meta', { n: treeSize(tree) })}>
+              <SubprocessList nodes={tree} />
+            </Section>
+          )}
           <Section title={t('bmp.chain')} meta={t('bmp.onlyPro')}>
             {elements.length ? <Chain p={p} elements={elements} /> : <EmptyState title={noChain} />}
           </Section>

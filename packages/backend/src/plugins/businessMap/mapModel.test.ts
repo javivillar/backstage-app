@@ -137,6 +137,38 @@ describe('buildMap', () => {
   });
 });
 
+describe('buildMap: sub-processes', () => {
+  const withSub: MapEntity[] = [
+    ...ENTITIES.map(e => (e.metadata.name === 'repair' && e.kind === 'BusinessProcess' ? { ...e, relations: [...(e.relations ?? []), rel('hasPart', 'businessprocess:customer/plan')] } : e)),
+    {
+      kind: 'BusinessProcess',
+      metadata: { name: 'plan', namespace: 'customer', title: 'Plan', description: 'Plan the repair', annotations: { 'apqc.org/pcf-id': '6.3.10.1' } },
+      spec: { domain: 'repairs', parentProcess: 'repair', owner: 'a-team' },
+      relations: [rel('partOf', 'businessprocess:customer/repair'), rel('partOf', 'domain:customer/repairs')],
+    },
+  ];
+  const m = buildMap(new ContinuityGraph(withSub, DEFAULTS), DEFAULTS);
+  it('lists each sub-process with its parent, inherits the requirement, and the parent its sub-processes', () => {
+    const plan = m.processes.find(p => p.name === 'plan')!;
+    expect(plan.parent).toBe('businessprocess:customer/repair');
+    expect(plan.description).toBe('Plan the repair');
+    expect(plan.criticality).toBe('critical');
+    expect(plan.requirement).toEqual({ rpo: '15m', rto: '4h', retention: '30y', ha: true, from: { rpo: 'default', rto: 'default' } });
+    expect(plan.dependsOn).toEqual(['system:default/shop']);
+    expect(plan.result).toBe('gap');
+    const repair = m.processes.find(p => p.name === 'repair')!;
+    expect(repair.subprocesses).toEqual(['businessprocess:customer/plan']);
+    expect(repair.dependsOn).toEqual(['system:default/shop']);
+    expect(repair.parent).toBeUndefined();
+  });
+  it('the impact lists the top process, not its sub-process that says nothing of its own', () => {
+    expect(impactOf(new ContinuityGraph(withSub, DEFAULTS), 'component:default/postgres-oneke').processes.map(p => p.ref)).toEqual([
+      'businessprocess:customer/repair',
+      'businessprocess:customer/invoice',
+    ]);
+  });
+});
+
 describe('impactOf', () => {
   it('lists the processes above a platform service, strictest first, with the way down and the check', () => {
     const a = impactOf(graph(), 'component:default/postgres-oneke');

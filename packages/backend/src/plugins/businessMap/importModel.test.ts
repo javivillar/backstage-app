@@ -14,11 +14,13 @@ X9,Q7,Lost,,,,,,
 `;
 
 const APQC = `Some title line
-PCF ID,Hierarchy ID,Name
-10001,1.0,Invented category one
-10002,1.1,Invented group
-10003,1.1.1,Invented process
-10004,1.1.1.1,Invented activity
+PCF ID,Hierarchy ID,Name,Element Description
+10001,1.0,Invented category one,What category one is about
+10002,1.1,Invented group,
+10003,1.1.1,Invented process,
+10004,1.1.1.1,Invented activity,An invented activity
+10008,1.1.1.1.1,Invented task,
+10009,1.1.1.2,Invented activity,The same name as another activity
 10005,7.0,Invented support category
 10006,7.1,Invented support group
 10007,7.1.1,Invented support process
@@ -74,15 +76,28 @@ describe('parseRows: the Refresquito template', () => {
 });
 
 describe('parseRows: APQC layout and own layout', () => {
-  it('APQC: levels 1-3 by the hierarchy ID, 4 and below left out', () => {
+  it('APQC: levels 1-3 by the hierarchy ID, 4 and below sub-processes; the description when the sheet has one', () => {
     const p = parseRows(parseCsv(APQC), { source: 'apqc', version: '9.9' });
     expect(p.errors).toEqual([]);
-    expect(p.drafts.map(d => `${d.kind} ${d.annotations[A.pcfId]} ${d.annotations[A.pcfElementId]}`)).toEqual([
-      'Domain 1.0 10001', 'Domain 1.1 10002', 'BusinessProcess 1.1.1 10003', 'Domain 7.0 10005', 'Domain 7.1 10006', 'BusinessProcess 7.1.1 10007',
+    expect(p.warnings).toEqual([]);
+    expect(p.drafts.map(d => `${d.kind}${d.sub ? ' sub' : ''} ${d.annotations[A.pcfId]} ${d.annotations[A.pcfElementId]} L${d.level} ${d.root}`)).toEqual([
+      'Domain 1.0 10001 L1 1.0', 'Domain 1.1 10002 L2 1.0', 'BusinessProcess 1.1.1 10003 L3 1.0',
+      'BusinessProcess sub 1.1.1.1 10004 L4 1.0', 'BusinessProcess sub 1.1.1.1.1 10008 L5 1.0', 'BusinessProcess sub 1.1.1.2 10009 L4 1.0',
+      'Domain 7.0 10005 L1 7.0', 'Domain 7.1 10006 L2 7.0', 'BusinessProcess 7.1.1 10007 L3 7.0',
     ]);
     expect(p.drafts[2].owner).toBe('group:default/unassigned');
     expect(p.drafts[2].criticality).toBe('standard');
-    expect(p.warnings[0].message).toMatch(/1 rows below the level of a process/);
+    // a sub-process without a criticality of its own inherits that of its parent
+    expect(p.drafts[3].criticality).toBeUndefined();
+    expect(p.drafts[0].description).toBe('What category one is about');
+    expect(p.drafts[3].description).toBe('An invented activity');
+    expect(p.drafts[1].description).toBeUndefined();
+  });
+  it('own: anything under a process is a sub-process', () => {
+    const p = parseRows(parseCsv('ID,Parent,Title\nA,,Sales\nA1,A,Sell\nA1a,A1,Quote\nA1a1,A1a,Price\nA1a1x,A1a1,Round\nA2,A,Ship\n'), { source: 'template' });
+    expect(p.drafts.map(d => `${d.kind}${d.sub ? ' sub' : ''} ${d.annotations[A.modelId]}`)).toEqual([
+      'Domain A', 'Domain A1', 'BusinessProcess A1a', 'BusinessProcess sub A1a1', 'BusinessProcess sub A1a1x', 'BusinessProcess A2',
+    ]);
   });
   it('own: column mapping by header and letter, levels, value mapping', () => {
     const p = parseRows(parseCsv(OWN), {
@@ -115,7 +130,7 @@ describe('plan: first import', () => {
       'domain-keep-the-fleet-flying.yaml', 'domain-repair-aircraft.yaml', 'domain-run-the-office.yaml',
       'process-order-spare-parts.yaml', 'process-plan-a-repair.yaml', 'process-report-the-fleet.yaml', 'reference-model.yaml',
     ]);
-    expect(r.counts).toEqual({ domains: 2, subdomains: 1, new: 6, changed: 0, gone: 0, unchanged: 0 });
+    expect(r.counts).toEqual({ domains: 2, subdomains: 1, processes: 3, subprocesses: 0, new: 6, changed: 0, gone: 0, unchanged: 0 });
     expect(r.referenceModel).toBe('referencemodel:default/example-customer-business-model');
   });
   it('writes the entities of the kinds', () => {
@@ -144,13 +159,13 @@ D3,,Plan a repair,,,,,,
 `;
     const again = plan(parseRows(parseCsv(next), { source: 'template', ...known }).drafts, edited, { ...opts, goneFamily: 'model' });
     it('keeps the portal edit, applies the file, marks the gone ones', () => {
-      expect(again.counts).toEqual({ domains: 2, subdomains: 1, new: 1, changed: 1, gone: 2, unchanged: 2 });
+      expect(again.counts).toEqual({ domains: 2, subdomains: 1, processes: 2, subprocesses: 0, new: 1, changed: 1, gone: 2, unchanged: 2 });
       // rewritten for its new hash, with the owner of the portal and its process key
       const bp = byPath(again.files, 'process-plan-a-repair.yaml')!;
       expect(bp.spec!.owner).toBe('group:default/night-shift');
       expect(bp.metadata.annotations!['refresquito.io/process-key']).toBe('repair-flow');
       expect(again.changes.filter(c => c.id === 'D1.1.1')).toEqual([
-        { kind: 'review', id: 'D1.1.1', title: 'Plan a repair', what: 'owner edited in the portal: kept group:default/night-shift (the file says group:default/fleet-team)' },
+        { kind: 'review', id: 'D1.1.1', title: 'Plan a repair', what: 'owner edited in the portal: kept group:default/night-shift (the file says group:default/fleet-team)', type: 'process', level: 3, root: 'D1' },
       ]);
       expect(byPath(again.files, 'process-order-spare-parts.yaml')!.metadata.title).toBe('Order spare parts fast');
       expect(byPath(again.files, 'domain-run-the-office.yaml')!.metadata.annotations![A.deprecated]).toBe('2026-11-08');
@@ -159,6 +174,41 @@ D3,,Plan a repair,,,,,,
       // a new name never takes one in use
       expect(byPath(again.files, 'domain-plan-a-repair-2.yaml')!.metadata.annotations![A.modelId]).toBe('D3');
     });
+  });
+});
+
+describe('plan: sub-processes and descriptions', () => {
+  const p = parseRows(parseCsv(APQC), { source: 'apqc' });
+  const r = plan(p.drafts, [], { ...opts, goneFamily: 'apqc' });
+  it('writes each sub-process under its parent process, in the domain of its top process', () => {
+    expect(r.counts).toMatchObject({ domains: 2, subdomains: 2, processes: 2, subprocesses: 3, new: 9 });
+    const activity = byPath(r.files, 'process-invented-activity.yaml')!;
+    expect(activity.spec).toEqual({
+      owner: 'group:default/unassigned',
+      domain: 'domain:example-customer/invented-group',
+      parentProcess: 'businessprocess:example-customer/invented-process',
+    });
+    expect(activity.metadata.description).toBe('An invented activity');
+    expect(byPath(r.files, 'process-invented-task.yaml')!.spec!.parentProcess).toBe('businessprocess:example-customer/invented-activity');
+    // a sub-process named like another takes its ID
+    expect(byPath(r.files, 'process-invented-activity-1-1-1-2.yaml')!.metadata.annotations![A.pcfId]).toBe('1.1.1.2');
+    expect(byPath(r.files, 'domain-invented-category-one.yaml')!.metadata.description).toBe('What category one is about');
+  });
+  it('says the type, level and level-1 domain of each change', () => {
+    expect(r.changes.find(c => c.id === '1.1.1.1.1')).toMatchObject({ kind: 'new', type: 'subprocess', level: 5, root: '1.0', what: 'new sub-process invented-task' });
+    expect(r.changes.find(c => c.id === '7.0')).toMatchObject({ type: 'domain', level: 1, root: '7.0' });
+  });
+  it('a reimport of an older file (no description hashed) changes nothing; a description edited in the portal wins', () => {
+    const tpl = 'ID,Parent,Title,Description\nD1,,Fleet,\nD1.1,D1,Repair,\n';
+    const first = plan(parseRows(parseCsv(tpl), { source: 'template' }).drafts, [], { ...opts, goneFamily: 'model' });
+    const again = plan(parseRows(parseCsv(tpl), { source: 'template' }).drafts, first.files, { ...opts, goneFamily: 'model' });
+    expect(again.files).toEqual([]);
+    expect(again.counts.unchanged).toBe(2);
+    const edited = first.files.map(f => (f.path.endsWith('process-repair.yaml') ? { ...f, text: f.text.replace('title: Repair', 'title: Repair\n  description: Ours') } : f));
+    const withDesc = plan(parseRows(parseCsv(tpl.replace('Repair,', 'Repair,From the file')), { source: 'template' }).drafts, edited, { ...opts, goneFamily: 'model' });
+    expect(withDesc.changes).toEqual([expect.objectContaining({ kind: 'review', id: 'D1.1', what: 'description edited in the portal: kept Ours (the file says From the file)' })]);
+    const fromFile = plan(parseRows(parseCsv(tpl.replace('Repair,', 'Repair,From the file')), { source: 'template' }).drafts, first.files, { ...opts, goneFamily: 'model' });
+    expect(fromFile.changes).toEqual([expect.objectContaining({ kind: 'changed', id: 'D1.1', what: 'description: (none) → From the file' })]);
   });
 });
 
@@ -176,16 +226,20 @@ describe('copyDrafts (adopt, keep support categories)', () => {
     e('BusinessProcess', 'one-process', '1.1.1', { owner: 'group:default/unassigned', domain: 'one-group', criticality: 'standard' }),
     e('Domain', 'support', '7.0', { owner: 'group:default/unassigned' }),
     e('BusinessProcess', 'support-process', '7.0.1', { owner: 'group:default/unassigned', domain: `domain:${ns}/support`, criticality: 'standard' }),
+    e('BusinessProcess', 'one-activity', '1.1.1.1', { owner: 'group:default/unassigned', domain: 'one-group', parentProcess: 'one-process' }),
   ];
   it('copies the chosen categories into the namespace, keeping the PCF ID', () => {
     const drafts = copyDrafts(model, ['1.0'], { owner: 'group:default/fleet-team', from: 'referencemodel:default/x' });
-    expect(drafts.map(d => d.key)).toEqual(['apqc:1', 'apqc:1.1', 'apqc:1.1.1']);
+    expect(drafts.map(d => d.key)).toEqual(['apqc:1', 'apqc:1.1', 'apqc:1.1.1', 'apqc:1.1.1.1']);
     const r = plan(drafts, [], opts);
     const bp = byPath(r.files, 'process-one-process.yaml')!;
     expect(bp.metadata.annotations![A.pcfId]).toBe('1.1.1');
     expect(bp.metadata.annotations![A.adoptedFrom]).toBe('referencemodel:default/x');
     expect(bp.spec!.owner).toBe('group:default/fleet-team');
     expect(bp.spec!.domain).toBe('domain:example-customer/one-group');
+    const sub = byPath(r.files, 'process-one-activity.yaml')!;
+    expect(sub.spec).toMatchObject({ domain: 'domain:example-customer/one-group', parentProcess: 'businessprocess:example-customer/one-process' });
+    expect(sub.spec!.criticality).toBeUndefined();
   });
   it('the support categories of an APQC model are those from 7 on', () => {
     const m: ModelEntity = { apiVersion: 'refresquito.io/v1alpha1', kind: 'ReferenceModel', metadata: { name: 'x' }, spec: { source: 'apqc', namespace: ns } };
