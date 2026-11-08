@@ -1,4 +1,4 @@
-import { CHECKS, cell, isoWeek, riskScore, weekly } from './heatmap';
+import { CHECKS, cell, isoWeek, mergeFacts, mergeSeries, riskScore, weekly } from './heatmap';
 import type { Status } from './model';
 
 const ctx = (status: Status = { kind: 'latest' }, more: Partial<{ health: string; owner: string; hasDocs: boolean }> = {}) => ({ status, owner: 'group:default/team', hasDocs: true, ...more });
@@ -139,4 +139,35 @@ describe('weekly', () => {
 
 describe('line cell of an ending line', () => {
   it('uses the known lines behind', () => expect(cell('line', {}, { status: { kind: 'ending', daysLeft: 73 }, behind: 2, hasDocs: true })).toEqual({ text: '2 behind', level: 2 }));
+});
+
+describe('mergeFacts (Spring parts)', () => {
+  it('adds counts, keeps the lowest coverage, ANDs booleans', () => {
+    const m = mergeFacts([
+      { ownLayerHigh: 1, backendCoverage: 80, sbomOnEveryImage: true, frameworkLine: '1.0' },
+      { ownLayerHigh: 2, backendCoverage: 55, sbomOnEveryImage: false, frameworkLine: '1.0' },
+    ])!;
+    expect(m.ownLayerHigh).toBe(3);
+    expect(m.backendCoverage).toBe(55);
+    expect(m.sbomOnEveryImage).toBe(false);
+    expect(m.frameworkLine).toBe('1.0');
+  });
+  it('a -1 in any part is not known', () => {
+    expect(mergeFacts([{ high: 1 }, { high: -1 }])!.high).toBe(-1);
+  });
+  it('a part without facts makes the whole not known', () => {
+    expect(mergeFacts([{ high: 1 }, undefined])).toBeUndefined();
+    expect(mergeFacts([])).toBeUndefined();
+  });
+});
+
+describe('mergeSeries', () => {
+  it('merges per week and drops a week some part lacks', () => {
+    const a = [{ timestamp: '2026-11-02T05:23:00Z', facts: { high: 1 } }, { timestamp: '2026-11-09T05:23:00Z', facts: { high: 2 } }];
+    const b = [{ timestamp: '2026-11-09T05:24:00Z', facts: { high: 3 } }];
+    const m = mergeSeries([a, b]);
+    expect(m).toHaveLength(1);
+    expect(m[0].facts.high).toBe(5);
+    expect(isoWeek(m[0].timestamp)).toBe('2026-W46');
+  });
 });

@@ -208,3 +208,52 @@ export function weekly(series: Array<{ timestamp: string; facts: Record<string, 
     return { week, ...metricCell(metric, p.facts ?? {}) };
   });
 }
+
+/** coverage is the weakest part's, not a sum */
+const MIN_KEYS = new Set(['backendCoverage', 'frontendCoverage']);
+
+/**
+ * The facts of an instance built from several parts (a Spring application: its images, so its facts, sit on its
+ * service parts). Counts add up, coverage is the lowest, a boolean holds when it holds for every part, texts are the
+ * distinct values. A part without facts, or a -1 (not known) in any part, makes the whole not known.
+ */
+export function mergeFacts(list: Facts[]): Facts {
+  if (!list.length || list.some(f => !f)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const key of new Set(list.flatMap(f => Object.keys(f!)))) {
+    const values = list.map(f => f![key]);
+    if (values.every(v => typeof v === 'number')) {
+      const nums = values as number[];
+      if (nums.some(n => n === -1)) out[key] = -1;
+      else out[key] = MIN_KEYS.has(key) ? Math.min(...nums) : nums.reduce((a, b) => a + b, 0);
+    } else if (values.every(v => typeof v === 'boolean')) {
+      out[key] = values.every(Boolean);
+    } else {
+      out[key] = [...new Set(values.filter(v => v !== undefined && v !== '').map(String))].join(', ');
+    }
+  }
+  return out;
+}
+
+type Point = { timestamp: string; facts: Record<string, unknown> };
+
+/** the weekly series of several parts as one: per ISO week, the latest point of each part merged; a week some part lacks is left out */
+export function mergeSeries(list: Point[][]): Point[] {
+  if (list.length === 1) return list[0];
+  const byWeek = list.map(series => {
+    const m = new Map<string, Point>();
+    for (const p of series) {
+      const w = isoWeek(p.timestamp);
+      const prev = m.get(w);
+      if (!prev || prev.timestamp < p.timestamp) m.set(w, p);
+    }
+    return m;
+  });
+  const weeks = [...new Set(byWeek.flatMap(m => [...m.keys()]))].sort();
+  return weeks
+    .filter(w => byWeek.every(m => m.has(w)))
+    .map(w => {
+      const points = byWeek.map(m => m.get(w)!);
+      return { timestamp: points.map(p => p.timestamp).sort().pop()!, facts: mergeFacts(points.map(p => p.facts))! };
+    });
+}
