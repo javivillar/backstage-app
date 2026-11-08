@@ -43,21 +43,25 @@ export const CATALOG: Entity[] = [
 
 const proc = (name: string, title: string, domain: string, criticality: MapProcess['criticality'], rpo: string, rto: string, dependsOn: string[], extra: Partial<MapProcess> = {}): MapProcess => ({
   ref: `businessprocess:occar/${name}`,
+  name,
+  namespace: 'occar',
   title,
   domain: `domain:occar/${domain}`,
   owner: 'group:occar/maintenance',
   criticality,
-  requirement: { rpo, rto, from: { rpo: 'default', rto: 'default' } },
+  requirement: { rpo, rto, retention: null, from: { rpo: 'default', rto: 'default' } },
   dependsOn,
   result: 'unknown',
   gaps: [],
   services: [],
+  dataProducts: [],
   ...extra,
 });
 
 export const MAP: MapData = {
   namespaces: ['occar'],
   models: [],
+  defaults: {},
   domains: [
     { ref: 'domain:occar/service-after-sales', title: 'Service after sales' },
     { ref: 'domain:occar/maintenance', title: 'Maintenance and repair', parent: 'domain:occar/service-after-sales' },
