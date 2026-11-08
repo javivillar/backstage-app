@@ -18,7 +18,7 @@ import { rq } from './tokens';
 import { TitleRow } from './ui';
 import { useI18n } from '../i18n';
 import { ManageRowActions, ManageToolbar, type SectionManage } from './manage/ManageSection';
-import { BLOCK_NAME_FIELD } from './manage/manageFields';
+import { blockNameField } from './manage/manageFields';
 
 type Row = Record<string, unknown>;
 type Column = { key: string; label: string; render?: (r: Row) => ReactNode };
@@ -260,7 +260,7 @@ export const MANAGE_SERVICES: ManageService[] = [
           what: 'bucket',
           platform: true,
           fields: [
-            BLOCK_NAME_FIELD('Name', 'the bucket of an application is <application>-<name>'),
+            blockNameField('Name', 'the bucket of an application is <application>-<name>'),
             { key: 'writeGroup', label: 'Group that writes', kind: 'text', only: 'platform', help: 'a Keycloak group: its members read and write the bucket' },
             { key: 'readGroup', label: 'Group that reads', kind: 'text', only: 'platform', help: 'a Keycloak group: its members only read it' },
           ],
@@ -309,7 +309,7 @@ export const MANAGE_SERVICES: ManageService[] = [
           platform: true,
           nameOf: r => String(r.id ?? ''),
           fields: [
-            BLOCK_NAME_FIELD('Name', 'the site of an application is <application>-<name>, private'),
+            blockNameField('Name', 'the site of an application is <application>-<name>, private'),
             { key: 'users', label: 'People', kind: 'list', help: 'user names of Keycloak that enter the site' },
             { key: 'groups', label: 'Groups', kind: 'list', help: 'Keycloak groups whose members enter the site' },
           ],

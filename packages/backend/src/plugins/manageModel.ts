@@ -114,15 +114,15 @@ export function entriesOf(doc: Document, path: string[]): Declared[] {
 }
 
 const HANDLERS = new Map<string, Handler>();
-const key = (service: string, object: string) => `${service}/${object}`;
+const handlerKey = (service: string, object: string) => `${service}/${object}`;
 
 /** Adds the handler of one kind of object (each service registers its own: see the handlers at the end). */
 export function registerHandler(h: Handler): void {
-  HANDLERS.set(key(h.service, h.object), h);
+  HANDLERS.set(handlerKey(h.service, h.object), h);
 }
 
 export function handlerFor(service: string, object: string): Handler {
-  const h = HANDLERS.get(key(service, object));
+  const h = HANDLERS.get(handlerKey(service, object));
   if (!h) throw new ChangeError(501, `Manage cannot change ${object} of ${service} yet.`);
   return h;
 }
@@ -315,8 +315,8 @@ function splice(source: string, touched: Touched): string {
     edits.push({ at: start, end, text: listText(l, source) + nl });
   }
   for (const [node, { value, pair }] of touched.values) {
-    const block = (isMap(node) || isSeq(node)) && !node.flow;
-    if (!block) {
+    const multiline = (isMap(node) || isSeq(node)) && !node.flow;
+    if (!multiline) {
       edits.push({ at: node.range![0], end: node.range![1], text: flowValue(value) });
       continue;
     }

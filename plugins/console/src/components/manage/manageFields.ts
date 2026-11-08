@@ -4,7 +4,7 @@ import type { Field } from './manageFormModel';
 export const BLOCK_NAME = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 /** The name field of a new bucket or site (it cannot change afterwards). */
-export const BLOCK_NAME_FIELD = (label: string, help?: string): Field => ({
+export const blockNameField = (label: string, help?: string): Field => ({
   key: 'name',
   label,
   kind: 'text',
