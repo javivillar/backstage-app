@@ -92,6 +92,28 @@ export const appFile = (owner: Owner): Target => {
   return { repo: 'services', path: `bootstrap/app-of-apps/apps/${owner.name}.yaml` };
 };
 
+/**
+ * The file of the objects of the platform of a service (not of any application): bootstrap/app-of-apps/platform/<file>.yaml,
+ * values under `manage:` that the app-of-apps passes to the chart of the service; its reconciler applies them. <file> is
+ * the chart without -oneke (iam, gravitee, datahub, superset, seaweedfs, alfrescodms…).
+ */
+export const platformFile = (file: string): Target => ({ repo: 'services', path: `bootstrap/app-of-apps/platform/${file}.yaml` });
+
+/** The target of a kind of object that may belong to an application or to the platform. */
+export const appOrPlatform = (file: string) => (owner: Owner): Target => (owner.kind === 'platform' ? platformFile(file) : appFile(owner));
+
+/** manage.<field> of a platform file, added when missing. */
+export function platformList(doc: Document, field: string, touched: Touched): YAMLSeq {
+  let m = doc.get('manage');
+  if (m === undefined || m === null) {
+    m = doc.createNode({});
+    doc.set('manage', m);
+    touched.added.push({ key: 'manage', node: m as Node });
+  }
+  if (!isMap(m)) throw new ChangeError(422, 'manage of this file is not a mapping.');
+  return list(doc, m, field, touched);
+}
+
 /** The id of a change: id for update/delete, spec.name for create. */
 export function changeId(req: ChangeRequest): string {
   const id = req.action === 'create' ? str(req.spec?.name) : req.id;
@@ -266,17 +288,24 @@ function splice(source: string, touched: Touched): string {
   return out;
 }
 
+/** The first line of a platform file the console creates. */
+export const NEW_FILE_HEADER = '# Objects of the platform of this service, changed from the console (Manage) by pull request: values under manage: for its chart.';
+
 /** The new text of the file after the change, and a short summary for the pull request. */
 export function applyChange(text: string, h: Handler, req: ChangeRequest): { text: string; summary: string } {
   const id = changeId(req);
   const errors = req.action === 'delete' ? [] : h.validate(req.action, req.spec ?? {});
   if (errors.length) throw new ChangeError(422, 'The change is not valid.', errors);
+  const fresh = text.trim() === '';
   const doc = parse(text);
+  if (doc.contents === null) doc.contents = doc.createNode({}) as typeof doc.contents;
   const touched = untouched();
   h.apply(doc, { ...req, id }, touched);
   const verb = { create: 'Add', update: 'Change', delete: 'Remove' }[req.action];
   const owner = req.owner.kind === 'application' ? req.owner.name : 'the platform';
-  return { text: splice(text, touched), summary: `${verb} ${h.label} ${id} of ${owner}` };
+  // a file that does not exist yet (the first object of the platform of a service) is written whole
+  const out = fresh ? `${NEW_FILE_HEADER}\n${doc.toString({ lineWidth: 0 })}` : splice(text, touched);
+  return { text: out, summary: `${verb} ${h.label} ${id} of ${owner}` };
 }
 
 /** A line-by-line diff of two texts, enough to show a change before its pull request (- old, + new). */
@@ -307,9 +336,17 @@ registerHandler({
   service: 'seaweedfs',
   object: 'bucket',
   label: 'S3 bucket',
-  target: appFile,
-  validate: (action, spec) => (action === 'create' ? checkName(spec, 'The name of the bucket') : []),
+  target: appOrPlatform('seaweedfs'),
+  validate: (action, spec) => [
+    ...(action === 'create' ? checkName(spec, 'The name of the bucket') : []),
+    ...['writeGroup', 'readGroup'].filter(k => spec[k] !== undefined && typeof spec[k] !== 'string').map(k => `${k}: a Keycloak group.`),
+  ],
   apply: (doc, req, touched) => {
+    // a bucket of the platform: manage.buckets of seaweedfs (its groups of writers and readers)
+    if (req.owner.kind === 'platform') {
+      editList(doc, platformList(doc, 'buckets', touched), req.action, req.id, { writeGroup: req.spec?.writeGroup, readGroup: req.spec?.readGroup }, false);
+      return;
+    }
     const b = block(doc, 's3', touched);
     editList(doc, list(doc, b, 'buckets', touched), req.action, req.id, {}, true);
   },
@@ -319,14 +356,18 @@ registerHandler({
   service: 'alfresco',
   object: 'site',
   label: 'document site',
-  target: appFile,
+  target: appOrPlatform('alfrescodms'),
   validate: (action, spec) => [
     ...(action === 'create' ? checkName(spec, 'The name of the site') : []),
     ...(spec.users !== undefined && !strList(spec.users) ? ['users: a list of user names.'] : []),
     ...(spec.groups !== undefined && !strList(spec.groups) ? ['groups: a list of Keycloak groups.'] : []),
   ],
   apply: (doc, req, touched) => {
-    const b = block(doc, 'dms', touched);
-    editList(doc, list(doc, b, 'sites', touched), req.action, req.id, { users: req.spec?.users, groups: req.spec?.groups }, false);
+    const fields = { users: req.spec?.users, groups: req.spec?.groups };
+    if (req.owner.kind === 'platform') {
+      editList(doc, platformList(doc, 'sites', touched), req.action, req.id, fields, false);
+      return;
+    }
+    editList(doc, list(doc, block(doc, 'dms', touched), 'sites', touched), req.action, req.id, fields, false);
   },
 });

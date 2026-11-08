@@ -158,9 +158,14 @@ export default createBackendPlugin({
               throw new ChangeError(403, `Only ${groups.join(', ')} can change objects of the platform.`);
             }
             if (target.repo !== 'services') throw new ChangeError(501, 'Changes in the repository of the application are not supported yet.');
-            const { text: before } = await services.get(target.path).catch(() => {
-              throw new ChangeError(404, `${target.path} is not in refresquito-services.`);
-            });
+            // the platform file of a service is created by its first object; an application's file must exist
+            const before = await services.get(target.path).then(
+              f => f.text,
+              () => {
+                if (r.owner.kind === 'platform' && r.action === 'create') return '';
+                throw new ChangeError(404, `${target.path} is not in refresquito-services.`);
+              },
+            );
             const { text, summary } = applyChange(before, h, r);
             const id = (r.action === 'create' ? (r.spec?.name as string) : r.id) as string;
             const diff = lineDiff(before, text);

@@ -45,7 +45,8 @@ describe('Manage through git: the edit of an application file', () => {
     expect(fails(() => run(req({ spec: { name: 'files' } }))).status).toBe(409);
     expect(fails(() => run(req({ spec: { name: 'Files!' } }))).status).toBe(422);
     expect(fails(() => handlerFor('gravitee', 'api')).status).toBe(501);
-    expect(fails(() => handlerFor('seaweedfs', 'bucket').target({ kind: 'platform' })).status).toBe(501);
+    expect(handlerFor('seaweedfs', 'bucket').target({ kind: 'platform' }).path).toBe('bootstrap/app-of-apps/platform/seaweedfs.yaml');
+    expect(handlerFor('alfresco', 'site').target({ kind: 'platform' }).path).toBe('bootstrap/app-of-apps/platform/alfrescodms.yaml');
     expect(handlerFor('seaweedfs', 'bucket').target({ kind: 'application', name: 'petshop' }).path).toBe('bootstrap/app-of-apps/apps/petshop.yaml');
   });
 
@@ -79,6 +80,17 @@ describe('Manage through git: the edit of an application file', () => {
     expect(changed).toMatch(/name: documents[\s\S]*javi[\s\S]*ana/);
     expect(fails(() => run(site({ action: 'update', id: 'documents', spec: { users: 'ana' } }))).errors[0]).toMatch(/users/);
     expect(run(site({ action: 'delete', id: 'documents' })).text).toMatch(/name: documents[\s\S]*state: absent/);
+  });
+
+  it('keeps the objects of the platform in manage: of the platform file, which the first one creates', () => {
+    const plat = (over: Partial<ChangeRequest>) => req({ owner: { kind: 'platform' }, ...over });
+    const first = run(plat({ spec: { name: 'shared', writeGroup: 's3-shared-writers' } }), '').text;
+    expect(first.split('\n')[0]).toMatch(/^# Objects of the platform/);
+    expect(first).toMatch(/manage:\n\s+buckets:\n\s+- name: shared\n\s+writeGroup: s3-shared-writers/);
+    const second = run(plat({ spec: { name: 'other' } }), first).text;
+    expect(second).toContain(first.trimEnd());
+    expect(second).toMatch(/name: other/);
+    expect(run(plat({ action: 'delete', id: 'shared' }), second).text).toMatch(/name: shared, state: absent/);
   });
 
   it('shows the change as a diff', () => {
