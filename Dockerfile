@@ -12,6 +12,13 @@ RUN find packages \! -name "package.json" -mindepth 2 -maxdepth 2 -exec rm -rf {
 # Stage 2 - Install dependencies and build packages
 FROM node:22-bookworm-slim AS build
 
+# native modules (isolated-vm…) are compiled when their prebuilt binary cannot be downloaded from GitHub releases
+# (those downloads answered 504 to the runners on 2026-11-08): the same tools as the final stage
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends python3 g++ build-essential
+
 USER node
 WORKDIR /app
 
@@ -42,14 +49,15 @@ RUN yarn config set python /usr/bin/python3
 # Add kubectl for the kube apply plugin
 RUN curl -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.9/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
 
-# Add cnoe-cli
-RUN curl -L -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/cnoe_Linux_x86_64.tar.gz && \
-    curl -L -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/checksums.txt && \
-    sha256sum -c --strict --status --ignore-missing checksums.txt && \
-    tar -xzf cnoe_Linux_x86_64.tar.gz && \
-    mv cnoe /usr/bin/cnoe-cli && \
+# Add cnoe-cli v0.1.0: the build workflow fetches it into the context through the GitHub API (the release's direct
+# download answered 504 to the runners on 2026-11-08); its sha256 is pinned (the one of the release's checksums.txt).
+ARG CNOE_CLI_SHA256=55a421f62963c74cb83880983fe360fa6cb1862444e15e4d74c15dd50bbe5fe4
+COPY cnoe_Linux_x86_64.tar.gz /tmp/cnoe_Linux_x86_64.tar.gz
+RUN echo "${CNOE_CLI_SHA256}  /tmp/cnoe_Linux_x86_64.tar.gz" | sha256sum -c --strict --status && \
+    tar -xzf /tmp/cnoe_Linux_x86_64.tar.gz -C /tmp && \
+    mv /tmp/cnoe /usr/bin/cnoe-cli && \
     chmod +x /usr/bin/cnoe-cli && \
-    rm checksums.txt cnoe_Linux_x86_64.tar.gz
+    rm /tmp/cnoe_Linux_x86_64.tar.gz
 COPY ./cnoe-wrapper.sh /usr/bin/cnoe
 RUN chmod +x /usr/bin/cnoe
 
