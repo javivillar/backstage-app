@@ -2,7 +2,6 @@ import type { BackstageCredentials } from '@backstage/backend-plugin-api';
 import type { Config } from '@backstage/config';
 import type { CatalogService } from '@backstage/plugin-catalog-node';
 import { parseAllDocuments } from 'yaml';
-import { GitHubFiles } from '../clusterVms';
 import {
   A,
   API_VERSION,
@@ -55,12 +54,38 @@ export type ImportInput = {
 export type ImportDeps = { config: Config; catalog: CatalogService };
 
 /** The files of a namespace's folder in refresquito-services main ([] when it does not exist yet). */
-export async function currentFiles(config: Config, namespace: string): Promise<CurrentFile[]> {
+export async function currentFiles(config: Config, namespace: string, fetchFn: typeof fetch = fetch): Promise<CurrentFile[]> {
   const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
   const repo = config.getOptionalString('businessMap.repo') ?? config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services';
-  const gh = new GitHubFiles(repo, config.getOptionalString('businessMap.branch') ?? 'main', token);
-  const list = (await gh.list(dirOf(namespace))).filter(f => /\.ya?ml$/.test(f.name));
-  return Promise.all(list.map(async f => ({ path: f.path, text: (await gh.get(f.path)).text })));
+  const branch = config.getOptionalString('businessMap.branch') ?? 'main';
+  // ONE GraphQL query for the whole folder: the contents API takes a request per file, and a customer with thousands
+  // of processes spent the hourly limit of the token of Backstage in two previews
+  const [owner, name] = repo.split('/');
+  const query = `query($owner: String!, $name: String!, $expr: String!) { repository(owner: $owner, name: $name) { object(expression: $expr) { ... on Tree { entries { name type object { ... on Blob { text isTruncated } } } } } } }`;
+  const res = await fetchFn('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ query, variables: { owner, name, expr: `${branch}:${dirOf(namespace)}` } }),
+  });
+  if (!res.ok) {
+    const reset = Number(res.headers.get('x-ratelimit-reset'));
+    if ((res.status === 403 || res.status === 429) && (res.headers.get('x-ratelimit-remaining') === '0' || reset)) {
+      const at = reset ? new Date(reset * 1000).toISOString().slice(11, 16) : 'within the hour';
+      throw new Error(`GitHub limits the requests of the token of Backstage for now: try again after ${at} UTC.`);
+    }
+    throw new Error(`GitHub answered ${res.status} reading ${repo}/${dirOf(namespace)}${res.status === 401 || res.status === 403 ? ' (does the token of Backstage have Contents: read on it?)' : ''}`);
+  }
+  type Entry = { name: string; type: string; object?: { text?: string | null; isTruncated?: boolean } | null };
+  const body = (await res.json()) as { data?: { repository?: { object?: { entries?: Entry[] } | null } | null }; errors?: Array<{ type?: string; message: string }> };
+  if (body.errors?.length) {
+    if (body.errors.some(e => e.type === 'RATE_LIMITED')) throw new Error('GitHub limits the requests of the token of Backstage for now: try again within the hour.');
+    throw new Error(`GitHub: ${body.errors.map(e => e.message).join('; ')}`);
+  }
+  const entries = body.data?.repository?.object?.entries ?? []; // no folder yet: a first import
+  const files = entries.filter(e => e.type === 'blob' && /\.ya?ml$/.test(e.name));
+  const cut = files.find(e => e.object?.isTruncated || typeof e.object?.text !== 'string');
+  if (cut) throw new Error(`${dirOf(namespace)}/${cut.name} could not be read whole from GitHub.`);
+  return files.map(e => ({ path: `${dirOf(namespace)}/${e.name}`, text: e.object!.text as string }));
 }
 
 const refOf = (e: { kind: string; metadata: { name: string; namespace?: string } }) => `${e.kind}:${e.metadata.namespace ?? 'default'}/${e.metadata.name}`.toLowerCase();
@@ -98,7 +123,8 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     current = await currentFiles(deps.config, input.namespace);
   } catch (e) {
     // an import that cannot see the current files would overwrite them: only the preview goes on
-    if (strict) throw new Error(`Cannot read ${dirOf(input.namespace)} of refresquito-services: ${(e as Error).message}`);
+    // the analysis only updates what is there: without the current files every row would be an error
+    if (strict || input.source === 'bia') throw new Error(`Cannot read ${dirOf(input.namespace)} of refresquito-services: ${(e as Error).message}`);
     warnings.push({ message: `The current files could not be read (${(e as Error).message}): shown as a first import.` });
   }
   const oldModel = current
