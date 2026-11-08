@@ -63,6 +63,8 @@ export type Kind = {
   /** read only: nothing of git is joined (no object of /api/manage) */
   readOnly?: boolean;
   noEdit?: boolean;
+  /** remove is not offered (the product cannot tear it down yet) */
+  noDelete?: boolean;
   /** a note above the table */
   note?: ReactNode;
 };
@@ -227,7 +229,7 @@ export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
                   {tx('Change', 'Cambiar')}
                 </Button>
               )}
-              {picked.d && !picked.d.gone && writable(picked.d.owner) && (
+              {picked.d && !picked.d.gone && !kind.noDelete && writable(picked.d.owner) && (
                 <Button size="small" variant="outlined" color="error" onClick={() => setMode({ kind: 'delete', d: picked.d! })} sx={{ textTransform: 'none' }}>
                   {tx('Remove', 'Eliminar')}
                 </Button>

@@ -104,6 +104,7 @@ const SHELL: Messages = {
   'page.gravitee': { en: 'API management', es: 'Gestión de APIs' },
   'page.datahub': { en: 'Data management', es: 'Gestión de datos' },
   'page.superset': { en: 'Business intelligence', es: 'Inteligencia de negocio' },
+  'page.grafana': { en: 'Monitoring', es: 'Monitorización' },
   'page.camunda': { en: 'Business process', es: 'Procesos de negocio' },
   'page.seaweedfs': { en: 'S3 buckets', es: 'Buckets S3' },
   'page.alfresco': { en: 'Document management system', es: 'Gestión documental' },

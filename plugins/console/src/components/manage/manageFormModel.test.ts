@@ -44,4 +44,15 @@ describe('the fields of a Manage form', () => {
     expect(declarationOf([app, plat], 'shared')).toBe(plat);
     expect(declarationOf([app, plat], 'manual-bucket')).toBeUndefined();
   });
+
+  it('checks and sends only the fields shown for the values (when)', () => {
+    const f: Field[] = [
+      { key: 'source', label: 'Source', kind: 'select', required: true, options: [{ value: 'template', label: 'T' }, { value: 'import', label: 'I' }] },
+      { key: 'template', label: 'Template', kind: 'select', required: true, options: [{ value: 'database', label: 'D' }], when: v => v.source !== 'import' },
+      { key: 'json', label: 'JSON', kind: 'textarea', required: true, when: v => v.source === 'import' },
+    ];
+    expect(fieldErrors(f, { source: 'import', template: '', json: '' }, true)).toEqual({ json: 'required' });
+    expect(specFrom(f, { source: 'import', template: 'database', json: ' {"panels":[]} ' }, true)).toEqual({ source: 'import', json: '{"panels":[]}' });
+    expect(specFrom(f, { source: 'template', template: 'database', json: 'x' }, true)).toEqual({ source: 'template', template: 'database' });
+  });
 });

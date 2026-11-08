@@ -1,5 +1,5 @@
 
-import { Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import { apiDocsPlugin, EntityApiDefinitionCard } from '@backstage/plugin-api-docs';
 import {
   CatalogEntityPage,
@@ -180,6 +180,8 @@ const consolePages: ConsoleClassicPage[] = [
   { id: 'gravitee', title: 'API management', product: 'Gravitee', layer: 'managers', classicPath: '/gravitee-manager', element: <GraviteeManagerPage /> },
   { id: 'datahub', title: 'Data management', product: 'DataHub', layer: 'managers', classicPath: '/datahub', element: <DatahubCatalogPage /> },
   { id: 'superset', title: 'Business intelligence', product: 'Superset', layer: 'managers', classicPath: '/superset-manager', element: <SupersetManagerPage /> },
+  // Manage › Monitoring is a page of the console only (no classic manager): its menu entry leads to /console/manage/grafana
+  { id: 'grafana', title: 'Monitoring', product: 'Grafana', layer: 'managers', classicPath: '/catalog', consoleOnly: true, element: <Navigate to="/console/manage/grafana" replace /> },
   { id: 'camunda', title: 'Business process', product: 'Operaton', layer: 'managers', classicPath: '/camunda-manager', element: <CamundaManagerPage /> },
   { id: 'seaweedfs', title: 'S3 buckets', product: 'SeaweedFS', layer: 'managers', classicPath: '/seaweedfs-manager', element: <SeaweedfsManagerPage /> },
   { id: 'alfresco', title: 'Document management system', product: 'Alfresco', layer: 'managers', classicPath: '/alfresco-manager', element: <AlfrescoManagerPage /> },
