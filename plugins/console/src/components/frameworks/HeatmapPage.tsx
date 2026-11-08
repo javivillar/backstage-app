@@ -7,11 +7,11 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useI18n } from '../../i18n';
 import { type RqTokens, useRq } from '../../theme/consoleTheme';
-import { EmptyState, Row, Section, TitleRow } from '../ui';
-import { CHECKS, type Cell, type Lens, type Level, METRICS, type Metric, cell, riskScore, weekly } from './heatmap';
+import { EmptyState, Row, Section, TitleRow, choose } from '../ui';
+import { CHECKS, type Cell, type Lens, type Level, METRICS, type Metric, cell, isEventMetric, riskScore, weekly, weeklyCounts } from './heatmap';
 import { type AppRow, type Stage, STAGES, behindOf, latestLines, statusOf } from './model';
 import { argoName, entityPath, todayIso } from './shared';
-import { useFrameworksData, useWeekly } from './useFrameworksData';
+import { useEvents, useFrameworksData, useWeekly } from './useFrameworksData';
 
 const WEEKS = 10;
 const LENSES: Lens[] = ['all', 'framework', 'security', 'quality', 'running'];
@@ -50,13 +50,14 @@ export const HeatmapPage = () => {
   const inStage = apps.filter(a => a.instances[stage]);
   const refs = useMemo(() => (mode === 'weeks' ? apps.filter(a => a.instances[stage]).map(a => a.instances[stage]!) : []), [mode, apps, stage]);
   const weeklyData = useWeekly(refs);
+  const events = useEvents(mode === 'weeks' && isEventMetric(metric), refs, ref => argoName(ref, entities));
   const lineTitle = (a: AppRow) => lines.find(l => l.framework === a.framework && l.line === a.lines[stage])?.title ?? `${a.framework} ${a.lines[stage] ?? ''}`;
 
   const checks = CHECKS.filter(c => lens === 'all' || c.lens === lens);
   const cols: Col[] =
     mode === 'checks'
       ? checks.map(c => ({ key: c.id, label: tr(`hm.check.${c.id}`), source: c.source, to: c.to }))
-      : weekly([], metric, WEEKS, today).map(w => ({ key: w.week, label: w.week, source: tr('hm.weeklySource'), to: '' }));
+      : weekly([], metric, WEEKS, today).map(w => ({ key: w.week, label: w.week, source: isEventMetric(metric) ? tr(`hm.source.${metric}`) : tr('hm.weeklySource'), to: '' }));
 
   const latest = latestLines(lines);
   const rows: HRow[] = inStage
@@ -73,7 +74,13 @@ export const HeatmapPage = () => {
                 hasDocs: !!entities.get(ref)?.metadata.annotations?.['backstage.io/techdocs-ref'],
               }),
             )
-          : weekly(weeklyData.series.get(ref) ?? [], metric, WEEKS, today, latest.get(a.framework)?.line).map(w => ({ text: w.text, level: w.level }));
+          : choose<() => Array<{ text: string; level: Level }>>(
+              [
+                [metric === 'deploys', () => weeklyCounts(events.deploys.get(ref), 'deploys', WEEKS, today)],
+                [metric === 'incidents', () => weeklyCounts(events.incidentsError ? undefined : events.incidents.get(ref), 'incidents', WEEKS, today)],
+              ],
+              () => weekly(weeklyData.series.get(ref) ?? [], metric, WEEKS, today, latest.get(a.framework)?.line),
+            )().map(w => ({ text: w.text, level: w.level }));
       return { app: a, ref, meta: lineTitle(a), cells, score: riskScore(cells.map(c => c.level)) };
     })
     .sort((x, y) => y.score - x.score || x.app.application.localeCompare(y.app.application));
@@ -264,6 +271,11 @@ export const HeatmapPage = () => {
               {tr('hm.noWeeks')}
             </Typography>
           )}
+          {mode === 'weeks' && metric === 'incidents' && events.incidentsError && (
+            <Typography variant="body2" color="text.secondary" sx={{ px: 2.25, py: 1.5 }}>
+              {tr('hm.incidentsNa')} ({events.incidentsError})
+            </Typography>
+          )}
         </Section>
         <Box sx={{ display: 'grid', gap: 3, '& > section': { mb: 0 } }}>
           {panel}
@@ -275,7 +287,7 @@ export const HeatmapPage = () => {
           </Section>
         </Box>
       </Row>
-      {(loading || (mode === 'weeks' && weeklyData.loading)) && <Progress />}
+      {(loading || (mode === 'weeks' && (weeklyData.loading || events.loading))) && <Progress />}
     </>
   );
 };
