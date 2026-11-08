@@ -200,6 +200,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
       title: tr('nav.development'),
       items: [
         { label: tr('nav.frameworks'), to: '/console/frameworks', hint: tr('nav.frameworks.hint') },
+        { label: tr('nav.heatmap'), to: '/console/heatmap', hint: tr('nav.heatmap.hint') },
         { label: tr('nav.newPython'), to: '/console/development/python-framework-app', hint: tr('nav.newPython.hint') },
         { label: tr('nav.newSpring'), to: '/console/development/spring-framework-app', hint: tr('nav.newSpring.hint') },
       ],
