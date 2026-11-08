@@ -24,6 +24,11 @@ export const IamPage = () => {
   const tx = (en: string, es: string) => (lang === 'es' ? es : en);
   const yesNo = [{ value: 'false', label: tx('no', 'no') }, { value: 'true', label: tx('one per role', 'uno por rol') },
     ...[2, 3, 4, 5].map(n => ({ value: String(n), label: tx(`${n} per role`, `${n} por rol`) }))];
+  const clientType = (r: Row) => {
+    if (r.serviceAccount) return tx('service account', 'cuenta de servicio');
+    if (r.publicClient) return tx('public (PKCE)', 'público (PKCE)');
+    return tx('confidential', 'confidencial');
+  };
   const groupName: Field = { key: 'name', label: tx('Name', 'Nombre'), kind: 'text', required: true, createOnly: true, pattern: { re: /^[A-Za-z0-9][A-Za-z0-9._-]{1,62}$/, message: tx('letters, digits and ._- (no "/")', 'letras, dígitos y ._- (sin "/")') } };
 
   const groups: Kind = {
@@ -80,7 +85,7 @@ export const IamPage = () => {
     live: { plugin: 'keycloak-manager', path: '/clients' },
     columns: [
       { key: 'clientId', label: tx('Client', 'Cliente'), render: r => <code>{String(r.clientId)}</code> },
-      { key: 'type', label: tx('Type', 'Tipo'), render: r => (r.serviceAccount ? tx('service account', 'cuenta de servicio') : r.publicClient ? tx('public (PKCE)', 'público (PKCE)') : tx('confidential', 'confidencial')) },
+      { key: 'type', label: tx('Type', 'Tipo'), render: r => clientType(r) },
       { key: 'stage', label: tx('Stage', 'Etapa'), render: r => ((r.declared as Declared)?.kind === 'application' ? String((r.declared as { stage?: string }).stage ?? 'pro') : '—') },
     ],
     key: r => {
@@ -89,7 +94,7 @@ export const IamPage = () => {
       if (d?.kind === 'platform') return { owner: { kind: 'platform' }, id: String(r.clientId) };
       return undefined;
     },
-    rowOf: d => ({ clientId: d.owner.kind === 'application' ? d.id : d.id, description: d.spec.description, publicClient: d.spec.type === 'public', serviceAccount: d.spec.type === 'service-account' }),
+    rowOf: d => ({ clientId: d.id, description: d.spec.description, publicClient: d.spec.type === 'public', serviceAccount: d.spec.type === 'service-account' }),
     title: r => String(r.clientId),
     facts: (r: Row) => [
       [tx('Client', 'Cliente'), <code>{String(r.clientId)}</code>],
