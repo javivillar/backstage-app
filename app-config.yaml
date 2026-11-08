@@ -116,7 +116,7 @@ catalog:
     entityFilename: catalog-info.yaml
     pullRequestBranchName: backstage-integration
   rules:
-    - allow: [Component, System, API, Resource, Location, Template, Group, User]
+    - allow: [Component, System, API, Resource, Location, Template, Group, User, Domain, BusinessProcess, ReferenceModel]
     # Allow Kro ResourceGroup entities (they appear as Components with type 'kro-resource-group')
     - allow: [Component]
       spec:
@@ -333,3 +333,11 @@ kro:
 permission:
   enabled: true
   enablePermissions: true
+
+# Business map (docs/business-map.md): the continuity requirement of each criticality of a business process; a
+# process's own rpo/rto win. In the cluster cnoe-oneke renders it from its values.
+businessMap:
+  criticality:
+    critical:  { rpo: 15m, rto: 4h,  ha: true }
+    important: { rpo: 4h,  rto: 24h, ha: true }
+    standard:  { rpo: 24h, rto: 72h, ha: false }

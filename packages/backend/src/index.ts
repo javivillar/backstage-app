@@ -31,6 +31,7 @@ import {
 } from '@internal/backstage-plugin-alfresco-backend';
 import { graviteeManagerPlugin } from '@internal/backstage-plugin-gravitee-backend';
 import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-backend';
+import { businessMapCatalogModule } from './plugins/businessMap/catalogModule';
 
 const backend = createBackend();
 
@@ -113,6 +114,9 @@ backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 
 // Catalog
 backend.add(import('@backstage/plugin-catalog-backend'));
+// Business map: the kinds BusinessProcess and ReferenceModel (refresquito.io/v1alpha1), validated, with their relations
+// (plugins/businessMap/kinds.ts, docs/business-map.md)
+backend.add(businessMapCatalogModule);
 
 // Discover catalog-info.yaml files in the repositories of a GitHub owner. Does nothing until
 // app-config declares catalog.providers.github (owner, filters, schedule).
