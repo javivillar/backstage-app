@@ -356,7 +356,7 @@ describe('vulnerabilities by layer (framework or own)', () => {
         },
         { ref: 'ghcr.io/o/refresquito-postgres:3.3.0', scan: scan([{ id: 'CVE-5', sev: 'HIGH', cls: 'lang', pkg: 'x', ver: '1' }]) },
       ],
-      new Set(['starlette@0.47.1']),
+      new Set(['starlette']),
     );
     expect(facts).toMatchObject({ frameworkLayerCritical: 1, frameworkLayerHigh: 2, ownLayerCritical: 0, ownLayerHigh: 1 });
   });

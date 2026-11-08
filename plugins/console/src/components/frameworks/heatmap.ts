@@ -92,8 +92,9 @@ function endOfLife(f: Facts): Cell {
 function licenses(f: Facts): Cell {
   const unknown = num(f, 'unknownLicenses');
   if (unknown === undefined) return NA;
-  const denied = String(f?.deniedLicenseIds ?? '').trim();
-  if (denied) return { text: `${denied.split(';').length} denied`, level: 3 };
+  const denied = num(f, 'deniedLicenses');
+  if (denied === undefined) return NA;
+  if (denied > 0) return { text: `${denied} denied`, level: 3 };
   if (unknown > 0) return { text: `${unknown} unknown`, level: 1 };
   return { text: 'ok', level: 0 };
 }
@@ -173,7 +174,8 @@ export function isoWeek(date: string): string {
 export type Metric = 'vulns' | 'coverage' | 'tests' | 'line';
 export const METRICS: Metric[] = ['vulns', 'coverage', 'tests', 'line'];
 
-function metricCell(metric: Metric, f: Record<string, unknown>): Cell {
+/** latestLine: the latest line of the app's own framework (a Spring app is never compared with Python's) */
+function metricCell(metric: Metric, f: Record<string, unknown>, latestLine?: string): Cell {
   if (metric === 'coverage') return cell('coverage', f, { status: { kind: 'latest' }, hasDocs: true });
   if (metric === 'tests') {
     const n = num(f, 'testsFailed');
@@ -182,17 +184,17 @@ function metricCell(metric: Metric, f: Record<string, unknown>): Cell {
   if (metric === 'line') {
     const line = String(f.frameworkLine ?? '');
     if (!line) return NA;
-    return { text: line, level: line === String(f.latestFrameworkLine ?? '') ? 0 : 2 };
+    return { text: line, level: line === (latestLine ?? String(f.latestFrameworkLine ?? '')) ? 0 : 2 };
   }
-  const c = num(f, 'critical');
-  const h = num(f, 'high');
-  if (c === undefined || h === undefined) return NA;
-  const n = c + h;
+  // the layer facts are -1 unless every image is scanned (critical/high are 0 when none is): never green when unknown
+  const parts = ['frameworkLayerCritical', 'frameworkLayerHigh', 'ownLayerCritical', 'ownLayerHigh'].map(k => num(f, k));
+  if (parts.some(x => x === undefined)) return NA;
+  const n = (parts as number[]).reduce((a, b) => a + b, 0);
   return { text: String(n), level: Math.min(3, n) as Level };
 }
 
 /** the last `weeks` ISO weeks up to today, oldest first: the value of the latest point of each week, empty when none */
-export function weekly(series: Array<{ timestamp: string; facts: Record<string, unknown> }>, metric: Metric, weeks: number, today: string): Array<{ week: string; text: string; level: Level }> {
+export function weekly(series: Array<{ timestamp: string; facts: Record<string, unknown> }>, metric: Metric, weeks: number, today: string, latestLine?: string): Array<{ week: string; text: string; level: Level }> {
   const latest = new Map<string, { timestamp: string; facts: Record<string, unknown> }>();
   for (const p of series) {
     const k = isoWeek(p.timestamp);
@@ -205,6 +207,6 @@ export function weekly(series: Array<{ timestamp: string; facts: Record<string, 
     const p = latest.get(k);
     const week = k.slice(5);
     if (!p) return { week, text: '', level: null };
-    return { week, ...metricCell(metric, p.facts ?? {}) };
+    return { week, ...metricCell(metric, p.facts ?? {}, latestLine) };
   });
 }

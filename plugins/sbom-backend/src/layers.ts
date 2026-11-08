@@ -22,13 +22,17 @@ export interface LayerCounts {
   own: { critical: number; high: number };
 }
 
-/** name@version, the key a finding (pkg@ver) is matched with; for Maven also group:name@version, as Trivy names it */
+/**
+ * The names a finding's package is matched with, lower case (Syft and Trivy differ in case: SQLAlchemy / sqlalchemy);
+ * for Maven also group:name, as Trivy names it. By name, not version: an application on a later patch of the line, or
+ * with a transitive dependency resolved to another version, still has it because of the framework.
+ */
 export function frameworkPackages(components: Component[]): Set<string> {
   const keys = new Set<string>();
   for (const c of components) {
-    if (!c.version) continue;
-    keys.add(`${c.name}@${c.version}`);
-    if (c.group) keys.add(`${c.group}:${c.name}@${c.version}`);
+    if (!c.name) continue;
+    keys.add(c.name.toLowerCase());
+    if (c.group) keys.add(`${c.group}:${c.name}`.toLowerCase());
   }
   return keys;
 }
@@ -39,7 +43,7 @@ export function splitByLayer(scans: LayerScan[], frameworkPkgs: Set<string>): La
     for (const v of s.vulns) {
       const sev = v.sev?.toUpperCase();
       if (sev !== 'CRITICAL' && sev !== 'HIGH') continue;
-      const framework = !s.own || v.cls === 'os' || frameworkPkgs.has(`${v.pkg}@${v.ver}`);
+      const framework = !s.own || v.cls === 'os' || (!!v.pkg && frameworkPkgs.has(v.pkg.toLowerCase()));
       out[framework ? 'framework' : 'own'][sev === 'CRITICAL' ? 'critical' : 'high']++;
     }
   }

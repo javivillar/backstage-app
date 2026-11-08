@@ -68,9 +68,9 @@ describe('cell', () => {
     expect(eol(-1, 0, 0)).toBeNull();
   });
   it('licenses: denied 3, unknown 1', () => {
-    expect(cell('licenses', facts({ deniedLicenseIds: 'x 1 (GPL-3.0)', unknownLicenses: 0 }), ctx()).level).toBe(3);
-    expect(cell('licenses', facts({ deniedLicenseIds: '', unknownLicenses: 2 }), ctx())).toEqual({ text: '2 unknown', level: 1 });
-    expect(cell('licenses', facts({ deniedLicenseIds: '', unknownLicenses: 0 }), ctx())).toEqual({ text: 'ok', level: 0 });
+    expect(cell('licenses', facts({ deniedLicenses: 1, unknownLicenses: 0 }), ctx()).level).toBe(3);
+    expect(cell('licenses', facts({ deniedLicenses: 0, unknownLicenses: 2 }), ctx())).toEqual({ text: '2 unknown', level: 1 });
+    expect(cell('licenses', facts({ deniedLicenses: 0, unknownLicenses: 0 }), ctx())).toEqual({ text: 'ok', level: 0 });
   });
   it('health from Argo CD', () => {
     expect(cell('health', undefined, ctx(undefined, { health: 'Healthy' }))).toEqual({ text: 'Healthy', level: 0 });
@@ -112,7 +112,7 @@ describe('weekly', () => {
     expect(isoWeek('2027-01-01')).toBe('2026-W53');
   });
   it('3 points over 10 weeks gives 10 entries, 7 empty', () => {
-    const out = weekly([p('2026-10-26T05:23:00Z', { critical: 0, high: 1 }), p('2026-11-02T05:23:00Z', { critical: 0, high: 0 }), p('2026-10-19T05:23:00Z', { critical: 1, high: 3 })], 'vulns', 10, '2026-11-08');
+    const out = weekly([p('2026-10-26T05:23:00Z', { frameworkLayerCritical: 0, frameworkLayerHigh: 0, ownLayerCritical: 0, ownLayerHigh: 1 }), p('2026-11-02T05:23:00Z', { frameworkLayerCritical: 0, frameworkLayerHigh: 0, ownLayerCritical: 0, ownLayerHigh: 0 }), p('2026-10-19T05:23:00Z', { frameworkLayerCritical: 1, frameworkLayerHigh: 2, ownLayerCritical: 0, ownLayerHigh: 1 })], 'vulns', 10, '2026-11-08');
     expect(out).toHaveLength(10);
     expect(out.filter(w => w.level === null && w.text === '')).toHaveLength(7);
     expect(out[0].week).toBe('W36');
@@ -133,6 +133,12 @@ describe('weekly', () => {
     expect(weekly([p('2026-11-03T05:00:00Z', { backendCoverage: 55, frontendCoverage: -1 })], 'coverage', 1, '2026-11-08')[0]).toEqual({ week: 'W45', text: '55%', level: 2 });
     expect(weekly([p('2026-11-03T05:00:00Z', { frameworkLine: '3.2', latestFrameworkLine: '3.3' })], 'line', 1, '2026-11-08')[0]).toEqual({ week: 'W45', text: '3.2', level: 2 });
     expect(weekly([p('2026-11-03T05:00:00Z', { frameworkLine: '3.3', latestFrameworkLine: '3.3' })], 'line', 1, '2026-11-08')[0].level).toBe(0);
+    // a Spring app is compared with the latest line of its own framework, not with Python's 3.3
+    expect(weekly([p('2026-11-03T05:00:00Z', { frameworkLine: '1.0', latestFrameworkLine: '3.3' })], 'line', 1, '2026-11-08', '1.0')[0].level).toBe(0);
+  });
+  it('vulns is n/a, not 0, when an image was not scanned (layer facts -1)', () => {
+    const w = weekly([p('2026-11-03T05:00:00Z', { critical: 0, high: 0, frameworkLayerCritical: -1, frameworkLayerHigh: -1, ownLayerCritical: -1, ownLayerHigh: -1 })], 'vulns', 1, '2026-11-08')[0];
+    expect(w.level).toBeNull();
     expect(weekly([p('2026-11-03T05:00:00Z', { critical: -1, high: -1 })], 'vulns', 1, '2026-11-08')[0]).toEqual({ week: 'W45', text: 'n/a', level: null });
   });
 });

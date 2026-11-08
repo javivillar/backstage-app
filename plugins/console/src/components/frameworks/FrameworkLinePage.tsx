@@ -22,10 +22,11 @@ const TABS: TabId[] = ['apps', 'security', 'requirements', 'notes'];
 const onLine = (apps: AppRow[], l: Line) =>
   apps.filter(a => a.framework === l.framework).flatMap(a => STAGES.filter(s => a.lines[s] === l.line && a.instances[s]).map(s => ({ app: a, stage: s, ref: a.instances[s]! })));
 
-/** sum of a fact over the instances that report it; undefined when none does */
+/** sum of a fact over the instances; undefined (n/a) when any of them does not report it: a partial sum would look better than it is */
 const sumOf = (refs: string[], facts: FactsMap, keys: string[]) => {
-  const known = refs.map(r => facts.get(r)).filter(f => keys.every(k => factNum(f, k) !== undefined));
-  return known.length ? known.reduce((a, f) => a + keys.reduce((b, k) => b + (factNum(f, k) ?? 0), 0), 0) : undefined;
+  const all = refs.map(r => facts.get(r));
+  if (!all.length || all.some(f => !keys.every(k => factNum(f, k) !== undefined))) return undefined;
+  return all.reduce((a, f) => a + keys.reduce((b, k) => b + (factNum(f, k) ?? 0), 0), 0);
 };
 
 const healthTone = (h?: string): Tone => choose<Tone>([[h === 'Healthy', 'pos'], [h === 'Progressing', 'info'], [h === 'Degraded' || h === 'Missing', 'neg']], 'neu');

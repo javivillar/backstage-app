@@ -22,10 +22,15 @@ describe('vulnerabilities by layer', () => {
   it('lang vuln of a framework package is framework', () => {
     const out = splitByLayer(
       [own([{ id: 'A', sev: 'HIGH', cls: 'lang', pkg: 'starlette', ver: '0.47.1' }])],
-      new Set(['starlette@0.47.1']),
+      new Set(['starlette']),
     );
     expect(out.framework.high).toBe(1);
     expect(out.own.high).toBe(0);
+  });
+
+  it('a framework package matches by name, any case and version', () => {
+    const out = splitByLayer([own([{ id: 'A', sev: 'HIGH', cls: 'lang', pkg: 'SQLAlchemy', ver: '2.0.99' }])], new Set(['sqlalchemy']));
+    expect(out.framework.high).toBe(1);
   });
 
   it('lang vuln of the app is own', () => {
@@ -45,6 +50,6 @@ describe('vulnerabilities by layer', () => {
       { name: 'spring-core', group: 'org.springframework', version: '6.2.0', ecosystem: 'maven', licenses: [] },
       { name: 'no-version', ecosystem: 'npm', licenses: [] },
     ]);
-    expect([...pkgs].sort()).toEqual(['org.springframework:spring-core@6.2.0', 'spring-core@6.2.0', 'starlette@0.47.1']);
+    expect([...pkgs].sort()).toEqual(['no-version', 'org.springframework:spring-core', 'spring-core', 'starlette']);
   });
 });

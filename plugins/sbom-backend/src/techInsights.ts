@@ -123,7 +123,7 @@ export function ownImages(entity: Entity, images: ImageFacts[]): ImageFacts[] {
 }
 
 /**
- * The facts of one application, from what its images say. frameworkPkgs: name@version of the libraries its line of
+ * The facts of one application, from what its images say. frameworkPkgs: names (lower case) of the libraries its line of
  * the framework ships (the components of the line's release SBOMs); without them only the base image and the
  * platform images count as the framework layer.
  */

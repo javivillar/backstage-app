@@ -9,7 +9,7 @@ import { useI18n } from '../../i18n';
 import { type RqTokens, useRq } from '../../theme/consoleTheme';
 import { EmptyState, Row, Section, TitleRow } from '../ui';
 import { CHECKS, type Cell, type Lens, type Level, METRICS, type Metric, cell, riskScore, weekly } from './heatmap';
-import { type AppRow, type Stage, STAGES, behindOf, statusOf } from './model';
+import { type AppRow, type Stage, STAGES, behindOf, latestLines, statusOf } from './model';
 import { argoName, entityPath, todayIso } from './shared';
 import { useFrameworksData, useWeekly } from './useFrameworksData';
 
@@ -58,6 +58,7 @@ export const HeatmapPage = () => {
       ? checks.map(c => ({ key: c.id, label: tr(`hm.check.${c.id}`), source: c.source, to: c.to }))
       : weekly([], metric, WEEKS, today).map(w => ({ key: w.week, label: w.week, source: tr('hm.weeklySource'), to: '' }));
 
+  const latest = latestLines(lines);
   const rows: HRow[] = inStage
     .map(a => {
       const ref = a.instances[stage]!;
@@ -72,7 +73,7 @@ export const HeatmapPage = () => {
                 hasDocs: !!entities.get(ref)?.metadata.annotations?.['backstage.io/techdocs-ref'],
               }),
             )
-          : weekly(weeklyData.series.get(ref) ?? [], metric, WEEKS, today).map(w => ({ text: w.text, level: w.level }));
+          : weekly(weeklyData.series.get(ref) ?? [], metric, WEEKS, today, latest.get(a.framework)?.line).map(w => ({ text: w.text, level: w.level }));
       return { app: a, ref, meta: lineTitle(a), cells, score: riskScore(cells.map(c => c.level)) };
     })
     .sort((x, y) => y.score - x.score || x.app.application.localeCompare(y.app.application));
