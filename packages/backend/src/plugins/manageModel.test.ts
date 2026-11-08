@@ -1,4 +1,4 @@
-import { applyChange, ChangeError, handlerFor, lineDiff, parse, type ChangeRequest } from './manageModel';
+import { applyChange, block, ChangeError, handlerFor, lineDiff, parse, registerHandler, setIn, type ChangeRequest } from './manageModel';
 
 const FILE = `# Petshop — the example application
 name: petshop
@@ -103,6 +103,29 @@ describe('Manage through git: the edit of an application file', () => {
     ]);
     expect(handlerFor('alfresco', 'site').declared!(parse(FILE), app)).toEqual([{ id: 'documents', spec: { name: 'documents', users: ['javi'] }, gone: false }]);
     expect(handlerFor('alfresco', 'site').declared!(parse('name: x\n'), app)).toEqual([]);
+  });
+
+  it('changes, adds and drops settings of a block in place (setIn)', () => {
+    registerHandler({
+      service: 'test',
+      object: 'setting',
+      label: 'setting',
+      target: () => ({ repo: 'services', path: 'x' }),
+      validate: () => [],
+      apply: (doc, r, touched) => {
+        const b = block(doc, String(r.spec!.block), touched);
+        for (const [k, v] of Object.entries(r.spec!.set as Record<string, unknown>)) setIn(doc, b, k, v === null ? undefined : v, touched);
+      },
+    });
+    const F = 'platform:\n  datahub:\n    enabled: true\n    description: "old"   # shown\n    classification: INTERNAL\n    owners:\n      users: [javi]\n  gateway: { enabled: true, team: alpha }\n  sso: {}\n# end\n';
+    const set = (blk: string, values: Record<string, unknown>) =>
+      applyChange(F, handlerFor('test', 'setting'), { service: 'test', object: 'setting', action: 'update', id: 'x', owner: { kind: 'application', name: 'a' }, spec: { block: blk, set: values } }).text;
+    expect(set('datahub', { classification: 'CONFIDENTIAL' })).toBe(F.replace('INTERNAL', 'CONFIDENTIAL'));
+    expect(set('datahub', { description: null, owners: null })).toBe(F.replace('    description: "old"   # shown\n', '').replace('    owners:\n      users: [javi]\n', ''));
+    expect(set('datahub', { owners: { users: ['ana'] } })).toBe(F.replace('    owners:\n      users: [javi]\n', '    owners: { users: [ana] }\n'));
+    expect(set('datahub', { retentionDays: 3650 })).toBe(F.replace('      users: [javi]\n', '      users: [javi]\n    retentionDays: 3650\n'));
+    expect(set('gateway', { team: null, state: 'absent' })).toBe(F.replace('{ enabled: true, team: alpha }', '{ enabled: true, state: absent }'));
+    expect(set('sso', { testUsers: true })).toBe(F.replace('sso: {}', 'sso: { enabled: true, testUsers: true }'));
   });
 
   it('shows the change as a diff', () => {

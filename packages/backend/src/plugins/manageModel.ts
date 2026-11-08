@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, parseDocument, type Document, type Node, type Scalar, type YAMLMap, type YAMLSeq } from 'yaml';
+import { isMap, isPair, isScalar, isSeq, parseDocument, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from 'yaml';
 
 /**
  * Manage through git (refresquito-services MANAGE-GITOPS-DESIGN.md): every create, update and delete asked from the
@@ -43,14 +43,39 @@ export type Target = { repo: 'services' | 'app'; path: string };
 
 /**
  * What an edit touched, so that only that is written back and the rest of the file stays byte for byte: the lists it
- * rewrote, the switches it turned on, and the keys it added to a mapping of the file (a new block, a new list).
+ * rewrote, the values it replaced (a scalar, or a whole value, at its range), the keys it added to a mapping and the
+ * keys it dropped. Handlers do not fill it by hand: block(), list(), editList() and setIn() do.
  */
 export type Touched = {
   lists: Set<YAMLSeq>;
-  switches: Set<Scalar>;
+  values: Map<Node, { value: unknown; pair: Pair }>;
   added: Array<{ parent?: YAMLMap; key: string; node: Node }>;
+  dropped: Array<{ parent: YAMLMap; pair: Pair }>;
 };
-export const untouched = (): Touched => ({ lists: new Set(), switches: new Set(), added: [] });
+export const untouched = (): Touched => ({ lists: new Set(), values: new Map(), added: [], dropped: [] });
+
+/**
+ * One setting of a mapping of the file (gateway.team, datahub.classification, a block's state…): changed in place
+ * when it is there, added when it is not, dropped when value is undefined.
+ */
+export function setIn(doc: Document, map: YAMLMap, key: string, value: unknown, touched: Touched): void {
+  const pair = map.items.find(p => isPair(p) && (isScalar(p.key) ? p.key.value : p.key) === key) as Pair | undefined;
+  if (value === undefined) {
+    if (!pair) return;
+    map.items.splice(map.items.indexOf(pair), 1);
+    if (map.range && (pair.key as Node | undefined)?.range) touched.dropped.push({ parent: map, pair });
+    return;
+  }
+  const node = pair?.value as Node | undefined;
+  if (pair && node?.range) {
+    if (JSON.stringify((node as { toJSON?: () => unknown }).toJSON?.() ?? null) === JSON.stringify(value)) return;
+    pair.value = doc.createNode(value);
+    touched.values.set(node, { value, pair });
+    return;
+  }
+  map.set(key, doc.createNode(value));
+  if (map.range) touched.added.push({ parent: map, key, node: map.get(key, true) as Node });
+}
 
 /** One kind of object of one service (e.g. the buckets of SeaweedFS), as the Manage pages change it. */
 export type Handler = {
@@ -160,14 +185,7 @@ export function block(doc: Document, name: string, touched: Touched): YAMLMap {
     if (!touched.added.some(a => a.node === platform)) touched.added.push({ parent: platform, key: name, node: b as Node });
   }
   if (!isMap(b)) throw new ChangeError(422, `platform.${name} of this file is not a mapping.`);
-  const on = b.get('enabled', true);
-  if (isScalar(on) && on.value !== true) {
-    on.value = true;
-    touched.switches.add(on);
-  } else if (on === undefined) {
-    b.set('enabled', true);
-    if (b.range) touched.added.push({ parent: b, key: 'enabled', node: b.get('enabled', true) as Node });
-  }
+  if (b.get('enabled') !== true) setIn(doc, b, 'enabled', true, touched);
   return b;
 }
 
@@ -280,7 +298,7 @@ const keyIndent = (m: YAMLMap, source: string) => {
 };
 
 /**
- * The file with what the edit touched written back in place (lists and switches at their range, added keys at the
+ * The file with what the edit touched written back in place (lists and values at their range, added keys at the
  * end of their mapping), everything else byte for byte as it was. Edits go from the end of the file to its start, so
  * every range still points at the original text.
  */
@@ -292,8 +310,57 @@ function splice(source: string, touched: Touched): string {
     const nl = !l.flow && source[end - 1] === '\n' ? '\n' : '';
     edits.push({ at: start, end, text: listText(l, source) + nl });
   }
-  for (const sw of touched.switches) edits.push({ at: sw.range![0], end: sw.range![1], text: 'true' });
+  for (const [node, { value, pair }] of touched.values) {
+    const block = (isMap(node) || isSeq(node)) && !node.flow;
+    if (!block) {
+      edits.push({ at: node.range![0], end: node.range![1], text: flowValue(value) });
+      continue;
+    }
+    // a block collection (lines under its key) becomes one line after the key: "key: { … }"
+    const keyEnd = (pair.key as Node).range![1];
+    const colon = source.indexOf(':', keyEnd) + 1;
+    const nl = source[node.range![1] - 1] === '\n' ? '\n' : '';
+    edits.push({ at: colon, end: node.range![1], text: ` ${flowValue(value)}${nl}` });
+  }
+  for (const d of touched.dropped) {
+    const k = (d.pair.key as Node).range!;
+    const v = (d.pair.value as Node | null)?.range ?? k;
+    if (d.parent.flow) {
+      // inside { a: 1, b: 2 }: the pair and the comma after it (or before it, when it is the last)
+      let at = k[0];
+      let end = v[1];
+      const after = /^\s*,\s*/.exec(source.slice(end));
+      if (after) end += after[0].length;
+      else {
+        const before = /,\s*$/.exec(source.slice(0, at));
+        if (before) at -= before[0].length;
+      }
+      edits.push({ at, end, text: '' });
+    } else {
+      // its whole lines: from the start of the key's line to the end of the value's last line
+      const at = source.lastIndexOf('\n', k[0] - 1) + 1;
+      const nl = source.indexOf('\n', Math.max(v[1] - 1, k[1]));
+      edits.push({ at, end: nl < 0 ? source.length : nl + 1, text: '' });
+    }
+  }
+  // keys added inside a flow mapping ({ a: 1 }) go in together, after its last pair
+  const flowAdds = new Map<YAMLMap, string[]>();
   for (const a of touched.added) {
+    if (!a.parent?.range || !a.parent.flow) continue;
+    const json = (a.node as { toJSON?: () => unknown }).toJSON?.() ?? a.node;
+    flowAdds.set(a.parent, [...(flowAdds.get(a.parent) ?? []), `${a.key}: ${flowValue(json)}`]);
+  }
+  for (const [parent, pairs] of flowAdds) {
+    const close = source.lastIndexOf('}', parent.range![1]);
+    const inner = source.slice(source.indexOf('{', parent.range![0]) + 1, close);
+    if (inner.trim() === '') edits.push({ at: close - inner.length, end: close, text: ` ${pairs.join(', ')} ` });
+    else {
+      const at = close - (inner.length - inner.trimEnd().length);
+      edits.push({ at, end: at, text: `, ${pairs.join(', ')}` });
+    }
+  }
+  for (const a of touched.added) {
+    if (a.parent?.range && a.parent.flow) continue;
     const json = (a.node as { toJSON?: () => unknown }).toJSON?.() ?? a.node;
     if (!a.parent?.range) {
       const tail = source.endsWith('\n') ? '' : '\n';
@@ -307,7 +374,9 @@ function splice(source: string, touched: Touched): string {
     edits.push({ at, end: at, text: `${lead}${blockText(a.key, json, keyIndent(a.parent, source))}\n` });
   }
   let out = source;
-  for (const e of edits.sort((x, y) => y.at - x.at)) out = out.slice(0, e.at) + e.text + out.slice(e.end);
+  // from the end of the file to its start; two edits at the same place go in the order they were made
+  const order = edits.map((e, i) => ({ ...e, i })).sort((x, y) => y.at - x.at || y.i - x.i);
+  for (const e of order) out = out.slice(0, e.at) + e.text + out.slice(e.end);
   return out;
 }
 
