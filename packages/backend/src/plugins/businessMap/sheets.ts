@@ -225,7 +225,11 @@ export function compactSheet(sheet: Sheet, fileName: string): string {
       lines.push('');
       line++;
     }
-    const text = r.cells.map(csvCell).join(',');
+    // an .xlsx often keeps formatted empty cells far to the right (up to column XFD): left out, else a sheet of a few
+    // thousand rows becomes tens of MB of commas
+    let last = r.cells.length;
+    while (last > 0 && r.cells[last - 1].trim() === '') last--;
+    const text = r.cells.slice(0, last).map(csvCell).join(',');
     lines.push(text);
     line += 1 + (text.match(/\n/g)?.length ?? 0);
   }

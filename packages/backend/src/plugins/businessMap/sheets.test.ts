@@ -113,7 +113,13 @@ describe('compactSheet', () => {
     const back = readUpload(compactSheet(sheet, 'PCF Cross Industry.xlsx'));
     expect(back.format).toBe('csv');
     expect(back.fileName).toBe('PCF Cross Industry.xlsx');
-    expect(back.sheets).toEqual([{ name: 'Combined', rows: sheet.rows }]);
+    // empty cells at the end of a row are left out
+    const trimmed = sheet.rows.map(r => ({ n: r.n, cells: r.n === 5 ? ['10017', '1.1.1'] : r.cells }));
+    expect(back.sheets).toEqual([{ name: 'Combined', rows: trimmed }]);
+  });
+  it('leaves out the formatted empty cells up to the far right of a sheet', () => {
+    const wide = { name: 'S', rows: [{ n: 1, cells: ['ID', 'Title', ...Array(16000).fill('')] }, { n: 2, cells: ['1.0', 'A', ...Array(16000).fill('')] }] };
+    expect(compactSheet(wide, 'w.xlsx').length).toBeLessThan(200);
   });
 });
 
