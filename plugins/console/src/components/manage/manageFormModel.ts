@@ -73,6 +73,13 @@ export function fieldErrors(fields: Field[], values: Values, creating: boolean):
   return out;
 }
 
+/** What a field holds when the object does not say: no list, false, nothing. */
+const emptyOf = (k: FieldKind): unknown => {
+  if (k === 'list') return [];
+  if (k === 'boolean') return false;
+  return undefined;
+};
+
 /** The spec of the change: lists as arrays, booleans as booleans, empty texts left out; on update only what changed. */
 export function specFrom(fields: Field[], values: Values, creating: boolean, current?: Record<string, unknown>): Record<string, unknown> {
   const spec: Record<string, unknown> = {};
@@ -87,7 +94,7 @@ export function specFrom(fields: Field[], values: Values, creating: boolean, cur
       out = s === '' ? undefined : s;
     }
     if (out === undefined) continue;
-    if (!creating && current && JSON.stringify(current[f.key] ?? (f.kind === 'list' ? [] : f.kind === 'boolean' ? false : undefined)) === JSON.stringify(out)) continue;
+    if (!creating && current && JSON.stringify(current[f.key] ?? emptyOf(f.kind)) === JSON.stringify(out)) continue;
     spec[f.key] = out;
   }
   return spec;

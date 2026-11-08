@@ -202,8 +202,11 @@ export function list(doc: Document, b: YAMLMap, field: string, touched: Touched)
 }
 
 /** The name of an item of a list: a plain name or a mapping with name. */
-const itemName = (it: unknown): string | undefined =>
-  isScalar(it) ? str(it.value) : isMap(it) ? str(it.get('name')) : undefined;
+const itemName = (it: unknown): string | undefined => {
+  if (isScalar(it)) return str(it.value);
+  if (isMap(it)) return str(it.get('name'));
+  return undefined;
+};
 
 /** Index and whether the item is a tombstone (state: absent, kept for the provisioner to remove the object). */
 function find(l: YAMLSeq, id: string): { i: number; gone: boolean } | undefined {
@@ -252,15 +255,16 @@ export function parse(text: string): Document {
 const PLAIN = /^[A-Za-z0-9_./@-][A-Za-z0-9_ ./@-]*$/;
 const RESERVED = /^(true|false|yes|no|on|off|null|~|[-+]?[0-9.]+)$/i;
 /** A scalar as the files write it: plain when it can be, else in double quotes. */
-const scalar = (v: unknown): string =>
-  typeof v === 'string' ? (PLAIN.test(v) && !RESERVED.test(v) && v.trim() === v ? v : JSON.stringify(v)) : String(v);
+const scalar = (v: unknown): string => {
+  if (typeof v !== 'string') return String(v);
+  return PLAIN.test(v) && !RESERVED.test(v) && v.trim() === v ? v : JSON.stringify(v);
+};
 /** A value inside a flow item: scalars, lists of scalars as [a, b], small maps as { k: v }. */
-const flowValue = (v: unknown): string =>
-  Array.isArray(v)
-    ? `[${v.map(flowValue).join(', ')}]`
-    : v && typeof v === 'object'
-      ? `{ ${Object.entries(v).map(([k, x]) => `${k}: ${flowValue(x)}`).join(', ')} }`
-      : scalar(v);
+const flowValue = (v: unknown): string => {
+  if (Array.isArray(v)) return `[${v.map(flowValue).join(', ')}]`;
+  if (v && typeof v === 'object') return `{ ${Object.entries(v).map(([k, x]) => `${k}: ${flowValue(x)}`).join(', ')} }`;
+  return scalar(v);
+};
 
 /** The text of an item: as it was in the file when it did not change, else written the way the files write items. */
 const itemText = (it: unknown, source: string): string => {
@@ -369,7 +373,9 @@ function splice(source: string, touched: Touched): string {
     }
     // after the last line of the mapping (its range ends after that line's newline, or at the end of the file)
     const end = a.parent.range[1];
-    const at = source[end - 1] === '\n' ? end : source.indexOf('\n', end) < 0 ? source.length : source.indexOf('\n', end) + 1;
+    const nextNl = source.indexOf('\n', end);
+    let at = end;
+    if (source[end - 1] !== '\n') at = nextNl < 0 ? source.length : nextNl + 1;
     const lead = at === source.length && !source.endsWith('\n') ? '\n' : '';
     edits.push({ at, end: at, text: `${lead}${blockText(a.key, json, keyIndent(a.parent, source))}\n` });
   }
