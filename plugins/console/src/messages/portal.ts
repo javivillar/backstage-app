@@ -7,6 +7,7 @@ export const PORTAL: Messages = {
   'cat.noCatalog': { en: 'The catalog did not answer', es: 'El catálogo no respondió' },
   'cat.businessApps': { en: 'Business applications', es: 'Aplicaciones de negocio' },
   'cat.services': { en: 'Refresquito services', es: 'Servicios de Refresquito' },
+  'cat.development': { en: 'Development services', es: 'Servicios de desarrollo' },
   'cat.apis': { en: 'APIs', es: 'APIs' },
   'cat.mine': { en: 'Owned by your groups', es: 'De tus grupos' },
   'cat.all': { en: 'All', es: 'Todo' },
@@ -18,6 +19,7 @@ export const PORTAL: Messages = {
   'cat.nothing': { en: 'Nothing matches.', es: 'No hay coincidencias.' },
   'cat.business': { en: 'business application', es: 'aplicación de negocio' },
   'cat.service': { en: 'Refresquito service', es: 'servicio de Refresquito' },
+  'cat.developmentOne': { en: 'development service', es: 'servicio de desarrollo' },
   'cat.notInArgo': { en: 'not in Argo CD', es: 'no está en Argo CD' },
   'cat.suspended': { en: 'suspended', es: 'suspendido' },
   // lists

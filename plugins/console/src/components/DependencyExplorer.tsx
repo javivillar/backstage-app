@@ -43,7 +43,7 @@ export const DependencyExplorer = () => {
   const [entities, setEntities] = useState<{ loading: boolean; items: Entity[]; error?: string }>({ loading: true, items: [] });
   useEffect(() => {
     let alive = true;
-    catalog.getEntities({ filter: [{ kind: 'component' }, { kind: 'resource' }, { kind: 'api' }], fields: FIELDS }).then(
+    catalog.getEntities({ filter: [{ kind: 'component' }, { kind: 'resource' }, { kind: 'api' }, { kind: 'system', 'spec.type': 'business-service' }], fields: FIELDS }).then(
       r => alive && setEntities({ loading: false, items: r.items }),
       e => alive && setEntities({ loading: false, items: [], error: (e as Error).message }),
     );

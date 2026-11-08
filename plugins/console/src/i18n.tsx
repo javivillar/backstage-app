@@ -48,6 +48,8 @@ const SHELL: Messages = {
   'shell.nothing': { en: 'Nothing matches.', es: 'No hay coincidencias.' },
   'shell.business': { en: 'Business application', es: 'Aplicación de negocio' },
   'shell.service': { en: 'Refresquito service', es: 'Servicio de Refresquito' },
+  'shell.businessService': { en: 'Business service', es: 'Servicio de negocio' },
+  'shell.development': { en: 'Development service', es: 'Servicio de desarrollo' },
   // menu groups and entries
   'nav.platform': { en: 'Platform', es: 'Plataforma' },
   'nav.zonesSegregations': { en: 'Zones and segregations', es: 'Zonas y segregaciones' },

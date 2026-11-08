@@ -54,7 +54,7 @@ export const ConsoleEntityPage = ({ content, apiDefinition }: { content?: ReactN
       {/* an API, a group or a system: the console's own page (no classic cards) */}
       {!loading && entity && hasNativePage(entity) && <NativeEntityPage entity={entity} apiDefinition={apiDefinition} />}
       {entity && !hasNativePage(entity) && (
-        <Crumbs items={[[t('nav.portal'), '/console'], [choose([[classify(entity) === 'business', t('cat.businessApps')], [classify(entity) === 'service', t('cat.services')]], entity.kind), '/console'], [entity.metadata.title ?? entity.metadata.name]]} />
+        <Crumbs items={[[t('nav.portal'), '/console'], [choose([[classify(entity) === 'business', t('cat.businessApps')], [classify(entity) === 'service', t('cat.services')], [classify(entity) === 'development', t('cat.development')]], entity.kind), '/console'], [entity.metadata.title ?? entity.metadata.name]]} />
       )}
       {!content && entity && !hasNativePage(entity) && (
         <Typography color="text.secondary">
