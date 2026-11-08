@@ -16,7 +16,7 @@ const base = (over: Partial<RawEntity> = {}): RawEntity => ({
   tags: { tags: [{ tag: { urn: 'urn:li:tag:bronze', properties: { name: 'Bronze' } } }] },
   structuredProperties: {
     properties: [
-      { structuredProperty: { definition: { qualifiedName: 'refresquito.data_classification' } }, values: [{ stringValue: 'Internal' }] },
+      { structuredProperty: { definition: { qualifiedName: 'refresquito.classification' } }, values: [{ stringValue: 'Internal' }] },
       { structuredProperty: { definition: { qualifiedName: 'refresquito.retention_days' } }, values: [{ numberValue: 365 }] },
     ],
   },

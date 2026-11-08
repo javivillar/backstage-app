@@ -1,4 +1,4 @@
-import { catalogPathForConsole, consolePathForCatalog, isConsolePath } from './paths';
+import { catalogPathForConsole, consolePathForCatalog, consolePathForDocs, isConsolePath } from './paths';
 import { classicPathFor } from './components/ConsoleShell';
 
 describe('paths', () => {
@@ -15,6 +15,13 @@ describe('paths', () => {
     expect(consolePathForCatalog('/catalog-graph')).toBeUndefined();
     expect(catalogPathForConsole('/console/entity/default/api/petstore-api/definition')).toBe('/catalog/default/api/petstore-api/definition');
     expect(catalogPathForConsole('/console/clusters')).toBeUndefined();
+  });
+
+  it('maps the TechDocs reader to the Docs tab of the entity', () => {
+    expect(consolePathForDocs('/docs/default/component/petstore')).toBe('/console/entity/default/component/petstore/docs');
+    expect(consolePathForDocs('/docs/default/component/petstore/api/index.html')).toBe('/console/entity/default/component/petstore/docs');
+    expect(consolePathForDocs('/docs')).toBeUndefined();
+    expect(consolePathForDocs('/docs/default/component')).toBeUndefined();
   });
 
   it('opens the same thing in the classic view', () => {

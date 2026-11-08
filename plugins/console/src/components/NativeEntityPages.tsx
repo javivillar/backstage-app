@@ -11,12 +11,11 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { classicUrl, useConsoleConfig } from '../config';
 import { useI18n } from '../i18n';
 import { MONO } from '../theme/consoleTheme';
 import { openApiOperations } from './EntityBuild';
 import { Method } from './ui-portal';
-import { classify, entityPath } from './classify';
+import { classify } from './classify';
 import { ClassicFrame } from './ClassicFrame';
 import { EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow } from './ui';
 
@@ -98,16 +97,6 @@ const EntityTable = ({ items, compact }: { items: Entity[]; compact?: boolean })
   );
 };
 
-const ClassicNote = ({ entity }: { entity: Entity }) => {
-  const cfg = useConsoleConfig();
-  const { t } = useI18n();
-  return (
-    <a href={classicUrl(cfg, entityPath(entity))} style={{ fontSize: 12 }}>
-      {t('ent.openClassic')}
-    </a>
-  );
-};
-
 /* ---------------- API ---------------- */
 
 const OperationsTable = ({ ops }: { ops: ReturnType<typeof openApiOperations> }) => {
@@ -173,7 +162,6 @@ const ApiPage = ({ entity, apiDefinition }: { entity: Entity; apiDefinition?: Re
         sub={entity.metadata.description}
         finding={finding}
         findingTone={open ? 'warn' : 'pos'}
-        actions={<ClassicNote entity={entity} />}
       />
       <Box component="nav" aria-label={t('native.sections')} sx={{ display: 'flex', gap: 0.5, borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         {[
@@ -281,7 +269,6 @@ const GroupPage = ({ entity }: { entity: Entity }) => {
         pills={<Pill plain>{t('native.group')}</Pill>}
         sub={entity.metadata.description}
         finding={members.length ? undefined : t('native.group.noMembers')}
-        actions={<ClassicNote entity={entity} />}
       />
       <Kpis
         items={[
@@ -347,7 +334,6 @@ const SystemPage = ({ entity }: { entity: Entity }) => {
         title={titleOf(entity)}
         pills={<Pill plain>{t('native.system')}</Pill>}
         sub={entity.metadata.description}
-        actions={<ClassicNote entity={entity} />}
       />
       <Kpis
         items={[

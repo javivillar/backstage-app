@@ -22,7 +22,6 @@ import {
 } from '../continuity';
 import { I18nProvider, useI18n } from '../i18n';
 import { ConsoleTheme } from '../theme/consoleTheme';
-import { ClassicLink } from './ClassicLink';
 import { Table } from './NetworkPage';
 import { Attention, EmptyState, Facts, Id, Kpis, Pill, Row, Section, TitleRow, type Tone, choose } from './ui';
 
@@ -55,9 +54,9 @@ function useSummary() {
 }
 
 /** Where the page is mounted: the console (/console/continuity) or the classic portal (/continuity). */
-type Mount = { base: string; entityBase: string; classic?: boolean };
+type Mount = { base: string; entityBase: string };
 const CONSOLE: Mount = { base: '/console/continuity', entityBase: '/console/entity/default/component' };
-const CLASSIC: Mount = { base: '/continuity', entityBase: '/catalog/default/component', classic: true };
+const CLASSIC: Mount = { base: '/continuity', entityBase: '/catalog/default/component' };
 
 const StatePill = ({ state }: { state: State }) => {
   const { t } = useI18n();
@@ -380,7 +379,6 @@ export const ContinuityPage = ({ service, mount = CONSOLE }: { service?: string;
                 {t('cont.back')}
               </Button>
             )}
-            {!mount.classic && <ClassicLink path={service ? `/continuity/${encodeURIComponent(service)}` : '/continuity'}>{t('shell.classic')}</ClassicLink>}
           </>
         }
       />

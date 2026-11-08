@@ -205,8 +205,8 @@ export function validateBrief(brief: DataBrief, vocab: Vocabulary): Validation {
     }
     const cls = classIndex(s.classification);
     if (cls < 0) err(`${label}: classification must be one of ${CLASSIFICATION_ORDER.join(', ')}`);
-    else if (!allowed('refresquito.data_classification').includes(s.classification)) {
-      err(`${label}: classification "${s.classification}" is not an allowed value of refresquito.data_classification`);
+    else if (!allowed('refresquito.classification').includes(s.classification)) {
+      err(`${label}: classification "${s.classification}" is not an allowed value of refresquito.classification`);
     }
     maxClass = Math.max(maxClass, cls);
     if (!Number.isFinite(s.retentionDays) || s.retentionDays <= 0) err(`${label}: retentionDays must be a number > 0`);

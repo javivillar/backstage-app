@@ -6,7 +6,7 @@ const vocab: Vocabulary = {
   glossaryTerms: [{ urn: 'urn:li:glossaryTerm:personal-data' }, { urn: 'urn:li:glossaryTerm:customer' }],
   tags: [{ urn: 'urn:li:tag:pii' }, { urn: 'urn:li:tag:gdpr' }, { urn: 'urn:li:tag:gold' }],
   structuredProperties: [
-    { qualifiedName: 'refresquito.data_classification', allowedValues: ['Public', 'Internal', 'Confidential', 'Restricted'] },
+    { qualifiedName: 'refresquito.classification', allowedValues: ['Public', 'Internal', 'Confidential', 'Restricted'] },
     { qualifiedName: 'refresquito.lawful_basis', allowedValues: ['Consent', 'Contract', 'Legitimate interest'] },
   ],
 };

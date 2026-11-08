@@ -200,7 +200,7 @@ async function readBack(): Promise<void> {
   );
   check(
     'structured properties',
-    sp['refresquito.data_classification'] === 'Confidential' &&
+    sp['refresquito.classification'] === 'Confidential' &&
       sp['refresquito.retention_days'] === 2555 &&
       sp['refresquito.lawful_basis'] === 'Contract' &&
       sp['refresquito.freshness_sla_hours'] === 24,

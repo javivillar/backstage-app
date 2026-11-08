@@ -10,8 +10,7 @@ import { useActions } from '../actions';
 import { totals, useNamespaceChanges } from '../entityData';
 import { useClusterOverview } from '../overview';
 import { Badge } from './Badge';
-import { ClassicLink } from './ClassicLink';
-import { classify, entityPath } from './classify';
+import { classify } from './classify';
 import { bytes } from './ClusterOverviewPage';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
@@ -205,7 +204,6 @@ export const ServiceHeader = () => {
                 </span>
               )}
               {d.ns?.segment && <span>{tr('ent.segment')} {d.ns.segment}</span>}
-              <ClassicLink path={entityPath(e)} />
             </Box>
           )}
         </Box>

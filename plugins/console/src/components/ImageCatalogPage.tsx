@@ -7,7 +7,6 @@ import Typography from '@mui/material/Typography';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from './Badge';
-import { ClassicLink } from './ClassicLink';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
@@ -97,7 +96,6 @@ export const ImageCatalogPage = () => {
         findingTone={choose<Tone>([[critical, 'neg'], [eolSoon, 'warn']], 'pos')}
         actions={
           <>
-            <ClassicLink path="/images">{tr('cisn.classic')}</ClassicLink>
             <Button variant="outlined" component={Link} to={REQUEST_IMAGE}>
               {tr('img.request')}
             </Button>

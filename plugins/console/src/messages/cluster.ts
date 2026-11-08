@@ -110,7 +110,6 @@ export const CLUSTER: Messages = {
   'cisn.sub': { en: 'CIS benchmark of every node, scanned by Wazuh. Accepted exceptions do not count as failures', es: 'CIS benchmark de cada nodo, revisado por Wazuh. Las excepciones aceptadas no cuentan como fallos' },
   'cisn.finding': { en: '{n} checks fail on the nodes; most fail on all {nodes}: fix them once, in the image.', es: 'Fallan {n} comprobaciones en los nodos; la mayoría en los {nodes}: se arreglan una vez, en la imagen.' },
   'cisn.findingOk': { en: 'No node has failures.', es: 'Ningún nodo tiene fallos.' },
-  'cisn.classic': { en: 'Details in the classic portal', es: 'Detalle en el portal clásico' },
   'cisn.clean': { en: 'Nodes without failures', es: 'Nodos sin fallos' },
   'cisn.failed': { en: 'Failed checks', es: 'Comprobaciones fallidas' },
   'cisn.new': { en: 'New since the last scan', es: 'Nuevos desde el último escaneo' },

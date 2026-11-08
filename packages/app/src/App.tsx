@@ -1,5 +1,5 @@
 
-import { Navigate, Route } from 'react-router-dom';
+import { Route } from 'react-router-dom';
 import { apiDocsPlugin, EntityApiDefinitionCard } from '@backstage/plugin-api-docs';
 import {
   CatalogEntityPage,
@@ -65,7 +65,13 @@ import { CONSOLE_ASSISTANTS } from './components/opsassistant/consoleAssistants'
 import { ConsoleAssistantsTeam } from './components/opsassistant/ConsoleAssistantsTeam';
 import { TechInsightsScorecardPage } from '@backstage-community/plugin-tech-insights';
 import { EntityKindPicker } from '@backstage/plugin-catalog-react';
-import { ConsolePage, ContinuityClassicPage, type ConsoleClassicPage } from '@internal/plugin-console';
+import {
+  ConsoleHomeRedirect,
+  ConsolePage,
+  ContinuityClassicPage,
+  StayInConsole,
+  type ConsoleClassicPage,
+} from '@internal/plugin-console';
 
 const app = createApp({
   apis,
@@ -182,7 +188,8 @@ const consolePages: ConsoleClassicPage[] = [
 
 const routes = (
   <FlatRoutes>
-    <Route path="/" element={<Navigate to="home" />} />
+    {/* the console for whoever can open it (console.enabled and allowedGroups), the classic home page otherwise */}
+    <Route path="/" element={<ConsoleHomeRedirect />} />
     <Route path="/home" element={<Homepage />} />
     <Route path="/catalog" element={<CatalogIndexPage filters={<EntityKindPicker initialFilter="component" hidden />} />} />
     <Route
@@ -253,6 +260,8 @@ export default app.createRoot(
     <OAuthRequestDialog />
     <AppRouter>
       <VisitListener />
+      {/* navigate('/create/...') of a classic page shown in the console stays in the console */}
+      <StayInConsole pages={consolePages} />
       <Root>{routes}</Root>
     </AppRouter>
   </>,

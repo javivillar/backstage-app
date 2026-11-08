@@ -6,7 +6,6 @@ import Typography from '@mui/material/Typography';
 import { Fragment, useEffect, useState } from 'react';
 import { useConsoleConfig } from '../config';
 import { Badge } from './Badge';
-import { ClassicLink } from './ClassicLink';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
@@ -82,7 +81,6 @@ export const CisNodesPage = () => {
         sub={`${t('cisn.sub')}${d?.generated ? ` · ${new Date(d.generated).toLocaleString()}` : ''}`}
         finding={d?.configured && nodes.length > 0 && (common.length ? t('cisn.finding', { n: common.length, nodes: nodes.length }) : t('cisn.findingOk'))}
         findingTone={common.length ? 'warn' : 'pos'}
-        actions={<ClassicLink path="/cis-nodes">{t('cisn.classic')}</ClassicLink>}
       />
       {state.loading && <Progress />}
       {state.error && <WarningPanel title="The CIS results could not be read" message={state.error} />}

@@ -54,7 +54,7 @@ function mockDatahub(w: World) {
           data: {
             searchAcrossEntities: {
               searchResults: [
-                { entity: { urn: 'x', definition: { qualifiedName: 'refresquito.data_classification', allowedValues: ['Public', 'Internal', 'Confidential', 'Restricted'].map(v => ({ value: { stringValue: v } })) } } },
+                { entity: { urn: 'x', definition: { qualifiedName: 'refresquito.classification', allowedValues: ['Public', 'Internal', 'Confidential', 'Restricted'].map(v => ({ value: { stringValue: v } })) } } },
                 { entity: { urn: 'y', definition: { qualifiedName: 'refresquito.lawful_basis', allowedValues: [{ value: { stringValue: 'Consent' } }] } } },
               ],
             },
