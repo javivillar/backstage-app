@@ -6,6 +6,11 @@ This repository contains code for the [Backstage](https://backstage.io) images u
 > self-service plugins) and how to safely pull in a newer upstream version,
 > see [FORK.md](./FORK.md).
 
+## Refresquito modules
+
+- [Business continuity (business map)](docs/business-map.md): business processes, their continuity requirement
+  checked down to the platform, the importer of business models and the dashboards.
+
 ## Container Images
 
 Container images are pushed to the GitHub Container Registry and available [here](https://github.com/cnoe-io/backstage-app/pkgs/container/backstage-app).
