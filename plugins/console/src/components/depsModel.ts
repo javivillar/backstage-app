@@ -86,6 +86,27 @@ export function catalogueCategory(e: Entity): 'business' | Layer | undefined {
   return DECLARABLE.has(layer) ? layer : 'ops';
 }
 
+/**
+ * The layer of an entity knowing the others: a Resource that does not declare its layer (an application's block: its
+ * bucket, its SSO client) takes the layer of the service that provides it (refresquito.io/provided-by, else the
+ * Component it depends on); a database stays data; else layerOf.
+ */
+export function layerAmong(e: Entity, byRef: Map<string, Entity>): Layer {
+  const own = layerOf(e);
+  const declared = e.metadata.annotations?.['refresquito.io/layer'];
+  if (e.kind !== 'Resource' || declared || own === 'ext' || String(e.spec?.type ?? '') === 'database') return own;
+  const providedBy = e.metadata.annotations?.['refresquito.io/provided-by'];
+  const candidates = [
+    ...(providedBy ? [`component:default/${providedBy}`] : []),
+    ...(e.relations ?? []).filter(r => r.type === 'dependsOn' && r.targetRef.startsWith('component:')).map(r => r.targetRef),
+  ];
+  for (const ref of candidates) {
+    const provider = byRef.get(ref);
+    if (provider && provider.kind === 'Component') return layerOf(provider);
+  }
+  return own;
+}
+
 export type Health = 'ok' | 'warn' | 'bad' | 'off';
 export type DepNodeModel = { id: string; entity: Entity; label: string; product: string; layer: Layer; health: Health; healthLabel: string; deg: number };
 export type DepLink = { source: string; target: string; label: string; type: 'dep' | 'api' };
@@ -109,6 +130,7 @@ const isNode = (e: Entity) =>
 export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: Health; label: string }): { nodes: DepNodeModel[]; links: DepLink[] } {
   const items = entities.filter(isNode);
   const byRef = new Map(items.map(e => [stringifyEntityRef(e), e]));
+  const all = new Map(entities.map(e => [stringifyEntityRef(e), e]));
   // the providers of each API
   const providers = new Map<string, string[]>();
   for (const e of entities)
@@ -139,7 +161,7 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
     const id = stringifyEntityRef(e);
     const h = health(e);
     const product = String(e.metadata.annotations?.['refresquito.io/product'] ?? e.spec?.type ?? e.kind.toLowerCase());
-    return { id, entity: e, label: e.metadata.title ?? e.metadata.name, product, layer: layerOf(e), health: h.tone, healthLabel: h.label, deg: deg.get(id) ?? 0 };
+    return { id, entity: e, label: e.metadata.title ?? e.metadata.name, product, layer: layerAmong(e, all), health: h.tone, healthLabel: h.label, deg: deg.get(id) ?? 0 };
   });
   return { nodes, links };
 }

@@ -1,5 +1,5 @@
 import type { Entity } from '@backstage/catalog-model';
-import { buildGraph, catalogueCategory, layerOf, reach, stackLayout } from './depsModel';
+import { buildGraph, catalogueCategory, layerAmong, layerOf, reach, stackLayout } from './depsModel';
 
 const c = (name: string, extra: Partial<Entity['metadata']> = {}, relations: Entity['relations'] = []): Entity => ({
   apiVersion: 'backstage.io/v1alpha1',
@@ -94,6 +94,27 @@ describe('the layer of a Refresquito service', () => {
     expect(catalogueCategory(svc('python-framework-3-3', {}, { type: 'framework-line' }))).toBe('fwk');
     expect(catalogueCategory({ ...svc('petstore-oneke', { annotations: { 'refresquito.io/application': 'petstore' } }), spec: { type: 'application-instance' } })).toBe('business');
     expect(catalogueCategory({ apiVersion: 'backstage.io/v1alpha1', kind: 'API', metadata: { name: 'x' }, spec: { type: 'openapi' } })).toBeUndefined();
+  });
+});
+
+describe('the layer of a block resource', () => {
+  const comp = (name: string, layer: string): Entity => ({ apiVersion: 'backstage.io/v1alpha1', kind: 'Component', metadata: { name, namespace: 'default', annotations: { 'refresquito.io/layer': layer } }, spec: { type: 'platform-service' } });
+  const res = (name: string, type: string, extra: Partial<Entity> = {}): Entity => ({ apiVersion: 'backstage.io/v1alpha1', kind: 'Resource', metadata: { name, namespace: 'default', annotations: { 'refresquito.io/application': 'petstore' } }, spec: { type }, ...extra });
+  const byRef = new Map([comp('seaweedfs-oneke', 'dat'), comp('iam-oneke', 'sec'), comp('alfrescodms-oneke', 'app')].map(e => [`component:default/${e.metadata.name}`, e]));
+  it('takes the layer of the service that provides it, or of the component it depends on', () => {
+    const files = res('petstore-files', 's3-bucket');
+    files.metadata.annotations!['refresquito.io/provided-by'] = 'seaweedfs-oneke';
+    expect(layerAmong(files, byRef)).toBe('dat');
+    expect(layerAmong(res('petstore-sso-client', 'sso-client', { relations: [{ type: 'dependsOn', targetRef: 'component:default/iam-oneke' }] }), byRef)).toBe('sec');
+    expect(layerAmong(res('petstore-documents', 'dms-site', { relations: [{ type: 'dependsOn', targetRef: 'component:default/alfrescodms-oneke' }] }), byRef)).toBe('app');
+  });
+  it('a database stays data, a declared layer wins, nothing known: the name fallback', () => {
+    expect(layerAmong(res('petstore-database', 'database', { relations: [{ type: 'dependsOn', targetRef: 'component:default/iam-oneke' }] }), byRef)).toBe('dat');
+    const declared = res('x', 's3-bucket');
+    declared.metadata.annotations!['refresquito.io/layer'] = 'obs';
+    declared.metadata.annotations!['refresquito.io/provided-by'] = 'seaweedfs-oneke';
+    expect(layerAmong(declared, byRef)).toBe('obs');
+    expect(layerAmong(res('lonely', 's3-bucket'), byRef)).toBe(layerOf(res('lonely', 's3-bucket')));
   });
 });
 
