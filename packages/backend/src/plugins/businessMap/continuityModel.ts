@@ -17,7 +17,7 @@ export type CriticalityDefaults = Partial<Record<Criticality, { rpo?: string; rt
 /** What the model needs of a catalog entity. */
 export type MapEntity = {
   kind: string;
-  metadata: { name: string; namespace?: string; title?: string; annotations?: Record<string, string> };
+  metadata: { name: string; namespace?: string; title?: string; description?: string; annotations?: Record<string, string> };
   spec?: Record<string, unknown>;
   relations?: Array<{ type: string; targetRef: string }>;
 };
@@ -75,12 +75,13 @@ const KINDS = new Set(['system', 'component', 'resource']);
 const NOT_RUN_TIME = new Set(['framework-line', 'development-service']);
 const NOT_A_SERVICE_SYSTEM = new Set(['network-segment', 'development-services']);
 
-type Need = { criticality: Criticality; rpo?: number; rto?: number };
+export type Need = { criticality: Criticality; rpo?: number; rto?: number };
 
 /** The catalog as a graph: who is under whom along the chain. */
 export class ContinuityGraph {
   private readonly nodes = new Map<string, MapEntity>();
   private readonly down = new Map<string, Set<string>>();
+  private readonly up = new Map<string, Set<string>>();
   private readonly chains = new Map<string, string[]>();
 
   constructor(
@@ -91,6 +92,8 @@ export class ContinuityGraph {
     const link = (from: string, to: string) => {
       if (!this.down.has(from)) this.down.set(from, new Set());
       this.down.get(from)!.add(to);
+      if (!this.up.has(to)) this.up.set(to, new Set());
+      this.up.get(to)!.add(from);
     };
     for (const [ref, e] of this.nodes) {
       for (const r of e.relations ?? []) {
@@ -104,6 +107,21 @@ export class ContinuityGraph {
 
   entity(ref: string): MapEntity | undefined {
     return this.nodes.get(ref.toLowerCase());
+  }
+
+  /** Every entity of the graph. */
+  entities(): MapEntity[] {
+    return [...this.nodes.values()];
+  }
+
+  /** What is directly under an element (dependsOn, hasPart), whether it counts or not. */
+  children(ref: string): string[] {
+    return [...(this.down.get(ref.toLowerCase()) ?? [])];
+  }
+
+  /** What is directly above an element (dependencyOf, partOf), whether it counts or not. */
+  parents(ref: string): string[] {
+    return [...(this.up.get(ref.toLowerCase()) ?? [])];
   }
 
   processes(): string[] {
@@ -166,13 +184,13 @@ export class ContinuityGraph {
   }
 }
 
-const rank = (c: Criticality) => CRITICALITIES.indexOf(c);
+export const rank = (c: Criticality) => CRITICALITIES.indexOf(c);
 const minOf = (values: Array<number | undefined>) => {
   const known = values.filter((v): v is number => v !== undefined);
   return known.length ? Math.min(...known) : undefined;
 };
 
-function gapsOf(need: Need, got: { rpo?: number; rto?: number } | null) {
+export function gapsOf(need: Need, got: { rpo?: number; rto?: number } | null) {
   const out: Array<{ field: 'rpo' | 'rto'; needs: string; delivers: string }> = [];
   for (const field of ['rpo', 'rto'] as const) {
     const n = need[field];
@@ -182,7 +200,7 @@ function gapsOf(need: Need, got: { rpo?: number; rto?: number } | null) {
   return out;
 }
 
-function resultOf(need: Need | undefined, got: { rpo?: number; rto?: number } | null, gaps: number): Result {
+export function resultOf(need: Need | undefined, got: { rpo?: number; rto?: number } | null, gaps: number): Result {
   if (!need) return 'unknown';
   if (gaps) return 'gap';
   const fields = (['rpo', 'rto'] as const).filter(f => need[f] !== undefined);
@@ -190,7 +208,7 @@ function resultOf(need: Need | undefined, got: { rpo?: number; rto?: number } | 
   return 'meets';
 }
 
-const shown = (got: { rpo?: number; rto?: number } | null): Delivers | null => (got ? { rpo: fmt(got.rpo), rto: fmt(got.rto) } : null);
+export const shown = (got: { rpo?: number; rto?: number } | null): Delivers | null => (got ? { rpo: fmt(got.rpo), rto: fmt(got.rto) } : null);
 
 /** GET /continuity?entity=: the strictest requirement of the processes above an entity, and its check. */
 export function continuityOf(graph: ContinuityGraph, entityRef: string): ContinuityAnswer {
