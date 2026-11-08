@@ -40,11 +40,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN yarn config set python /usr/bin/python3
 
 # Add kubectl for the kube apply plugin
-RUN curl -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.9/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.9/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
 
-# Add cnoe-cli
-RUN curl -L -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/cnoe_Linux_x86_64.tar.gz && \
-    curl -L -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/checksums.txt && \
+# Add cnoe-cli (GitHub release assets answer 504 now and then on the runners: retry, and fail on an HTTP error)
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/cnoe_Linux_x86_64.tar.gz && \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -O https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/checksums.txt && \
     sha256sum -c --strict --status --ignore-missing checksums.txt && \
     tar -xzf cnoe_Linux_x86_64.tar.gz && \
     mv cnoe /usr/bin/cnoe-cli && \
