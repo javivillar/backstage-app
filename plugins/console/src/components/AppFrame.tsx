@@ -13,12 +13,13 @@ import { TitleRow } from './ui';
  * A business application of the Portal menu (Incidents, Accreditation…) inside the console, under the same Keycloak
  * login. The application must let *.<domain> frame it (frame-ancestors); if it does not, the button opens it apart.
  * Framed, an application of refresquito-angular ≥ 3.3.2 drops its own header (user, Sign out, light/dark: the console
- * shows them) and takes the console's mode from `rq-theme`, so it reads as a page of the console.
+ * shows them) when asked (`rq-embed=1`) and takes the console's mode from `rq-theme`, so it reads as a page of the console.
  */
 
-/** The URL of the application with the console's mode (light|dark) for its shell. */
+/** The URL of the application asking its shell to be embedded, with the console's mode (light|dark). */
 export function embedUrl(url: string, mode: 'light' | 'dark'): string {
   const u = new URL(url);
+  u.searchParams.set('rq-embed', '1');
   u.searchParams.set('rq-theme', mode);
   return u.toString();
 }
