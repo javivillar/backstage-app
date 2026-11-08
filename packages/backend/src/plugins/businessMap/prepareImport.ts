@@ -24,7 +24,7 @@ import {
   supportCategories,
   type ValueMapping,
 } from './importModel';
-import { readUpload, type Sheet } from './sheets';
+import { compactSheet, readUpload, type Sheet } from './sheets';
 
 /**
  * What an import of a business model reads and plans, shared by the scaffolder actions (scaffolderModule.ts:
@@ -170,16 +170,24 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     goneFamily: input.source === 'apqc' ? 'apqc' : 'model',
     model,
   });
-  return { parsed, planned, warnings: [...warnings, ...parsed.warnings] };
+  return { parsed, planned, warnings: [...warnings, ...parsed.warnings], upload, sheet };
 }
 
 /** What a preview answers (the outputs of refresquito:business-model:preview and the body of the route). */
-export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[] };
+export type Preview = {
+  counts: Counts;
+  errors: Issue[];
+  warnings: Issue[];
+  changes: Change[];
+  /** An .xlsx: its sheet read, as a small CSV data URL for the template (compactSheet). */
+  compact?: string;
+};
 
 /** The preview of an import: nothing is written; the current files that cannot be read are a warning. */
 export async function previewOf(input: ImportInput, deps: ImportDeps, credentials: BackstageCredentials, user: string | undefined): Promise<Preview> {
-  const { parsed, planned, warnings } = await prepare(input, deps, credentials, user, false);
-  return { counts: planned.counts, errors: parsed.errors, warnings, changes: planned.changes };
+  const { parsed, planned, warnings, upload, sheet } = await prepare(input, deps, credentials, user, false);
+  const compact = upload.format === 'xlsx' ? compactSheet(sheet, upload.fileName) : undefined;
+  return { counts: planned.counts, errors: parsed.errors, warnings, changes: planned.changes, ...(compact ? { compact } : {}) };
 }
 
 /** A bad request body of the preview route (400). */

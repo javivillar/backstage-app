@@ -1,5 +1,5 @@
 import { deflateRawSync } from 'node:zlib';
-import { columnOf, parseCsv, readUpload, readXlsx } from './sheets';
+import { columnOf, parseCsv, readUpload, readXlsx, compactSheet } from './sheets';
 
 /** A tiny zip writer for the tests: deflated entries, CRC left 0 (the reader does not check it). */
 function zip(files: Record<string, string>): Buffer {
@@ -95,5 +95,24 @@ describe('readUpload', () => {
   });
   it('refuses an old .xls', () => {
     expect(() => readUpload(`data:application/vnd.ms-excel;base64,${Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0]).toString('base64')}`, 'old.xls')).toThrow('.xls');
+  });
+});
+
+describe('compactSheet', () => {
+  it('reads back as the same sheet: its name, row numbers, cells with commas, quotes and line breaks', () => {
+    const sheet = {
+      name: 'Combined',
+      rows: [
+        { n: 1, cells: ['PCF ID', 'Hierarchy ID', 'Name'] },
+        { n: 2, cells: ['10002', '1.0', 'Develop Vision, and "Strategy"'] },
+        { n: 5, cells: ['10017', '1.1.1', ''] },
+        // a cell with a line break takes two lines of the CSV: the rows after it are numbered one more
+        { n: 6, cells: ['10014', '1.1', 'Two\nlines'] },
+      ],
+    };
+    const back = readUpload(compactSheet(sheet, 'PCF Cross Industry.xlsx'));
+    expect(back.format).toBe('csv');
+    expect(back.fileName).toBe('PCF Cross Industry.xlsx');
+    expect(back.sheets).toEqual([{ name: 'Combined', rows: sheet.rows }]);
   });
 });

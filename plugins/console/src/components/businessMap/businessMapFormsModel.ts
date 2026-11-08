@@ -164,7 +164,8 @@ export function previewKey(body: PreviewBody): string {
 export type Issue = { row?: number; message: string };
 export type Change = { kind: 'new' | 'changed' | 'review'; id: string; title: string; what: string };
 export type Counts = { domains: number; subdomains: number; new: number; changed: number; gone: number; unchanged: number };
-export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[] };
+/** compact: an .xlsx, its sheet read as a small CSV data URL, what the template gets instead of the workbook. */
+export type Preview = { counts: Counts; errors: Issue[]; warnings: Issue[]; changes: Change[]; compact?: string };
 /** The preview of one request (key) as the page holds it. */
 export type PreviewState = { key: string; state: 'loading' | 'done' | 'failed'; preview?: Preview; error?: string };
 
@@ -207,12 +208,20 @@ export function importBlocker(form: ImportForm, preview: PreviewState | undefine
   return undefined;
 }
 
+/** The compact sheet of the preview, when it is the preview of these values. */
+function compactOf(form: ImportForm, preview: PreviewState | undefined): string | undefined {
+  const body = previewBody(form);
+  return body && preview?.key === previewKey(body) ? preview.preview?.compact : undefined;
+}
+
 /** The values of the template business-model-import: its parameters, page by page. */
 export function importValues(form: ImportForm, preview: PreviewState | undefined): Record<string, unknown> {
   const v: Record<string, unknown> = {
     source: form.source,
-    file: form.file ?? '',
-    sheet: form.sheet.trim(),
+    // the sheet of an .xlsx as the preview read it (a small CSV that names the sheet): a workbook in base64 can pass the
+    // 10 MB the scaffolder takes
+    file: compactOf(form, preview) ?? form.file ?? '',
+    sheet: compactOf(form, preview) ? '' : form.sheet.trim(),
     namespace: form.namespace,
     skipErrors: form.skipErrors,
     // the value of the form field BusinessModelPreview of the classic form: a short summary of the preview

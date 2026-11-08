@@ -195,6 +195,41 @@ export function readUpload(file: string, fileName?: string): Upload {
   }
   if (buf.length >= 4 && buf.readUInt32LE(0) === 0xe011cfd0) throw new Error(`${name} is an old Excel file (.xls): save it as .xlsx or .csv.`);
   if (buf.length >= 4 && buf.readUInt32LE(0) === 0x04034b50) return { fileName: name, format: 'xlsx', sheets: readXlsx(buf) };
-  if (type.includes('spreadsheetml') || /\.xlsx$/i.test(name)) throw new Error(`${name} is not a valid .xlsx file.`);
-  return { fileName: name, format: 'csv', sheets: [{ name: 'csv', rows: parseCsv(buf.toString('utf8')) }] };
+  // text/csv is a sheet sent again as CSV (compactSheet): it keeps the name of its workbook
+  if (type !== 'text/csv' && (type.includes('spreadsheetml') || /\.xlsx$/i.test(name))) throw new Error(`${name} is not a valid .xlsx file.`);
+  // a sheet of an .xlsx sent again as CSV (compactSheet) keeps its name
+  const sheetName = params.find(p => p.startsWith('sheet='))?.slice(6);
+  let shown = 'csv';
+  try {
+    shown = sheetName ? decodeURIComponent(sheetName) : 'csv';
+  } catch {
+    shown = sheetName ?? 'csv';
+  }
+  return { fileName: name, format: 'csv', sheets: [{ name: shown, rows: parseCsv(buf.toString('utf8')) }] };
+}
+
+const csvCell = (c: string) => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+
+/**
+ * One sheet of an upload as a small CSV data URL (data:text/csv;name=<file>;sheet=<sheet>;base64,…): the import reads
+ * it as it read the sheet of the .xlsx, with the same row numbers (blank lines fill the gaps; a cell with line breaks
+ * shifts the numbers after it). The form sends this to
+ * the template instead of the whole workbook, whose base64 can pass the 10 MB the scaffolder accepts.
+ */
+export function compactSheet(sheet: Sheet, fileName: string): string {
+  const lines: string[] = [];
+  let line = 1;
+  for (const r of sheet.rows) {
+    while (line < r.n) {
+      lines.push('');
+      line++;
+    }
+    const text = r.cells.map(csvCell).join(',');
+    lines.push(text);
+    line += 1 + (text.match(/\n/g)?.length ?? 0);
+  }
+  // a first line without a comma would leave the delimiter to the guess: the header always has one
+  if (lines.length && !lines[0].includes(',')) lines[0] += ',';
+  const data = Buffer.from(lines.join('\n'), 'utf8').toString('base64');
+  return `data:text/csv;name=${encodeURIComponent(fileName)};sheet=${encodeURIComponent(sheet.name)};base64,${data}`;
 }

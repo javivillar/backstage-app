@@ -121,6 +121,14 @@ describe('import', () => {
     const apqc = importValues({ ...emptyImport('x1'), file: FILE, source: 'apqc' }, undefined);
     expect([apqc.industry, apqc.version, apqc.mapping, apqc.preview]).toEqual(['', '7.4', undefined, {}]);
   });
+  it('sends the sheet the preview read (compact CSV) instead of the workbook', () => {
+    const f = { ...emptyImport('x1'), file: FILE, source: 'apqc' as const, sheet: '2' };
+    const key = previewKey(previewBody(f)!);
+    const counts = { domains: 0, subdomains: 0, new: 0, changed: 0, gone: 0, unchanged: 0 };
+    const preview: PreviewState = { key, state: 'done', preview: { counts, errors: [], warnings: [], changes: [], compact: 'data:text/csv;sheet=Combined;base64,QQ==' } };
+    expect(importValues(f, preview)).toMatchObject({ file: 'data:text/csv;sheet=Combined;base64,QQ==', sheet: '' });
+    expect(importValues(f, { ...preview, key: 'stale' })).toMatchObject({ file: FILE, sheet: '2' });
+  });
   it('orders the changes and makes the cards', () => {
     const { rows, total } = shownChanges(
       [
