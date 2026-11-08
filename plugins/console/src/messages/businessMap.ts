@@ -175,6 +175,7 @@ export const BUSINESS_MAP: Messages = {
   'bmi.tab': { en: 'Impact on the business', es: 'Impacto en el negocio' },
   // Business management group of the portal menu
   'nav.businessManagement': { en: 'Business management', es: 'Gestión del negocio' },
+  'nav.finops': { en: 'FinOps', es: 'FinOps' },
   'nav.dataContinuity': { en: 'Data continuity', es: 'Continuidad del dato' },
   'nav.dataContinuity.hint': { en: 'The continuity of the data of each business service', es: 'La continuidad de los datos de cada servicio de negocio' },
   'nav.digitalContinuity': { en: 'Digital continuity', es: 'Continuidad digital' },
