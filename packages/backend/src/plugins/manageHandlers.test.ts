@@ -3,6 +3,7 @@ import './manageHandlersGravitee';
 import './manageHandlersDatahub';
 import './manageHandlersSuperset';
 import './manageHandlersProcesses';
+import './manageHandlersMonitoring';
 import { parseDocument } from 'yaml';
 import { applyChange, ChangeError, handlerFor, type ChangeRequest } from './manageModel';
 import { groupsWithTombstones } from './manageHandlersProcesses';
@@ -168,5 +169,70 @@ describe('Manage › Business process (Operaton)', () => {
 
   it('revives a group given back', () => {
     expect(groupsWithTombstones(['a', { name: 'b', state: 'absent' }], ['a', 'b'])).toEqual(['a', 'b']);
+  });
+});
+
+describe('Manage › Monitoring', () => {
+  const dash = handlerFor('monitoring', 'dashboard').files!;
+  const change = (r: Partial<ChangeRequest> & { action: ChangeRequest['action']; id: string }, current?: string) =>
+    dash.change({ service: 'monitoring', object: 'dashboard', owner: app, ...r } as ChangeRequest & { id: string }, current);
+
+  it('turns monitoring of an application on, and refuses to turn it off', () => {
+    const on = run({ service: 'monitoring', object: 'monitoring', action: 'create', spec: { name: 'animalshelter' } });
+    expect(json(on).platform.monitoring).toEqual({ enabled: true });
+    expect(on).toContain('# Animal shelter');
+    expect(fails(() => run({ service: 'monitoring', object: 'monitoring', action: 'create', spec: { name: 'animalshelter' } }, on)).status).toBe(409);
+    expect(fails(() => run({ service: 'monitoring', object: 'monitoring', action: 'delete', id: 'animalshelter' }, on)).status).toBe(422);
+  });
+
+  it('adds a dashboard from a template as platform/monitoring/<name>.json of the repository', () => {
+    expect(handlerFor('monitoring', 'dashboard').target(app)).toEqual({ repo: 'app', path: 'platform/monitoring' });
+    expect(dash.path('database')).toBe('platform/monitoring/database.json');
+    const { text, summary } = change({ action: 'create', id: 'database', spec: { name: 'database', template: 'database' } });
+    const d = JSON.parse(text!);
+    expect(summary).toBe('Add dashboard database of animalshelter');
+    expect(d.title).toBe('Database');
+    expect(d.tags).toEqual(['template:database']);
+    expect(d.uid).toBeUndefined();
+    expect(d.templating.list.map((v: { name: string }) => v.name)).toEqual(['prometheus', 'namespace']);
+    expect(JSON.stringify(d.panels)).toContain('namespace=\\"$namespace\\"');
+    expect(dash.declared('database.json', text!)).toEqual({ id: 'database', spec: { name: 'database', title: 'Database', source: 'template', template: 'database', replacesStandard: false }, gone: false });
+    expect(fails(() => change({ action: 'create', id: 'database', spec: { name: 'database', template: 'database' } }, text!)).status).toBe(409);
+  });
+
+  it('every template is a dashboard with panels', () => {
+    for (const template of ['database', 'jobs', 'platform', 'business']) {
+      const d = JSON.parse(change({ action: 'create', id: template, spec: { name: template, template } }).text!);
+      expect(d.panels.length).toBeGreaterThan(1);
+    }
+  });
+
+  it('imports a Grafana export: unwraps it, drops what Grafana keeps per instance and maps its datasources', () => {
+    const exported = JSON.stringify({
+      __inputs: [{ name: 'DS_PROM', pluginId: 'prometheus' }],
+      id: 12,
+      uid: 'abc',
+      version: 7,
+      title: 'Pets',
+      panels: [{ type: 'timeseries', datasource: { uid: '${DS_PROM}' } }],
+    });
+    const { text } = change({ action: 'create', id: 'pets', spec: { name: 'pets', source: 'import', json: exported } });
+    const d = JSON.parse(text!);
+    expect(d.id).toBeUndefined();
+    expect(d.uid).toBeUndefined();
+    expect(d.__inputs).toBeUndefined();
+    expect(d.panels[0].datasource.uid).toBe('${prometheus}');
+    expect(d.templating.list[0]).toMatchObject({ name: 'prometheus', type: 'datasource' });
+    expect(dash.declared('pets.json', text!)!.spec.source).toBe('import');
+    expect(dash.declared('logs.json', text!)!.spec.replacesStandard).toBe(true);
+    expect(fails(() => change({ action: 'create', id: 'bad', spec: { name: 'bad', source: 'import', json: '{"title":"x"}' } })).errors[0]).toContain('no panels');
+  });
+
+  it('changes and removes a dashboard of the repository', () => {
+    const { text } = change({ action: 'create', id: 'jobs', spec: { name: 'jobs', template: 'jobs' } });
+    expect(change({ action: 'update', id: 'jobs', spec: { template: 'platform' } }, text!).summary).toBe('Change dashboard jobs of animalshelter');
+    expect(change({ action: 'delete', id: 'jobs' }, text!)).toEqual({ text: null, summary: 'Remove dashboard jobs of animalshelter' });
+    expect(fails(() => change({ action: 'delete', id: 'jobs' })).status).toBe(404);
+    expect(fails(() => change({ action: 'create', id: 'x', spec: { name: 'x', template: 'nope' } })).status).toBe(422);
   });
 });

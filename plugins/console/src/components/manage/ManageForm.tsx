@@ -10,7 +10,7 @@ import { useI18n } from '../../i18n';
 import { type ChangeAnswer, ManageError, type ManageOwner, type OwnerView, useManageChange } from '../../manage';
 import { ResultNote, type Note } from '../Requests';
 import { AppPicker } from './AppPicker';
-import { fieldErrors, type Field, fieldsFor, initialValues, specFrom } from './manageFormModel';
+import { fieldErrors, type Field, fieldsFor, initialValues, shownFor, specFrom } from './manageFormModel';
 
 /**
  * The form of one Manage object (create, or change one): its fields, the application it belongs to, why; then the
@@ -107,7 +107,7 @@ export const ManageForm = ({
           setPreview(undefined);
         }} platform={platform} disabled={!!fixedOwner} />
       {shown
-        .filter(f => creating || !f.createOnly)
+        .filter(f => (creating || !f.createOnly) && shownFor(f, values))
         .map(f =>
           f.kind === 'boolean' ? (
             <FormControlLabel key={f.key} control={<Switch checked={values[f.key] === true} onChange={e => set(f.key, e.target.checked)} />} label={f.label} />
@@ -122,7 +122,10 @@ export const ManageForm = ({
               onChange={e => set(f.key, e.target.value)}
               error={!!errors[f.key] && errors[f.key] !== 'required'}
               helperText={helpOf(f)}
-              multiline={f.kind === 'list'}
+              multiline={f.kind === 'list' || f.kind === 'textarea'}
+              minRows={f.kind === 'textarea' ? 6 : undefined}
+              maxRows={f.kind === 'textarea' ? 16 : undefined}
+              slotProps={f.kind === 'textarea' ? { htmlInput: { style: { fontFamily: 'monospace', fontSize: 12 } } } : undefined}
             >
               {f.kind === 'select' && f.options?.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </TextField>

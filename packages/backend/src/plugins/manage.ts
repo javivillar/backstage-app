@@ -9,7 +9,8 @@ import './manageHandlersGravitee';
 import './manageHandlersDatahub';
 import './manageHandlersSuperset';
 import './manageHandlersProcesses';
-import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner, parse } from './manageModel';
+import './manageHandlersMonitoring';
+import { applyChange, ChangeError, type ChangeRequest, changeId, type Handler, handlerFor, handlers, lineDiff, type ManageAction, NAME, type Owner, parse } from './manageModel';
 
 /**
  * Manage through git (refresquito-services MANAGE-GITOPS-DESIGN.md): the console's Manage pages change the objects of
@@ -27,6 +28,10 @@ import { applyChange, ChangeError, type ChangeRequest, handlerFor, handlers, lin
  *        in every application file and in the platform file, without reading the product (to prefill an edit, to say
  *        which live objects Manage may change, and for the drift view); read at most once a minute
  *
+ * A kind of object that is a file of the application's own repository (Handler.files: its dashboards in
+ * platform/monitoring/) is changed by a pull request there: the repository is `repository` of its file of the app-of-apps,
+ * against its default branch; /declared lists that folder in each repository and /pending adds their pull requests.
+ *
  * Who may ask: the owner team of the application (spec.owner of its production instance in the catalog) or the groups
  * of console.actions.groups (default backstage-admin); objects of the platform only those groups. Approval is in
  * GitHub (CODEOWNERS of the application's file).
@@ -41,6 +46,7 @@ const slugOf = (r: { service: string; object: string; id: string }) => `${SLUG}$
 const MARK = /<!-- manage: (\{.*\}) -->/;
 
 const ACTIONS: ManageAction[] = ['create', 'update', 'delete'];
+const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /** The request body checked: anything else is a 400. */
 export function readRequest(body: unknown): ChangeRequest {
@@ -76,7 +82,9 @@ export function pullBody(r: ChangeRequest & { id: string }, user: string, file: 
     '\n```diff',
     diff,
     '```',
-    '\nOn merge, the provisioner of the application applies it; a removal is a tombstone (`state: absent`) it deletes.',
+    r.service === 'monitoring' && r.object === 'dashboard'
+      ? '\nOn merge, the file travels in the next image of the application: dev gets the dashboard when it is built, pre and pro when it is promoted.'
+      : '\nOn merge, the provisioner of the application applies it; a removal is a tombstone (`state: absent`) it deletes.',
     `\n<!-- manage: ${JSON.stringify({ service: r.service, object: r.object, id: r.id, action: r.action, owner: r.owner })} -->`,
   ].join('\n');
 }
@@ -97,6 +105,29 @@ export default createBackendPlugin({
         const groups = config.getOptionalStringArray('console.actions.groups') ?? ['backstage-admin'];
         const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
         const services = new GitHubFiles(config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.manage.branch') ?? 'main', token);
+
+        /** The repository of an application (`repository` of its file of the app-of-apps), at its default branch. */
+        const repos = new Map<string, { at: number; files: GitHubFiles }>();
+        const appRepo = async (app: string): Promise<GitHubFiles> => {
+          const hit = repos.get(app);
+          if (hit && Date.now() - hit.at < 300_000) return hit.files;
+          const text = await services.get(`bootstrap/app-of-apps/apps/${app}.yaml`).then(f => f.text, () => undefined);
+          if (text === undefined) throw new ChangeError(404, `bootstrap/app-of-apps/apps/${app}.yaml is not in refresquito-services.`);
+          const repo = parse(text).get('repository');
+          if (typeof repo !== 'string' || !REPO.test(repo)) throw new ChangeError(422, `${app} has no repository (owner/name) in its file of the app-of-apps.`);
+          const res = await fetch(`https://api.github.com/repos/${repo}`, {
+            headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          });
+          if (!res.ok) throw new ChangeError(404, `GitHub answered ${res.status} for the repository ${repo} of ${app}.`);
+          const branch = ((await res.json()) as { default_branch?: string }).default_branch ?? 'main';
+          const files = new GitHubFiles(repo, branch, token);
+          repos.set(app, { at: Date.now(), files });
+          return files;
+        };
+        /** The applications of the app-of-apps (their files), for what is listed in every repository. */
+        const appNames = async () =>
+          (await services.list('bootstrap/app-of-apps/apps')).filter(f => /^[a-z0-9-]+\.ya?ml$/.test(f.name)).map(f => f.name.replace(/\.ya?ml$/, ''));
+        const inRepos = (service?: string) => handlers().some((h: Handler) => !!h.files && (!service || h.service === service));
 
         const who = async (req: express.Request) => {
           const credentials = await httpAuth.credentials(req, { allow: ['user'] });
@@ -122,7 +153,7 @@ export default createBackendPlugin({
         };
 
         const router = Router();
-        router.use(express.json({ limit: '64kb' }));
+        router.use(express.json({ limit: '1mb' })); // a dashboard exported from Grafana
         const fail = (res: express.Response, e: unknown) => {
           if (e instanceof ChangeError) res.status(e.status).json({ error: e.message, errors: e.errors });
           else {
@@ -167,7 +198,24 @@ export default createBackendPlugin({
             } else if (!w.admin) {
               throw new ChangeError(403, `Only ${groups.join(', ')} can change objects of the platform.`);
             }
-            if (target.repo !== 'services') throw new ChangeError(501, 'Changes in the repository of the application are not supported yet.');
+            if (target.repo === 'app') {
+              if (!h.files || r.owner.kind !== 'application') throw new ChangeError(501, 'Changes in the repository of the application are not supported for this kind.');
+              const id = changeId(r);
+              if (!NAME.test(id)) throw new ChangeError(422, 'The change is not valid.', ['name: lowercase letters, digits and "-".']);
+              const repo = await appRepo(r.owner.name);
+              const path = h.files.path(id);
+              const current = await repo.get(path).then(f => f.text, () => undefined);
+              const { text, summary } = h.files.change({ ...r, id }, current);
+              const diff = lineDiff(current ?? '', text ?? '');
+              if (r.dryRun) {
+                res.json({ file: path, diff, summary });
+                return;
+              }
+              const pull = await repo.pullRequest(slugOf({ ...r, id }), `Manage: ${summary}`, pullBody({ ...r, id }, w.user, path, diff), [{ path, text }]);
+              logger.info(`manage: ${summary} by ${w.user}: pull request #${pull.number} in the repository of ${r.owner.name}`);
+              res.json({ pull, file: path, diff, summary });
+              return;
+            }
             // the platform file of a service is created by its first object; an application's file must exist
             const before = await services.get(target.path).then(
               f => f.text,
@@ -203,6 +251,25 @@ export default createBackendPlugin({
           try {
             await httpAuth.credentials(req, { allow: ['user'] });
             const h = handlerFor(String(req.query.service ?? ''), String(req.query.object ?? ''));
+            if (h.files) {
+              const files = h.files;
+              const out: Array<{ owner: Owner; id: string; spec: Record<string, unknown>; gone: boolean }> = [];
+              for (const app of await appNames()) {
+                const repo = await appRepo(app).catch(() => undefined);
+                if (!repo) continue;
+                const key = `app:${app}:${files.dir}`;
+                if (Date.now() - cache.at > 60_000) cache = { at: Date.now(), files: new Map() };
+                if (!cache.files.has(key)) cache.files.set(key, JSON.stringify(await repo.list(files.dir).catch(() => [])));
+                for (const f of JSON.parse(cache.files.get(key) ?? '[]') as Array<{ name: string; path: string }>) {
+                  const fileKey = `app:${app}:${f.path}`;
+                  if (!cache.files.has(fileKey)) cache.files.set(fileKey, await repo.get(f.path).then(x => x.text, () => undefined));
+                  const d = files.declared(f.name, cache.files.get(fileKey));
+                  if (d) out.push({ owner: { kind: 'application', name: app }, ...d });
+                }
+              }
+              res.json(out);
+              return;
+            }
             if (!h.declared) throw new ChangeError(501, `Manage cannot list what git declares of ${h.object} of ${h.service} yet.`);
             const out: Array<{ owner: Owner; id: string; spec: Record<string, unknown>; gone: boolean }> = [];
             const files = (await services.list(APPS)).filter(f => /^[a-z0-9-]+\.ya?ml$/.test(f.name));
@@ -231,6 +298,14 @@ export default createBackendPlugin({
             await httpAuth.credentials(req, { allow: ['user'] });
             const service = typeof req.query.service === 'string' ? req.query.service : undefined;
             const pulls = (await services.openPulls()).filter(p => p.branch.startsWith(`${PR_PREFIX}${SLUG}`));
+            // the pull requests in the repositories of the applications (their dashboards), when the service has such objects
+            if (inRepos(service)) {
+              for (const app of await appNames()) {
+                const repo = await appRepo(app).catch(() => undefined);
+                const open = repo ? await repo.openPulls().catch(() => []) : [];
+                pulls.push(...open.filter(p => p.branch.startsWith(`${PR_PREFIX}${SLUG}`)));
+              }
+            }
             res.json(
               pulls
                 .map(p => {
