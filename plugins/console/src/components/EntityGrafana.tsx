@@ -36,7 +36,7 @@ const uidOf = (entity: Entity, kind: GrafanaKind) =>
 export const hasGrafanaDashboard = (kind: GrafanaKind) => (entity: Entity) =>
   Boolean(entity.metadata.annotations?.[GRAFANA_URL] && uidOf(entity, kind));
 
-/** The URL of the dashboard: in kiosk mode (no Grafana bar) for the frame, full for "Open in Grafana". */
+/** The URL of the dashboard: in kiosk mode without Grafana's bars for the frame, full for "Open in Grafana". */
 export function grafanaUrl(
   base: string,
   uid: string,
@@ -49,7 +49,9 @@ export function grafanaUrl(
   if (opts.level !== undefined) q.set('var-level', opts.level || ALL);
   if (opts.container !== undefined) q.set('var-container', opts.container || ALL);
   if (opts.search) q.set('var-search', opts.search);
-  const kiosk = opts.kiosk ? 'kiosk&' : '';
+  // in the frame the console's own controls (range, level, container, search) replace Grafana's bars: kiosk hides its
+  // navigation, and _dash.hide* (Grafana 11.3) its time picker, variables and dashboard links
+  const kiosk = opts.kiosk ? 'kiosk&_dash.hideTimePicker&_dash.hideVariables&_dash.hideLinks&' : '';
   return `${base.replace(/\/+$/, '')}/d/${encodeURIComponent(uid)}?${kiosk}${q.toString()}`;
 }
 

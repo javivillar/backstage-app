@@ -1,5 +1,6 @@
 import { useI18n } from '../../i18n';
 import type { Row } from '../ManagePages';
+import { FoldersAccess } from './FoldersAccess';
 import { type Kind, ManageTabs } from './ManageObjectsView';
 
 /**
@@ -9,6 +10,7 @@ import { type Kind, ManageTabs } from './ManageObjectsView';
  *   each stage gets Logs and Performance in Applications/<application>/<stage> of Grafana. Only turned on from here.
  * - Dashboards: the dashboards of the application's own, platform/monitoring/<name>.json of its repository, from a
  *   template or a Grafana export. They travel in its image: dev gets them when it is built, pre and pro when promoted.
+ * - Folders and access (read only): who edits and who sees each folder (FoldersAccess.tsx).
  */
 
 const NAME = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
@@ -53,6 +55,7 @@ export const MonitoringPage = () => {
     label: tx('Dashboards', 'Dashboards'),
     service: 'monitoring',
     object: 'dashboard',
+    inAppRepo: true,
     what: tx('dashboard', 'dashboard'),
     columns: [
       { key: 'name', label: tx('Dashboard', 'Dashboard') },
@@ -112,5 +115,5 @@ export const MonitoringPage = () => {
     ),
   };
 
-  return <ManageTabs kinds={[apps, dashboards]} label="Monitoring" />;
+  return <ManageTabs kinds={[apps, dashboards]} extra={[{ label: tx('Folders and access', 'Carpetas y acceso'), element: <FoldersAccess /> }]} label="Monitoring" />;
 };
