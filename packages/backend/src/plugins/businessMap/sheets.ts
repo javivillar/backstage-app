@@ -12,7 +12,7 @@ export type Sheet = { name: string; rows: SheetRow[] };
 
 /** The cells of a CSV text: quotes as in RFC 4180, the delimiter (, ; or tab) guessed from the first line. */
 export function parseCsv(input: string): SheetRow[] {
-  const text = input.replace(/^﻿/, '');
+  const text = input.replace(/^\uFEFF/, '');
   const first = text.split(/\r?\n/, 1)[0] ?? '';
   const count = (c: string) => first.split(c).length - 1;
   const candidates = [',', ';', '\t'];

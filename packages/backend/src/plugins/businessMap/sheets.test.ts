@@ -60,7 +60,7 @@ function workbook(rows: string[][], sheetName = 'Model'): Buffer {
 
 describe('parseCsv', () => {
   it('reads quotes, semicolons and empty lines', () => {
-    const rows = parseCsv('﻿ID;Title;Owner\n1;"Sell; and ""ship""";\n\n2;"Two\nlines";x\n');
+    const rows = parseCsv('\uFEFFID;Title;Owner\n1;"Sell; and ""ship""";\n\n2;"Two\nlines";x\n');
     expect(rows.map(r => r.cells)).toEqual([
       ['ID', 'Title', 'Owner'],
       ['1', 'Sell; and "ship"', ''],
