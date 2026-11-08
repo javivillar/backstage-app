@@ -42,16 +42,15 @@ RUN yarn config set python /usr/bin/python3
 # Add kubectl for the kube apply plugin
 RUN curl -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.9/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
 
-# Add cnoe-cli v0.1.0. Its sha256 is pinned here (the one of the release's checksums.txt): the release asset host
-# answered 504 for checksums.txt on 2026-11-08 and broke every image build. Downloads retry on any error.
+# Add cnoe-cli v0.1.0: the build workflow fetches it into the context through the GitHub API (the release's direct
+# download answered 504 to the runners on 2026-11-08); its sha256 is pinned (the one of the release's checksums.txt).
 ARG CNOE_CLI_SHA256=55a421f62963c74cb83880983fe360fa6cb1862444e15e4d74c15dd50bbe5fe4
-RUN curl -fsSL --retry 10 --retry-delay 10 --retry-all-errors -o cnoe_Linux_x86_64.tar.gz \
-      https://github.com/cnoe-io/cnoe-cli/releases/download/v0.1.0/cnoe_Linux_x86_64.tar.gz && \
-    echo "${CNOE_CLI_SHA256}  cnoe_Linux_x86_64.tar.gz" | sha256sum -c --strict --status && \
-    tar -xzf cnoe_Linux_x86_64.tar.gz && \
-    mv cnoe /usr/bin/cnoe-cli && \
+COPY cnoe_Linux_x86_64.tar.gz /tmp/cnoe_Linux_x86_64.tar.gz
+RUN echo "${CNOE_CLI_SHA256}  /tmp/cnoe_Linux_x86_64.tar.gz" | sha256sum -c --strict --status && \
+    tar -xzf /tmp/cnoe_Linux_x86_64.tar.gz -C /tmp && \
+    mv /tmp/cnoe /usr/bin/cnoe-cli && \
     chmod +x /usr/bin/cnoe-cli && \
-    rm cnoe_Linux_x86_64.tar.gz
+    rm /tmp/cnoe_Linux_x86_64.tar.gz
 COPY ./cnoe-wrapper.sh /usr/bin/cnoe
 RUN chmod +x /usr/bin/cnoe
 

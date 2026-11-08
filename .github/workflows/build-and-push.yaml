@@ -30,6 +30,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
       # Uses the `docker/login-action` action to log in to the Container registry using the account and password that will publish the packages. Once published, the packages are scoped to the account defined here.
+      # cnoe-cli comes into the build context through the GitHub API: the release's direct download URL answered 504
+      # to the runners on 2026-11-08 and broke every build (the Dockerfile checks its pinned sha256)
+      - name: Fetch cnoe-cli
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh release download v0.1.0 --repo cnoe-io/cnoe-cli --pattern cnoe_Linux_x86_64.tar.gz --clobber && break
+            sleep 15
+          done
+          test -s cnoe_Linux_x86_64.tar.gz
+
       - name: Log in to the Container registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
         with:
