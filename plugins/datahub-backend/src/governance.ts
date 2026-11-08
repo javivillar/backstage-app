@@ -76,7 +76,22 @@ export interface Owner extends Ref {
   type: string;
 }
 
+/**
+ * Where an asset is declared, for Manage (every change is a pull request): an application when its provisioner wrote it
+ * (managedBy python-app-oneke, application <app>: the datahub block of its file), the platform when the reconciler of
+ * datahub-oneke did (refresquito.managed: platform, bootstrap/app-of-apps/platform/datahub.yaml), else nowhere.
+ */
+export type Declared = { kind: 'application'; name: string } | { kind: 'platform' };
+export function declaredBy(custom?: Array<{ key: string; value?: string | null }>): Declared | undefined {
+  const get = (k: string) => custom?.find(p => p.key === k)?.value ?? undefined;
+  if (get('refresquito.managed') === 'platform') return { kind: 'platform' };
+  const app = get('application');
+  if (get('managedBy') === 'python-app-oneke' && app) return { kind: 'application', name: app };
+  return undefined;
+}
+
 export interface Summary {
+  declared?: Declared;
   urn: string;
   type: AssetType;
   name: string;
@@ -208,6 +223,7 @@ export function summarize(type: AssetType, raw: RawEntity, publicUrl: string, th
     deprecated: !!raw.deprecation?.deprecated,
     deprecationNote: raw.deprecation?.note ?? undefined,
     managedBy: props?.customProperties?.find(p => p.key === 'managedBy')?.value ?? undefined,
+    declared: declaredBy(props?.customProperties ?? undefined),
     columns,
   };
   return { ...base, url: assetUrl(publicUrl, type, raw.urn), score: computeScore(base, hasBusinessOwner, threshold) };

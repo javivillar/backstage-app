@@ -32,6 +32,7 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/;
 
 interface ApiRow {
   id: string;
+  declared?: { kind: 'application'; name: string } | { kind: 'platform' };
   name: string;
   version: string;
   description?: string;
@@ -99,6 +100,19 @@ export const graviteeManagerPlugin = createBackendPlugin({
           res.status(status).json({ error: e.message });
         }
 
+        /**
+         * Where the API is declared, for Manage (every change is a pull request): an application (the gateway block of
+         * its file: labels python-app-oneke and <app>), the platform (label manage-platform: the reconciler of
+         * gravitee-oneke, bootstrap/app-of-apps/platform/gravitee.yaml), or nowhere (made by hand).
+         */
+        function declaredOf(api: GvApi) {
+          const labels = api.labels ?? [];
+          if (labels.includes('manage-platform')) return { kind: 'platform' as const };
+          const app = labels.find(l => l !== 'python-app-oneke');
+          if (labels.includes('python-app-oneke') && app) return { kind: 'application' as const, name: app };
+          return undefined;
+        }
+
         function toRow(api: GvApi, team: string | undefined, access: Access): ApiRow {
           const contextPath = contextPathOf(api);
           const editable = canEdit(access);
@@ -115,6 +129,7 @@ export const graviteeManagerPlugin = createBackendPlugin({
             lifecycleState: api.lifecycleState,
             deploymentState: api.deploymentState,
             team,
+            declared: declaredOf(api),
             owner: api.primaryOwner?.displayName ?? api.primaryOwner?.email,
             access,
             canEdit: editable,

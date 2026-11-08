@@ -24,6 +24,7 @@ export interface GvApi {
   createdAt?: string;
   updatedAt?: string;
   primaryOwner?: { id: string; email?: string; displayName?: string; type: string };
+  labels?: string[];
   listeners?: Array<{ type: string; paths?: Array<{ path: string }> }>;
   endpointGroups?: Array<{ endpoints?: Array<{ configuration?: { target?: string } }> }>;
 }

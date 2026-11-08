@@ -20,6 +20,7 @@ interface KcUser {
 interface KcGroup {
   id: string;
   name: string;
+  path?: string;
   attributes?: Record<string, string[]>;
 }
 
@@ -29,7 +30,25 @@ interface KcClient {
   name?: string;
   description?: string;
   publicClient?: boolean;
+  serviceAccountsEnabled?: boolean;
+  redirectUris?: string[];
+  webOrigins?: string[];
   attributes?: Record<string, string>;
+}
+
+/**
+ * Where an object of Keycloak is declared, for Manage (every change is a pull request on that file): an application
+ * (attribute refresquito.component, set by the provisioner of its sso block), the platform (refresquito.managed:
+ * platform, set by the reconciler of iam-oneke from bootstrap/app-of-apps/platform/iam.yaml), or nowhere (made by hand
+ * or by the old direct-write actions: Manage cannot change it until it is declared).
+ */
+export type Declared = { kind: 'application'; name: string; stage?: string } | { kind: 'platform' } | undefined;
+const firstOf = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+export function declaredBy(attributes?: Record<string, string | string[]>): Declared {
+  if (firstOf(attributes?.['refresquito.managed']) === 'platform') return { kind: 'platform' };
+  const component = firstOf(attributes?.['refresquito.component']);
+  if (component && component !== 'platform') return { kind: 'application', name: component, stage: firstOf(attributes?.['refresquito.stage']) };
+  return undefined;
 }
 
 /**
@@ -118,6 +137,10 @@ export const keycloakManagerPlugin = createBackendPlugin({
               .map(g => ({
                 id: g.id,
                 name: g.name,
+                path: g.path,
+                description: g.attributes?.description?.[0],
+                grants: g.attributes?.['refresquito.grants']?.[0],
+                declared: declaredBy(g.attributes),
                 owner: ownerFromAttributes(g.attributes),
               }))
               .filter(g => caller.isAdmin || g.owner === caller.entityRef);
@@ -139,7 +162,11 @@ export const keycloakManagerPlugin = createBackendPlugin({
                 id: c.id,
                 clientId: c.clientId,
                 name: c.name,
+                description: c.description,
                 publicClient: c.publicClient,
+                serviceAccount: c.serviceAccountsEnabled === true,
+                redirectUris: c.redirectUris ?? [],
+                declared: declaredBy(c.attributes),
                 owner: ownerFromClientAttributes(c.attributes),
               }))
               .filter(c => caller.isAdmin || c.owner === caller.entityRef);

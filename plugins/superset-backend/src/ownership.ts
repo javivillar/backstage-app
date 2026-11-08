@@ -81,6 +81,20 @@ export function connectionOwnerFromExtra(extra: unknown): string | undefined {
 }
 
 /**
+ * Where a connection is declared, for Manage (every change is a pull request): the platform when the reconciler of
+ * superset-oneke made it (extra.refresquito_managed: platform, from bootstrap/app-of-apps/platform/superset.yaml);
+ * otherwise nowhere that Manage changes (the connection of an application belongs to its dashboards block).
+ */
+export function connectionDeclared(extra: unknown): { kind: 'platform' } | undefined {
+  if (typeof extra !== 'string' || !extra) return undefined;
+  try {
+    return (JSON.parse(extra) as { refresquito_managed?: string }).refresquito_managed === 'platform' ? { kind: 'platform' } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * List a Superset resource scoped to the caller's own objects, or
  * everything for a backstage-admin member.
  *

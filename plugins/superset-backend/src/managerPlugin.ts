@@ -6,6 +6,7 @@ import {
   CallerInfo,
   callerSupersetOwnerId,
   connectionOwnerFromExtra,
+  connectionDeclared,
   listSupersetObjects,
   requireConnectionOwnerOrAdmin,
   requireOwnerOrAdmin,
@@ -100,6 +101,7 @@ export const supersetManagerPlugin = createBackendPlugin({
           name: d.database_name,
           backend: d.backend,
           owners: [connectionOwnerFromExtra(d.extra)].filter((x): x is string => Boolean(x)),
+          declared: connectionDeclared(d.extra),
         }));
 
         listRoute('/datasets', 'dataset', d => ({
