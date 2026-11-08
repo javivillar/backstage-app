@@ -55,7 +55,7 @@ export function createPreviewRouter(deps: BusinessMapRouteDeps): Router {
       }
       const input = readImportInput(req.body);
       const preview = await previewOf(input, deps, w.credentials, w.user);
-      deps.logger.info(`business-map preview ${input.namespace}: file ${input.file.length} chars, sent to the template ${preview.compact?.length ?? input.file.length}`);
+      deps.logger.info(`business-map preview ${input.namespace}: file ${input.file.length} chars, held for the template`);
       res.json(preview);
     } catch (e) {
       if (e instanceof InputError) {

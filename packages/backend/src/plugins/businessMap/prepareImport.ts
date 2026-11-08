@@ -26,6 +26,7 @@ import {
 } from './importModel';
 import { pickBiaSheet, planBia } from './biaModel';
 import { compactSheet, readUpload, type Sheet } from './sheets';
+import { resolveUpload, stageUpload } from './uploads';
 
 /**
  * What an import of a business model reads and plans, shared by the scaffolder actions (scaffolderModule.ts:
@@ -116,7 +117,7 @@ export async function prepare(input: ImportInput, deps: ImportDeps, credentials:
     }
   }
 
-  const upload = readUpload(input.file, input.fileName);
+  const upload = readUpload(resolveUpload(input.file), input.fileName);
   const sheet = pickSheet(upload.sheets, { ...input, mapping });
   const [groups, others] = await Promise.all([
     deps.catalog.getEntities({ filter: { kind: 'group' }, fields: ['kind', 'metadata.name', 'metadata.namespace'] }, { credentials }),
@@ -191,14 +192,14 @@ export type Preview = {
   errors: Issue[];
   warnings: Issue[];
   changes: Change[];
-  /** An .xlsx: its sheet read, as a small CSV data URL for the template (compactSheet). */
+  /** What the template gets in place of the file: a reference to the sheet read (compactSheet), held by Backstage. */
   compact?: string;
 };
 
 /** The preview of an import: nothing is written; the current files that cannot be read are a warning. */
 export async function previewOf(input: ImportInput, deps: ImportDeps, credentials: BackstageCredentials, user: string | undefined): Promise<Preview> {
   const { parsed, planned, warnings, upload, sheet } = await prepare(input, deps, credentials, user, false);
-  const compact = upload.format === 'xlsx' ? compactSheet(sheet, upload.fileName) : undefined;
+  const compact = stageUpload(upload.format === 'xlsx' ? compactSheet(sheet, upload.fileName) : resolveUpload(input.file));
   return { counts: planned.counts, errors: parsed.errors, warnings, changes: planned.changes, ...(compact ? { compact } : {}) };
 }
 
