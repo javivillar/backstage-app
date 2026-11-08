@@ -63,7 +63,8 @@ describe('Manage through git: the edit of an application file', () => {
     const other = '# x\nname: x\nplatform:\n  sso:\n    enabled: true   # its login\n';
     expect(run(req({ spec: { name: 'files' } }), other).text).toBe(`${other}  s3:\n    enabled: true\n    buckets: [files]\n`);
     const off = 'name: x\nplatform:\n  s3:\n    enabled: false\n    buckets: [a]\n';
-    expect(run(req({ spec: { name: 'b' } }), off).text).toBe('name: x\nplatform:\n  s3:\n    enabled: true\n    buckets: [a, b]\n');
+    expect(run(req({ spec: { name: 'bbb' } }), off).text).toBe('name: x\nplatform:\n  s3:\n    enabled: true\n    buckets: [a, bbb]\n');
+    expect(fails(() => run(req({ spec: { name: 'b' } }), off)).errors[0]).toMatch(/3 to 30/);
   });
 
   it('changes only the lines of the change', () => {
