@@ -5,12 +5,14 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
+import { useNamespaceCosts } from '../../costs';
 import { useI18n } from '../../i18n';
+import { useClusterOverview } from '../../overview';
 import { useRq } from '../../theme/consoleTheme';
 import { Attention, EmptyState, Kpis, Pill, Row, Section, TitleRow, type Tone, choose } from '../ui';
 import { cell } from './heatmap';
-import { type AppRow, type Line, type Stage, STAGES, behindOf, latestLines, statusOf } from './model';
-import { Bar, Chips, Table, businessService, entityPath, factNum, levelTone, lineClass, linePath, mainInstance, statusLabel, statusTone, todayIso } from './shared';
+import { type AppRow, type Line, type Stage, STAGES, behindOf, costPerLine, latestLines, statusOf } from './model';
+import { Bar, Chips, Table, argoName, businessService, entityPath, factNum, levelTone, lineClass, linePath, mainInstance, statusLabel, statusTone, todayIso } from './shared';
 import { useFrameworksData } from './useFrameworksData';
 
 /** CRITICAL + HIGH of the framework layer of an instance; undefined when not known */
@@ -162,6 +164,14 @@ export const FrameworksPage = () => {
   const today = todayIso();
   const frameworks = useMemo(() => [...new Set(lines.map(l => l.framework))], [lines]);
   const titleOf = (f: string) => lines.find(l => l.framework === f)?.frameworkTitle ?? (f || '—');
+  // the running cost of each line in pro: OpenCost of the namespaces of its pro instances, 7 days scaled to a month
+  const costs = useNamespaceCosts('7d');
+  const overview = useClusterOverview();
+  const lineCosts = useMemo(() => {
+    const nsByApp = new Map((overview.data?.apps ?? []).map(a => [a.name, a.namespace]));
+    const byNs = new Map((costs.costs ?? []).map(c => [c.namespace, c.total]));
+    return costPerLine(apps, lines, ref => nsByApp.get(argoName(ref, entities)), byNs, 7);
+  }, [overview.data, costs.costs, apps, lines, entities]);
 
   if (loading && !lines.length) return <Progress />;
   const crumbs: Array<[string, string?]> = [[tr('nav.portal'), '/console'], [tr('dev.development')], [tr('nav.frameworks')]];
@@ -351,6 +361,30 @@ export const FrameworksPage = () => {
           </Table>
         </Section>
       </Row>
+      <Section title={tr('fw.cost')} flush>
+        <Typography variant="body2" color="text.secondary" sx={{ px: 2.25, mb: 1.5 }}>
+          {tr('fw.costMeta')}
+        </Typography>
+        {choose(
+          [
+            [costs.loading || overview.loading, <Progress key="p" />],
+            [!!costs.error, <EmptyState key="e" title={tr('fw.costNa')}>{costs.error}</EmptyState>],
+            [!lineCosts.length, <EmptyState key="n" title={tr('fw.costNone')} />],
+          ],
+          <Table head={[tr('fw.line'), tr('fw.costApps'), tr('fw.costPerApp'), tr('fw.costTotal')]} minWidth={480}>
+            {lineCosts.map(x => (
+              <tr key={x.line.ref}>
+                <td>
+                  <Link to={linePath(x.line)}>{x.line.title}</Link>
+                </td>
+                <td>{x.apps}</td>
+                <td>{costs.money(x.perApp)}</td>
+                <td>{costs.money(x.total)}</td>
+              </tr>
+            ))}
+          </Table>,
+        )}
+      </Section>
       {loading && <Progress />}
     </>
   );

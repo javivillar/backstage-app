@@ -1,4 +1,4 @@
-import { CHECKS, cell, isoWeek, riskScore, weekly } from './heatmap';
+import { CHECKS, cell, isoWeek, riskScore, weekly, weeklyCounts } from './heatmap';
 import type { Status } from './model';
 
 const ctx = (status: Status = { kind: 'latest' }, more: Partial<{ health: string; owner: string; hasDocs: boolean }> = {}) => ({ status, owner: 'group:default/team', hasDocs: true, ...more });
@@ -145,4 +145,26 @@ describe('weekly', () => {
 
 describe('line cell of an ending line', () => {
   it('uses the known lines behind', () => expect(cell('line', {}, { status: { kind: 'ending', daysLeft: 73 }, behind: 2, hasDocs: true })).toEqual({ text: '2 behind', level: 2 }));
+});
+
+describe('weeklyCounts (deploys, incidents)', () => {
+  it('counts events per ISO week, oldest first', () => {
+    const w = weeklyCounts(['2026-11-03T10:00:00Z', '2026-11-04T10:00:00Z', '2026-10-28T10:00:00Z'], 'deploys', 3, '2026-11-08');
+    expect(w.map(x => x.week)).toEqual(['W43', 'W44', 'W45']);
+    expect(w.map(x => x.text)).toEqual(['0', '1', '2']);
+    expect(w.map(x => x.level)).toEqual([1, 0, 0]);
+  });
+  it('incidents: 0 good, 1 ok, 2 attention, 3+ act now', () => {
+    const d = (n: number) => Array.from({ length: n }, () => '2026-11-03T10:00:00Z');
+    expect(weeklyCounts(d(0), 'incidents', 1, '2026-11-08')[0].level).toBe(0);
+    expect(weeklyCounts(d(1), 'incidents', 1, '2026-11-08')[0].level).toBe(1);
+    expect(weeklyCounts(d(2), 'incidents', 1, '2026-11-08')[0].level).toBe(2);
+    expect(weeklyCounts(d(5), 'incidents', 1, '2026-11-08')[0]).toEqual({ week: 'W45', text: '5', level: 3 });
+  });
+  it('a source that could not be read is n/a, never 0', () => {
+    expect(weeklyCounts(undefined, 'incidents', 2, '2026-11-08')).toEqual([{ week: 'W44', text: 'n/a', level: null }, { week: 'W45', text: 'n/a', level: null }]);
+  });
+  it('ignores dates that do not parse', () => {
+    expect(weeklyCounts(['', 'nope'], 'deploys', 1, '2026-11-08')[0].text).toBe('0');
+  });
 });

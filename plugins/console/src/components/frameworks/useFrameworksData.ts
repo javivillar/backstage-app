@@ -1,5 +1,5 @@
 import { type Entity, stringifyEntityRef } from '@backstage/catalog-model';
-import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
+import { createApiRef, discoveryApiRef, fetchApiRef, type OAuthApi, useApi, useApiHolder } from '@backstage/core-plugin-api';
 import { CATALOG_FILTER_EXISTS, catalogApiRef } from '@backstage/plugin-catalog-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useClusterOverview } from '../../overview';
@@ -139,5 +139,77 @@ export function useWeekly(refs: string[]): { loading: boolean; series: Map<strin
       alive = false;
     };
   }, [key, discovery, fetch]);
+  return state;
+}
+
+const keycloakRef = createApiRef<OAuthApi>({ id: 'auth.keycloak-oidc' });
+
+/** where the support is: refresquito.io/url of its most stable deployment */
+const supportBase = (items: Entity[]) => {
+  const stage = (e: Entity) => e.metadata.annotations?.['refresquito.io/stage'] ?? 'pro';
+  const best = items.filter(e => e.metadata.annotations?.['refresquito.io/url']).sort((a, b) => (STAGES as string[]).indexOf(stage(b)) - (STAGES as string[]).indexOf(stage(a)))[0];
+  return best?.metadata.annotations?.['refresquito.io/url']?.replace(/\/+$/, '');
+};
+
+/**
+ * The dated events of some instances for the weeks view: deployments (Argo CD history, GET /api/cluster/apps/:app)
+ * and incidents (the support, GET /api/incidents?element=, with the Keycloak token of the person, as the tab
+ * Incidents). Only read when asked (`on`). A source that cannot be read leaves its map without the instance (n/a).
+ */
+export function useEvents(on: boolean, refs: string[], argoOf: (ref: string) => string): { loading: boolean; deploys: Map<string, string[]>; incidents: Map<string, string[]>; incidentsError?: string } {
+  const discovery = useApi(discoveryApiRef);
+  const catalog = useApi(catalogApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const keycloak = useApiHolder().get(keycloakRef);
+  const key = refs.join(',');
+  const [state, setState] = useState<{ loading: boolean; deploys: Map<string, string[]>; incidents: Map<string, string[]>; incidentsError?: string }>({ loading: false, deploys: new Map(), incidents: new Map() });
+  useEffect(() => {
+    if (!on) return undefined;
+    const list = key ? key.split(',') : [];
+    let alive = true;
+    setState(s => ({ ...s, loading: true }));
+    (async () => {
+      const cluster = await discovery.getBaseUrl('cluster');
+      const deploys = new Map<string, string[]>();
+      await pool(list, 4, async ref => {
+        try {
+          const r = await fetch(`${cluster}/apps/${encodeURIComponent(argoOf(ref))}`);
+          if (!r.ok) return;
+          const body = (await r.json()) as { history?: Array<{ deployedAt?: string }> };
+          deploys.set(ref, (body.history ?? []).map(h => h.deployedAt ?? '').filter(Boolean));
+        } catch {
+          // n/a for this instance
+        }
+      });
+      const incidents = new Map<string, string[]>();
+      let incidentsError: string | undefined;
+      try {
+        const { items } = await catalog.getEntities({ filter: { kind: 'component', 'metadata.annotations.refresquito.io/application': 'support' }, fields: ['kind', 'metadata.name', 'metadata.namespace', 'metadata.annotations'] });
+        const base = supportBase(items);
+        const token = keycloak ? await keycloak.getAccessToken(undefined, { optional: true }) : '';
+        if (!base) incidentsError = 'the support is not deployed';
+        else if (!token) incidentsError = 'sign in with Keycloak to read the incidents';
+        else
+          await pool(list, 4, async ref => {
+            const r = await window.fetch(`${base}/api/incidents?element=${encodeURIComponent(ref)}&size=200`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) return;
+            const body = (await r.json()) as { items?: Array<{ opened_at?: string }> } | Array<{ opened_at?: string }>;
+            const rows = Array.isArray(body) ? body : body.items ?? [];
+            incidents.set(ref, rows.map(i => i.opened_at ?? '').filter(Boolean));
+          });
+      } catch (e) {
+        incidentsError = e instanceof TypeError ? 'the support could not be reached' : (e as Error).message;
+      }
+      return { loading: false, deploys, incidents, incidentsError };
+    })().then(
+      v => alive && setState(v),
+      () => alive && setState({ loading: false, deploys: new Map(), incidents: new Map() }),
+    );
+    return () => {
+      alive = false;
+    };
+    // argoOf is derived from the same catalog read as refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, key, discovery, catalog, fetch, keycloak]);
   return state;
 }
