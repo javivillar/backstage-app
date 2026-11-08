@@ -406,7 +406,7 @@ export const ImportModelPage = () => {
                   ))}
                 </TextField>
                 <Button size="small" aria-label={t('bmf.remove')} onClick={() => set({ criticalityValues: form.criticalityValues.filter((_, j) => j !== i) })}>
-                  {'×'}
+                  ×
                 </Button>
               </Box>
             ))}

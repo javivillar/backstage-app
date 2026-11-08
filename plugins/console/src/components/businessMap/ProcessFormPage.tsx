@@ -126,7 +126,6 @@ const Form = ({ mode, initial, processRef, ownFile }: { mode: ProcessMode; initi
           <TextField
             size="small"
             required
-            autoFocus={mode === 'new'}
             label={t('bmf.process.title')}
             value={form.title}
             onChange={e => setForm(f => (mode === 'new' ? withTitle(f, e.target.value) : { ...f, title: e.target.value }))}
