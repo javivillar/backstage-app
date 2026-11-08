@@ -87,6 +87,12 @@ export const ManageForm = ({
       setBusy(false);
     }
   };
+  /** under a field: what is wrong with it, else its help (lists: how to type them) */
+  const helpOf = (f: Field) => {
+    if (errors[f.key] && errors[f.key] !== 'required') return errors[f.key];
+    if (f.kind === 'list') return `${f.help ? `${f.help} · ` : ''}${t('mng.listHint')}`;
+    return f.help;
+  };
   const set = (k: string, v: string | boolean) => {
     setValues(x => ({ ...x, [k]: v }));
     setPreview(undefined);
@@ -115,7 +121,7 @@ export const ManageForm = ({
               value={String(values[f.key] ?? '')}
               onChange={e => set(f.key, e.target.value)}
               error={!!errors[f.key] && errors[f.key] !== 'required'}
-              helperText={errors[f.key] && errors[f.key] !== 'required' ? errors[f.key] : f.kind === 'list' ? `${f.help ? `${f.help} · ` : ''}${t('mng.listHint')}` : f.help}
+              helperText={helpOf(f)}
               multiline={f.kind === 'list'}
             >
               {f.kind === 'select' && f.options?.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}

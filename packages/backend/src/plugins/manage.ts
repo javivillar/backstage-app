@@ -48,8 +48,9 @@ export function readRequest(body: unknown): ChangeRequest {
   if (typeof b.service !== 'string' || typeof b.object !== 'string') throw bad('service and object are required.');
   if (!ACTIONS.includes(b.action as ManageAction)) throw bad('action is create, update or delete.');
   const o = b.owner as Record<string, unknown> | undefined;
-  const owner: Owner | undefined =
-    o?.kind === 'platform' ? { kind: 'platform' } : o?.kind === 'application' && typeof o.name === 'string' ? { kind: 'application', name: o.name } : undefined;
+  let owner: Owner | undefined;
+  if (o?.kind === 'platform') owner = { kind: 'platform' };
+  else if (o?.kind === 'application' && typeof o.name === 'string') owner = { kind: 'application', name: o.name };
   if (!owner) throw bad('owner is { kind: "application", name } or { kind: "platform" }.');
   if (b.spec !== undefined && (typeof b.spec !== 'object' || b.spec === null || Array.isArray(b.spec))) throw bad('spec is an object.');
   return {

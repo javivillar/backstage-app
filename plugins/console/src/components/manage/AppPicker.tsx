@@ -25,6 +25,10 @@ export const AppPicker = ({
 }) => {
   const { t } = useI18n();
   const list = owners.filter(o => platform || o.kind === 'application');
+  const noteOf = (o: OwnerView) => {
+    if (!o.canWrite) return t('mng.readOnly');
+    return o.owner ? t('mng.ownerTeam', { team: o.owner.replace(/^group:(default\/)?/, '') }) : '';
+  };
   const any = list.some(o => o.canWrite);
   return (
     <div>
@@ -47,7 +51,7 @@ export const AppPicker = ({
             <span>
               {o.title}
               <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                {o.canWrite ? (o.owner ? t('mng.ownerTeam', { team: o.owner.replace(/^group:(default\/)?/, '') }) : '') : t('mng.readOnly')}
+                {noteOf(o)}
               </Typography>
             </span>
           </MenuItem>
