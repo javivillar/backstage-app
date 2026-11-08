@@ -158,11 +158,7 @@ export function cell(id: CheckId, facts: Facts, ctx: CellContext): Cell {
 }
 
 /** how hot a row is: 3 per "act now", 1 per "attention" */
-export const riskScore = (levels: Level[]) => levels.reduce<number>((a, l) => a + choose3(l), 0);
-const choose3 = (l: Level) => {
-  if (l === 3) return 3;
-  return l === 2 ? 1 : 0;
-};
+export const riskScore = (levels: Level[]) => levels.reduce<number>((a, l) => a + (l === 3 ? 3 : Number(l === 2)), 0);
 
 /** "2026-W45": the ISO week of a date (weeks start on Monday; week 1 holds the first Thursday) */
 export function isoWeek(date: string): string {
