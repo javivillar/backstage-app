@@ -33,7 +33,7 @@ const cellColour = (t: RqTokens, l: Level) => {
 export const HeatmapPage = () => {
   const { t: tr } = useI18n();
   const t = useRq();
-  const { loading, error, lines, apps, facts, parts, health, entities } = useFrameworksData();
+  const { loading, error, lines, apps, facts, health, entities } = useFrameworksData();
   const [mode, setMode] = useState<'checks' | 'weeks'>('checks');
   const [stage, setStage] = useState<Stage>('pro');
   const [lens, setLens] = useState<Lens>('all');
@@ -49,7 +49,7 @@ export const HeatmapPage = () => {
 
   const inStage = apps.filter(a => a.instances[stage]);
   const refs = useMemo(() => (mode === 'weeks' ? apps.filter(a => a.instances[stage]).map(a => a.instances[stage]!) : []), [mode, apps, stage]);
-  const weeklyData = useWeekly(refs, parts);
+  const weeklyData = useWeekly(refs);
   const lineTitle = (a: AppRow) => lines.find(l => l.framework === a.framework && l.line === a.lines[stage])?.title ?? `${a.framework} ${a.lines[stage] ?? ''}`;
 
   const checks = CHECKS.filter(c => lens === 'all' || c.lens === lens);

@@ -3,7 +3,6 @@ import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api
 import { CATALOG_FILTER_EXISTS, catalogApiRef } from '@backstage/plugin-catalog-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useClusterOverview } from '../../overview';
-import { mergeFacts, mergeSeries } from './heatmap';
 import { type AppRow, type Line, STAGES, appsOf, linesOf } from './model';
 
 /** The retrievers of sbom-backend whose facts the pages read. */
@@ -11,31 +10,17 @@ export const SUPPLY_CHAIN = 'refresquitoSupplyChainFactRetriever';
 export const WEEKLY = 'refresquitoWeeklyFactRetriever';
 
 export type FactsMap = Map<string, Record<string, unknown>>;
-/** instance ref -> the refs of its service parts (a Spring application), whose images and facts stand for it */
-export type PartsMap = Map<string, string[]>;
-
-/** the service parts of each instance: components with refresquito.io/service that are subcomponentOf it */
-export function partsOf(items: Entity[]): PartsMap {
-  const out: PartsMap = new Map();
-  for (const e of items) {
-    const parent = (e.spec as { subcomponentOf?: string } | undefined)?.subcomponentOf;
-    if (!e.metadata.annotations?.['refresquito.io/service'] || !parent) continue;
-    const key = parent.includes(':') ? parent : `component:default/${parent}`;
-    out.set(key, [...(out.get(key) ?? []), stringifyEntityRef(e)]);
-  }
-  return out;
-}
 
 const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.description', 'metadata.annotations', 'metadata.tags', 'metadata.links', 'spec', 'relations'];
 
 /** runs fn over items with at most `limit` calls in flight */
-async function pool<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+async function pool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i], i);
+      out[i] = await fn(items[i]);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
@@ -52,7 +37,6 @@ export function useFrameworksData(): {
   lines: Line[];
   apps: AppRow[];
   facts: FactsMap;
-  parts: PartsMap;
   health: Map<string, string>;
   entities: Map<string, Entity>;
 } {
@@ -88,15 +72,13 @@ export function useFrameworksData(): {
   const lines = useMemo(() => linesOf(cat.items), [cat.items]);
   const apps = useMemo(() => appsOf(cat.items, lines), [cat.items, lines]);
   const refs = useMemo(() => apps.flatMap(a => STAGES.map(s => a.instances[s]).filter((r): r is string => !!r)), [apps]);
-  const parts = useMemo(() => partsOf(cat.items), [cat.items]);
 
   useEffect(() => {
     if (cat.loading) return undefined;
     let alive = true;
     (async () => {
       const base = await discovery.getBaseUrl('tech-insights');
-      const all = [...new Set(refs.flatMap(r => [r, ...(parts.get(r) ?? [])]))];
-      const got = await pool(all, 8, async ref => {
+      const got = await pool(refs, 8, async ref => {
         try {
           const r = await fetch(`${base}/facts/latest?entity=${encodeURIComponent(ref)}&ids[]=${SUPPLY_CHAIN}`);
           if (!r.ok) return [ref, undefined] as const;
@@ -107,14 +89,7 @@ export function useFrameworksData(): {
           return [ref, undefined] as const;
         }
       });
-      const byRef = new Map(got);
-      const value: FactsMap = new Map();
-      for (const ref of refs) {
-        // a Spring instance has no images of its own: its facts are those of its parts together
-        const own = parts.has(ref) ? mergeFacts(parts.get(ref)!.map(p => byRef.get(p))) : byRef.get(ref);
-        if (own) value.set(ref, own);
-      }
-      return value;
+      return new Map(got.filter((x): x is readonly [string, Record<string, unknown>] => !!x[1]));
     })().then(
       value => alive && setFacts({ loading: false, value }),
       () => alive && setFacts({ loading: false, value: new Map() }),
@@ -122,24 +97,22 @@ export function useFrameworksData(): {
     return () => {
       alive = false;
     };
-  }, [cat.loading, refs, parts, discovery, fetch]);
+  }, [cat.loading, refs, discovery, fetch]);
 
   const health = useMemo(() => new Map((overview.data?.apps ?? []).map(a => [a.name, a.health])), [overview.data]);
   const entities = useMemo(() => new Map(cat.items.map(e => [stringifyEntityRef(e), e])), [cat.items]);
 
-  return { loading: cat.loading || facts.loading, error: cat.error, lines, apps, facts: facts.value, parts, health, entities };
+  return { loading: cat.loading || facts.loading, error: cat.error, lines, apps, facts: facts.value, health, entities };
 }
 
 /** the weekly facts of some instances over the last 10 weeks (retriever refresquitoWeeklyFactRetriever) */
-export function useWeekly(refs: string[], parts: PartsMap = new Map()): { loading: boolean; series: Map<string, Array<{ timestamp: string; facts: Record<string, unknown> }>> } {
+export function useWeekly(refs: string[]): { loading: boolean; series: Map<string, Array<{ timestamp: string; facts: Record<string, unknown> }>> } {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const key = refs.join(',');
-  const partsKey = refs.map(r => (parts.get(r) ?? []).join('+')).join(',');
   const [state, setState] = useState<{ loading: boolean; series: Map<string, Array<{ timestamp: string; facts: Record<string, unknown> }>> }>({ loading: true, series: new Map() });
   useEffect(() => {
     const list = key ? key.split(',') : [];
-    const partList = partsKey.split(',').map(p => (p ? p.split('+') : []));
     let alive = true;
     setState(s => ({ ...s, loading: true }));
     (async () => {
@@ -147,7 +120,7 @@ export function useWeekly(refs: string[], parts: PartsMap = new Map()): { loadin
       const end = new Date();
       const start = new Date(end.getTime() - 70 * 86400000);
       const range = `startDatetime=${encodeURIComponent(start.toISOString())}&endDatetime=${encodeURIComponent(end.toISOString())}`;
-      const fetchOne = async (ref: string) => {
+      const got = await pool(list, 8, async ref => {
         try {
           const r = await fetch(`${base}/facts/range?entity=${encodeURIComponent(ref)}&ids[]=${WEEKLY}&${range}`);
           if (!r.ok) return [ref, []] as const;
@@ -156,12 +129,6 @@ export function useWeekly(refs: string[], parts: PartsMap = new Map()): { loadin
         } catch {
           return [ref, []] as const;
         }
-      };
-      const got = await pool(list, 4, async (ref, i) => {
-        const ps = partList[i] ?? [];
-        if (!ps.length) return fetchOne(ref);
-        const series = await Promise.all(ps.map(async p => [...(await fetchOne(p))[1]]));
-        return [ref, mergeSeries(series)] as const;
       });
       return new Map(got.map(([r, s]) => [r, [...s]]));
     })().then(
@@ -171,6 +138,6 @@ export function useWeekly(refs: string[], parts: PartsMap = new Map()): { loadin
     return () => {
       alive = false;
     };
-  }, [key, partsKey, discovery, fetch]);
+  }, [key, discovery, fetch]);
   return state;
 }
