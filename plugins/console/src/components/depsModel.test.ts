@@ -1,5 +1,5 @@
 import type { Entity } from '@backstage/catalog-model';
-import { buildGraph, catalogueCategory, layerAmong, layerOf, reach, stackLayout } from './depsModel';
+import { buildGraph, catalogueCategory, inStack, layerAmong, layerOf, matchesCatalogue, reach, stackLayout, topApplications, treeOf } from './depsModel';
 
 const c = (name: string, extra: Partial<Entity['metadata']> = {}, relations: Entity['relations'] = []): Entity => ({
   apiVersion: 'backstage.io/v1alpha1',
@@ -118,3 +118,88 @@ describe('the layer of a block resource', () => {
   });
 });
 
+describe('Dependencies as the catalogue', () => {
+  // made-up catalog: an application, its instance with a database and an SSO client, a service it uses through an
+  // API, the storage under that service, an image and a business service
+  const comp = (name: string, spec: Record<string, unknown>, relations: Entity['relations'] = [], annotations: Record<string, string> = {}): Entity => ({
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'Component',
+    metadata: { name, namespace: 'default', annotations },
+    spec,
+    relations,
+  });
+  const res = (name: string, type: string, relations: Entity['relations'] = [], annotations: Record<string, string> = {}): Entity => ({
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'Resource',
+    metadata: { name, namespace: 'default', annotations },
+    spec: { type, owner: 'group:default/team-pets' },
+    relations,
+  });
+  const shop = comp('shop', { type: 'service', system: 'business-systems', owner: 'team-pets' }, [
+    { type: 'hasPart', targetRef: 'component:default/shop-oneke' },
+  ]);
+  const instance = comp('shop-oneke', { type: 'application-instance', owner: 'team-pets' }, [
+    { type: 'partOf', targetRef: 'component:default/shop' },
+    { type: 'dependsOn', targetRef: 'resource:default/shop-database' },
+    { type: 'dependsOn', targetRef: 'resource:default/shop-sso-client' },
+    { type: 'consumesApi', targetRef: 'api:default/files' },
+  ], { 'refresquito.io/application': 'shop' });
+  const db = res('shop-database', 'database', [], { 'refresquito.io/application': 'shop-oneke' });
+  const sso = res('shop-sso-client', 'sso-client', [], { 'refresquito.io/application': 'shop', 'refresquito.io/provided-by': 'iam-oneke' });
+  const iam = comp('iam-oneke', { type: 'platform-service', system: 'iam' });
+  // a platform service that also uses the API of another application (as observability scrapes every one)
+  const files = comp('files-oneke', { type: 'platform-service' }, [
+    { type: 'providesApi', targetRef: 'api:default/files' },
+    { type: 'dependsOn', targetRef: 'component:default/longhorn-oneke' },
+    { type: 'consumesApi', targetRef: 'api:default/zoo' },
+  ], { 'refresquito.io/layer': 'dat' });
+  const zoo = comp('zoo-oneke', { type: 'application-instance' }, [
+    { type: 'providesApi', targetRef: 'api:default/zoo' },
+    { type: 'dependsOn', targetRef: 'resource:default/zoo-database' },
+  ], { 'refresquito.io/application': 'zoo' });
+  const zooDb: Entity = { ...res('zoo-database', 'database', [], { 'refresquito.io/application': 'zoo-oneke' }), spec: { type: 'database', owner: 'group:default/team-zoo' } };
+  const longhorn = comp('longhorn-oneke', { type: 'platform-service' }, [], { 'refresquito.io/layer': 'inf' });
+  const image = res('shop-image', 'container-image');
+  const business: Entity = { apiVersion: 'backstage.io/v1alpha1', kind: 'System', metadata: { name: 'shop', namespace: 'default' }, spec: { type: 'business-service' } };
+  const all = [shop, instance, db, sso, iam, files, longhorn, zoo, zooDb, image, business];
+  const g = buildGraph(all, () => ({ tone: 'ok', label: 'Healthy' }), inStack);
+  const ids = (xs: Iterable<string>) => [...xs].map(x => x.split('/')[1]).sort();
+
+  it('draws what the catalogue lists and the Resources of the applications, not the images nor the Systems', () => {
+    expect(ids(g.nodes.map(n => n.id))).toEqual(['files-oneke', 'iam-oneke', 'longhorn-oneke', 'shop', 'shop-database', 'shop-oneke', 'shop-sso-client', 'zoo-database', 'zoo-oneke']);
+  });
+
+  it('puts each Component in the band of the catalogue, a Resource in the layer of what provides it', () => {
+    const layer = (name: string) => g.nodes.find(n => n.entity.metadata.name === name)?.layer;
+    for (const e of [shop, iam, files, longhorn]) {
+      const cat = catalogueCategory(e);
+      expect(layer(e.metadata.name)).toBe(cat === 'business' ? 'biz' : cat);
+    }
+    expect(layer('shop-database')).toBe('dat');
+    expect(layer('shop-sso-client')).toBe('sec');
+  });
+
+  it('takes a repository made of an application instance as a business application', () => {
+    const repo = comp('petstore', { type: 'service', system: 'petstore' }, [{ type: 'hasPart', targetRef: 'component:default/petstore-oneke' }]);
+    const inst = comp('petstore-oneke', { type: 'application-instance' });
+    const byRef = new Map([repo, inst].map(e => [`component:default/${e.metadata.name}`, e]));
+    expect(catalogueCategory(repo)).toBeUndefined();
+    expect(catalogueCategory(repo, byRef)).toBe('business');
+  });
+
+  it('filters as the chips of the catalogue', () => {
+    const pass = (f: Parameters<typeof matchesCatalogue>[1], mine = new Set<string>(), starred = new Set<string>()) =>
+      ids(g.nodes.filter(n => matchesCatalogue(n, f, mine, starred)).map(n => n.id));
+    expect(pass('business')).toEqual(['shop', 'shop-oneke', 'zoo-oneke']);
+    expect(pass('inf')).toEqual(['longhorn-oneke']);
+    expect(pass('mine', new Set(['group:default/team-pets']))).toEqual(['shop', 'shop-database', 'shop-oneke', 'shop-sso-client']);
+    expect(pass('favourites', new Set(), new Set(['component:default/iam-oneke']))).toEqual(['iam-oneke']);
+    expect(pass('all')).toHaveLength(9);
+  });
+
+  it('offers the applications, not their instances, and gives the whole tree under one, not going into another', () => {
+    expect(topApplications(g.nodes).map(n => n.entity.metadata.name)).toEqual(['shop', 'zoo-oneke']);
+    expect(ids(treeOf('component:default/shop', g.links, g.nodes))).toEqual(['files-oneke', 'longhorn-oneke', 'shop', 'shop-database', 'shop-oneke', 'shop-sso-client']);
+    expect(g.links.find(l => l.source === 'component:default/shop')?.label).toBe('instance');
+  });
+});

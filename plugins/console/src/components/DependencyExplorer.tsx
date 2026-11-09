@@ -4,17 +4,42 @@ import { type Entity } from '@backstage/catalog-model';
 import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useClusterOverview } from '../overview';
 import { consoleEntityPath } from './classify';
 import { healthOf } from './EntityDependencies';
 import { TONES } from './Flow';
-import { BAND_H, buildGraph, type DepNodeModel, forceLayout, GLASS, glassFor, glassPath, type Health, LAYER_INFO, LAYERS, type Layer, layerY, reach, stackLayout, wAt } from './depsModel';
+import {
+  BAND_H,
+  buildGraph,
+  CATALOGUE_FILTERS,
+  type CatalogueFilter,
+  type DepNodeModel,
+  forceLayout,
+  GLASS,
+  glassFor,
+  glassPath,
+  type Health,
+  inStack,
+  LAYER_INFO,
+  LAYERS,
+  type Layer,
+  layerY,
+  matchesCatalogue,
+  reach,
+  stackLayout,
+  topApplications,
+  treeOf,
+  wAt,
+} from './depsModel';
+import { useOwnership, useStarred } from './PortalHome';
 
 const HEALTH: Record<Health, { label: string; colour: string }> = {
   ok: { label: 'Healthy', colour: TONES.ok.fg },
@@ -81,7 +106,8 @@ export const DependencyExplorer = () => {
   const [entities, setEntities] = useState<{ loading: boolean; items: Entity[]; error?: string }>({ loading: true, items: [] });
   useEffect(() => {
     let alive = true;
-    catalog.getEntities({ filter: [{ kind: 'component' }, { kind: 'resource' }, { kind: 'api' }, { kind: 'system', 'spec.type': 'business-service' }], fields: FIELDS }).then(
+    // what the catalogue of the console lists and the Resources of the applications; the APIs only link consumers to providers
+    catalog.getEntities({ filter: [{ kind: 'component' }, { kind: 'resource' }, { kind: 'api' }], fields: FIELDS }).then(
       r => alive && setEntities({ loading: false, items: r.items }),
       e => alive && setEntities({ loading: false, items: [], error: (e as Error).message }),
     );
@@ -90,7 +116,7 @@ export const DependencyExplorer = () => {
     };
   }, [catalog]);
   const apps = ov.data?.apps;
-  const graph = useMemo(() => buildGraph(entities.items, e => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps ?? [])), [entities.items, apps]);
+  const graph = useMemo(() => buildGraph(entities.items, e => healthOf(e.metadata.name.replace(/-oneke$/, ''), apps ?? []), inStack), [entities.items, apps]);
   const byId = useMemo(() => new Map(graph.nodes.map(n => [n.id, n])), [graph]);
 
   const [mode, setMode] = useState<'stack' | 'graph'>('stack');
@@ -100,7 +126,24 @@ export const DependencyExplorer = () => {
   useEffect(() => relayout(), [graph, mode]);
 
   const [q, setQ] = useState('');
-  const [layers, setLayers] = useState<Set<Layer>>(new Set(LAYERS));
+  const [cat, setCat] = useState<CatalogueFilter>('all');
+  const mine = useOwnership();
+  const starred = useStarred();
+  // Relations of: a business application and its whole tree down (kept in the URL, ?app=<ref>)
+  const [params, setParams] = useSearchParams();
+  const treeRoot = params.get('app') ?? undefined;
+  const setTreeRoot = (ref?: string) =>
+    setParams(
+      p => {
+        const n = new URLSearchParams(p);
+        if (ref) n.set('app', ref);
+        else n.delete('app');
+        return n;
+      },
+      { replace: true },
+    );
+  const businessApps = useMemo(() => topApplications(graph.nodes), [graph.nodes]);
+  const tree = useMemo(() => (treeRoot && byId.has(treeRoot) ? treeOf(treeRoot, graph.links, graph.nodes) : undefined), [treeRoot, byId, graph]);
   const [health, setHealth] = useState<'all' | Health>('all');
   const [hops, setHops] = useState(4);
   const [down, setDown] = useState(false);
@@ -109,11 +152,13 @@ export const DependencyExplorer = () => {
   const selected = sel ? byId.get(sel) : undefined;
 
   const around = useMemo(() => (sel && (hops < 4 || down) ? reach(sel, graph.links, hops >= 4 ? 99 : hops, down) : undefined), [sel, hops, down, graph.links]);
-  const visible = (n: DepNodeModel) =>
-    layers.has(n.layer) &&
+  // the tree of Relations of is shown whole: the filters and the name search do not cut it
+  const filtered = (n: DepNodeModel) =>
+    matchesCatalogue(n, cat, mine, starred) &&
     (health === 'all' || n.health === health) &&
     (!q || `${n.label} ${n.entity.metadata.name} ${n.product}`.toLowerCase().includes(q.toLowerCase())) &&
     (!around || around.has(n.id));
+  const visible = (n: DepNodeModel) => (tree ? tree.has(n.id) : filtered(n));
   const neigh = useMemo(() => {
     const s = new Set<string>(sel ? [sel] : []);
     graph.links.forEach(l => {
@@ -240,74 +285,113 @@ export const DependencyExplorer = () => {
       <Box sx={{ display: 'grid', gap: 1.75, gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '230px minmax(0, 1fr)' }, alignItems: 'stretch' }}>
         <Box component="aside" aria-label={t('dx.filters')} sx={{ border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, bgcolor: 'background.paper', display: 'grid', gap: 1.25, alignContent: 'start' }}>
           <Typography variant="overline" color="text.secondary">
-            {t('dx.find')}
+            {t('dx.relations')}
           </Typography>
-          <TextField size="small" placeholder={t('dx.findPh')} value={q} onChange={e => setQ(e.target.value)} inputProps={{ 'aria-label': t('list.search') }} />
-          <Typography variant="overline" color="text.secondary">
-            {t('dx.what')}
-          </Typography>
-          <Box sx={{ display: 'grid', gap: 0.5 }}>
-            {LAYERS.map(k => (
-              <Box component="label" key={k} sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: 13.5, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={layers.has(k)}
-                  onChange={e =>
-                    setLayers(s => {
-                      const n = new Set(s);
-                      if (e.target.checked) n.add(k);
-                      else n.delete(k);
-                      return n;
-                    })
-                  }
-                />
-                <Box component="span" sx={{ width: 11, height: 11, borderRadius: '3px', bgcolor: LAYER_INFO[k].colour, flexShrink: 0 }} />
-                {LAYER_INFO[k].label}
-                <Box component="span" sx={{ ml: 'auto', color: 'text.secondary', fontFamily: 'monospace', fontSize: 12 }}>
-                  {graph.nodes.filter(n => n.layer === k).length}
-                </Box>
-              </Box>
-            ))}
-          </Box>
-          <Typography variant="overline" color="text.secondary">
-            {t('dx.state')}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-            {(['all', 'ok', 'warn', 'bad'] as const).map(h => (
-              <Button key={h} size="small" variant={health === h ? 'contained' : 'outlined'} disableElevation aria-pressed={health === h} onClick={() => setHealth(h)} sx={btn()}>
-                {{ all: t('cat.all'), ok: t('dx.healthy'), warn: t('dx.degraded'), bad: t('dx.failing') }[h]}
-              </Button>
-            ))}
-          </Box>
-          <Typography variant="overline" color="text.secondary">
-            {t('dx.around')}
-          </Typography>
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'text.secondary' }}>
-              <span>{t('dx.hops')}</span>
-              <span>{hops >= 4 ? t('dx.allHops') : hops}</span>
+          <Autocomplete
+            size="small"
+            options={businessApps}
+            value={businessApps.find(n => n.id === treeRoot) ?? null}
+            getOptionLabel={n => n.label}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            onChange={(_, n) => {
+              setTreeRoot(n?.id);
+              if (n) setSel(n.id);
+            }}
+            renderInput={p => <TextField {...p} placeholder={t('dx.relationsPh')} inputProps={{ ...p.inputProps, 'aria-label': t('dx.relationsLabel') }} />}
+          />
+          {tree && (
+            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+              {t('dx.treeNote', { n: tree.size })}
+            </Typography>
+          )}
+          <Box component="fieldset" disabled={!!tree} sx={{ border: 0, p: 0, m: 0, minWidth: 0, display: 'grid', gap: 1.25, opacity: tree ? 0.45 : 1 }}>
+            <Typography variant="overline" color="text.secondary">
+              {t('dx.find')}
+            </Typography>
+            <TextField size="small" placeholder={t('dx.findPh')} value={q} onChange={e => setQ(e.target.value)} inputProps={{ 'aria-label': t('list.search') }} />
+            <Typography variant="overline" color="text.secondary">
+              {t('dx.what')}
+            </Typography>
+            <Box role="radiogroup" aria-label={t('dx.what')} sx={{ display: 'grid', gap: 0.25 }}>
+              {CATALOGUE_FILTERS.map(f => [f, graph.nodes.filter(n => matchesCatalogue(n, f, mine, starred)).length] as const)
+                // the bands with nothing in this cluster are left out, as in the catalogue
+                .filter(([f, n]) => n > 0 || f === 'all' || f === 'business' || f === 'mine' || f === 'favourites')
+                .map(([f, n]) => {
+                  const colour = f === 'business' ? LAYER_INFO.biz.colour : (LAYER_INFO as Record<string, { colour: string }>)[f]?.colour;
+                  const label = { all: t('cat.all'), business: t('cat.businessApps'), mine: t('cat.mine'), favourites: t('cat.favourites') }[f as string] ?? t(`cat.layer.${f}`);
+                  return (
+                    <Box
+                      key={f}
+                      component="button"
+                      type="button"
+                      role="radio"
+                      aria-checked={cat === f}
+                      onClick={() => setCat(f)}
+                      sx={{
+                        all: 'unset',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        gap: 1,
+                        alignItems: 'center',
+                        fontSize: 13.5,
+                        px: 0.75,
+                        py: 0.4,
+                        borderRadius: '6px',
+                        bgcolor: cat === f ? 'action.selected' : undefined,
+                        fontWeight: cat === f ? 600 : 400,
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                      }}
+                    >
+                      <Box component="span" sx={{ width: 11, height: 11, borderRadius: '3px', bgcolor: colour ?? 'transparent', border: colour ? 0 : 1, borderColor: 'divider', flexShrink: 0 }} />
+                      {label}
+                      <Box component="span" sx={{ ml: 'auto', color: 'text.secondary', fontFamily: 'monospace', fontSize: 12 }}>
+                        {n}
+                      </Box>
+                    </Box>
+                  );
+                })}
             </Box>
-            <input type="range" min={1} max={4} value={hops} onChange={e => setHops(Number(e.target.value))} aria-label={t('dx.hopsLabel')} style={{ width: '100%' }} />
-          </Box>
-          <Box component="label" sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: 13.5 }}>
-            <input type="checkbox" checked={down} onChange={e => setDown(e.target.checked)} /> Only what it uses (downstream)
+            <Typography variant="overline" color="text.secondary">
+              {t('dx.state')}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+              {(['all', 'ok', 'warn', 'bad'] as const).map(h => (
+                <Button key={h} size="small" variant={health === h ? 'contained' : 'outlined'} disableElevation aria-pressed={health === h} onClick={() => setHealth(h)} sx={btn()}>
+                  {{ all: t('cat.all'), ok: t('dx.healthy'), warn: t('dx.degraded'), bad: t('dx.failing') }[h]}
+                </Button>
+              ))}
+            </Box>
+            <Typography variant="overline" color="text.secondary">
+              {t('dx.around')}
+            </Typography>
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'text.secondary' }}>
+                <span>{t('dx.hops')}</span>
+                <span>{hops >= 4 ? t('dx.allHops') : hops}</span>
+              </Box>
+              <input type="range" min={1} max={4} value={hops} onChange={e => setHops(Number(e.target.value))} aria-label={t('dx.hopsLabel')} style={{ width: '100%' }} />
+            </Box>
+            <Box component="label" sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: 13.5 }}>
+              <input type="checkbox" checked={down} onChange={e => setDown(e.target.checked)} /> Only what it uses (downstream)
+            </Box>
           </Box>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
             <Button
               size="small"
               variant="outlined"
               onClick={() => {
+                setTreeRoot(undefined);
                 setQ('');
-                setLayers(new Set(LAYERS));
+                setCat('all');
                 setHealth('all');
                 setHops(4);
                 setDown(false);
               }}
-              
             >
               Reset filters
             </Button>
-            <Button size="small" variant="outlined" onClick={() => relayout()} >
+            <Button size="small" variant="outlined" onClick={() => relayout()}>
               Re-arrange
             </Button>
           </Box>

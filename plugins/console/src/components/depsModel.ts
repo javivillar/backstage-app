@@ -73,13 +73,17 @@ export function layerOf(e: Entity): Layer {
   return e.kind === 'Resource' ? 'inf' : 'ops';
 }
 
+/** Whether a component is made of an application instance (spec.subcomponentOf): the repository of a business application. */
+export const hasInstance = (e: Entity, byRef: Map<string, Entity>) =>
+  (e.relations ?? []).some(r => r.type === 'hasPart' && byRef.get(r.targetRef)?.spec?.type === 'application-instance');
+
 /**
  * The category of an entity in the catalogue of the console: a business application, or the band of a Refresquito
  * service (a development service is fwk); undefined for the rest (APIs, systems, what nothing classifies).
  */
-export function catalogueCategory(e: Entity): 'business' | Layer | undefined {
+export function catalogueCategory(e: Entity, byRef?: Map<string, Entity>): 'business' | Layer | undefined {
   const kind = classify(e);
-  if (kind === 'business') return 'business';
+  if (kind === 'business' || (byRef && hasInstance(e, byRef))) return 'business';
   if (kind === 'development') return 'fwk';
   if (kind !== 'service') return undefined;
   const layer = layerOf(e);
@@ -107,6 +111,45 @@ export function layerAmong(e: Entity, byRef: Map<string, Entity>): Layer {
   return own;
 }
 
+/** The layer of a node in the glass: a Component in the band the catalogue of the console puts it in, the rest by layerAmong. */
+export function stackLayerOf(e: Entity, byRef: Map<string, Entity>): Layer {
+  if (e.kind !== 'Component') return layerAmong(e, byRef);
+  const c = catalogueCategory(e, byRef);
+  if (c === 'business') return 'biz';
+  return c ?? layerOf(e);
+}
+
+/**
+ * What Dependencies draws: what the catalogue of the console lists (its Components) and the Resources an application
+ * makes (refresquito.io/application: its database, bucket, SSO client, site...); not the images nor the Systems.
+ */
+export const inStack = (e: Entity): boolean =>
+  e.kind === 'Component' || (e.kind === 'Resource' && !!e.metadata.annotations?.['refresquito.io/application']);
+
+/** The owner of an entity as an entity ref (team-pets, group:team-pets → group:default/team-pets). */
+export const ownerRef = (owner?: string) => {
+  if (!owner) return undefined;
+  const o = owner.toLowerCase();
+  if (o.includes(':')) return o.includes('/') ? o : o.replace(':', ':default/');
+  return `group:default/${o}`;
+};
+
+/** The chips of the catalogue of the console, shared by Dependencies. */
+export type CatalogueFilter = 'all' | 'business' | Layer | 'mine' | 'favourites';
+export const CATALOGUE_FILTERS: CatalogueFilter[] = ['all', 'business', ...SERVICE_LAYERS, 'mine', 'favourites'];
+
+/** Whether a node passes a chip of the catalogue: its band, whose it is (the groups of the user) or starred. */
+export function matchesCatalogue(n: { id: string; layer: Layer; entity: Entity }, f: CatalogueFilter, mine: Set<string>, starred: Set<string>): boolean {
+  if (f === 'all') return true;
+  if (f === 'mine') {
+    const o = ownerRef((n.entity.spec as { owner?: string } | undefined)?.owner);
+    return !!o && mine.has(o);
+  }
+  if (f === 'favourites') return starred.has(n.id);
+  if (f === 'business') return n.layer === 'biz';
+  return n.layer === f;
+}
+
 export type Health = 'ok' | 'warn' | 'bad' | 'off';
 export type DepNodeModel = { id: string; entity: Entity; label: string; product: string; layer: Layer; health: Health; healthLabel: string; deg: number };
 export type DepLink = { source: string; target: string; label: string; type: 'dep' | 'api' };
@@ -124,11 +167,17 @@ const isNode = (e: Entity) =>
 
 /**
  * The nodes and links: dependsOn, an API consumed drawn to the component that provides it (labelled with the API), a
- * business service to its business application (hasPart) and an application to its instances (hasSubcomponent).
- * Links to elements not in the catalog are dropped.
+ * business service to its business application (hasPart), an application to its instances (hasSubcomponent) and a
+ * component to the components it is made of (hasPart).
+ * Links to elements not in the catalog are dropped. keep narrows the nodes (Dependencies: inStack); every entity still
+ * counts for the providers of the APIs and the layer of the Resources.
  */
-export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: Health; label: string }): { nodes: DepNodeModel[]; links: DepLink[] } {
-  const items = entities.filter(isNode);
+export function buildGraph(
+  entities: Entity[],
+  health: (e: Entity) => { tone: Health; label: string },
+  keep: (e: Entity) => boolean = () => true,
+): { nodes: DepNodeModel[]; links: DepLink[] } {
+  const items = entities.filter(e => isNode(e) && keep(e));
   const byRef = new Map(items.map(e => [stringifyEntityRef(e), e]));
   const all = new Map(entities.map(e => [stringifyEntityRef(e), e]));
   // the providers of each API
@@ -152,6 +201,10 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
       if (r.type === 'consumesApi') for (const p of providers.get(r.targetRef) ?? []) add(me, p, `${parseEntityRef(r.targetRef).name} API`, 'api');
       if (e.kind === 'System' && r.type === 'hasPart' && byRef.get(r.targetRef)?.spec?.type === 'business-application') add(me, r.targetRef, 'application', 'dep');
       if (e.spec?.type === 'business-application' && r.type === 'hasSubcomponent') add(me, r.targetRef, 'instance', 'dep');
+      // a business application and the components it is made of (spec.subcomponentOf: its instance, its services); not
+      // a framework and its lines, so an application on one line does not reach the others
+      if (e.kind === 'Component' && r.type === 'hasPart' && byRef.get(r.targetRef)?.kind === 'Component' && catalogueCategory(e, byRef) === 'business')
+        add(me, r.targetRef, byRef.get(r.targetRef)?.spec?.type === 'application-instance' ? 'instance' : 'part', 'dep');
       if (e.kind === 'Domain' && r.type === 'hasPart') add(me, r.targetRef, byRef.get(r.targetRef)?.kind === 'Domain' ? 'subdomain' : 'process', 'dep');
     }
   }
@@ -161,7 +214,7 @@ export function buildGraph(entities: Entity[], health: (e: Entity) => { tone: He
     const id = stringifyEntityRef(e);
     const h = health(e);
     const product = String(e.metadata.annotations?.['refresquito.io/product'] ?? e.spec?.type ?? e.kind.toLowerCase());
-    return { id, entity: e, label: e.metadata.title ?? e.metadata.name, product, layer: layerAmong(e, all), health: h.tone, healthLabel: h.label, deg: deg.get(id) ?? 0 };
+    return { id, entity: e, label: e.metadata.title ?? e.metadata.name, product, layer: stackLayerOf(e, all), health: h.tone, healthLabel: h.label, deg: deg.get(id) ?? 0 };
   });
   return { nodes, links };
 }
@@ -184,6 +237,55 @@ export function reach(start: string, links: DepLink[], max: number, down: boolea
     }
   }
   return dist;
+}
+
+/**
+ * The business applications Relations of offers: the business nodes that are not part of another component of the glass
+ * (petstore, not petstore-oneke, its instance, nor the services of petshop).
+ */
+export function topApplications(nodes: DepNodeModel[]): DepNodeModel[] {
+  const ids = new Set(nodes.map(n => n.id));
+  return nodes
+    .filter(n => n.layer === 'biz' && !(n.entity.relations ?? []).some(r => r.type === 'partOf' && r.targetRef.startsWith('component:') && ids.has(r.targetRef)))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** The application a node belongs to: its refresquito.io/application, or its name when it is a business application. */
+const applicationOf = (n: DepNodeModel): string | undefined =>
+  n.entity.metadata.annotations?.['refresquito.io/application'] ?? (n.layer === 'biz' ? n.entity.metadata.name : undefined);
+
+/**
+ * The whole tree under a business application (Dependencies › relations of): what it uses, what that uses, down to the
+ * end, without going into another application nor its resources (a platform service that uses the APIs of every
+ * application, as observability, would otherwise bring them all in).
+ */
+export function treeOf(start: string, links: DepLink[], nodes: DepNodeModel[]): Set<string> {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const root = byId.get(start);
+  const own = new Set<string>();
+  // the application and its instances, by name and by application: their resources name the instance (petstore-oneke)
+  const mark = (n?: DepNodeModel) => {
+    if (!n) return;
+    own.add(n.entity.metadata.name);
+    const a = applicationOf(n);
+    if (a) own.add(a);
+  };
+  mark(root);
+  for (const l of links) if (l.source === start) mark(byId.get(l.target)?.layer === 'biz' ? byId.get(l.target) : undefined);
+  const seen = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const c = queue.shift()!;
+    for (const l of links) {
+      if (l.source !== c || seen.has(l.target)) continue;
+      const n = byId.get(l.target);
+      const a = n && applicationOf(n);
+      if (a && !own.has(a)) continue;
+      seen.add(l.target);
+      queue.push(l.target);
+    }
+  }
+  return seen;
 }
 
 /**
