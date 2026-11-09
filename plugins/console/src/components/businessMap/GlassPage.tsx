@@ -121,8 +121,8 @@ export const BusinessGlassPage = () => {
       window.removeEventListener('resize', measure);
     };
   }, [graph]);
-  const fill = useMemo(() => glassToFill(BUSINESS_LAYERS, size.w, size.h), [size]);
-  const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS, fill.shape) : new Map<string, { x: number; y: number }>()), [graph, fill]);
+  const filled = useMemo(() => glassToFill(BUSINESS_LAYERS, size.w, size.h), [size]);
+  const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS, filled.shape) : new Map<string, { x: number; y: number }>()), [graph, filled]);
 
   const crumbs: Array<[string, string?]> = [[t('nav.portal'), '/console'], [t('bmd.crumb'), '/console/business-map'], [t('bmd.glass.title')]];
   const title = namespace ? `${t('bmd.glass.title')} · ${namespace}` : t('bmd.glass.title');
@@ -141,7 +141,7 @@ export const BusinessGlassPage = () => {
   const sel = picked === undefined ? fromUrl : picked ?? undefined;
   const selected = sel ? graph.byId.get(sel) : undefined;
   const lit = selected ? litOf(graph, selected.id) : undefined;
-  const box = fill.box;
+  const box = filled.box;
   const toggle = (id: string) => setPicked(sel === id ? null : id);
   const fullProcs = new Map(data.full.processes.map(p => [normRef(p.ref), p]));
   const openOrClose = (id: string) => {
@@ -399,7 +399,7 @@ export const BusinessGlassPage = () => {
               height={size.h || undefined}
               style={{ display: 'block' }}
             >
-              <GlassBands layers={BUSINESS_LAYERS} muted={muted} shape={fill.shape} />
+              <GlassBands layers={BUSINESS_LAYERS} muted={muted} shape={filled.shape} />
               <g>
                 {graph.links.map(l => {
                   const a = pos.get(l.source);
