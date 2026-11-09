@@ -136,8 +136,8 @@ export const BUSINESS_MAP_DASHBOARDS: Messages = {
   // glass
   'bmd.glass.title': { en: 'The business glass', es: 'El vaso de negocio' },
   'bmd.glass.sub': {
-    en: 'The Dependencies glass with the business on top. Refresquito services are two families: platform services (what the applications run on) and development services (the framework lines they are built with). The size of a service is its blast radius. Pick any node to light its chain.',
-    es: 'El vaso de Dependencias con el negocio encima. Los servicios de Refresquito son dos familias: servicios de plataforma (sobre lo que corren las aplicaciones) y servicios de desarrollo (las líneas de framework con las que se construyen). El tamaño de un servicio es su radio de impacto. Elige un nodo para iluminar su cadena.',
+    en: 'The business model as a glass: level-1 domains, subdomains, processes and sub-processes, and below them the business services and applications they run on. The platform and the framework lines under the applications count for the colours and the detail, without being drawn. Pick any node to light its chain.',
+    es: 'El modelo de negocio como un vaso: dominios de nivel 1, subdominios, procesos y subprocesos, y debajo los servicios y aplicaciones de negocio en los que se apoyan. La plataforma y las líneas de framework que hay bajo las aplicaciones cuentan para los colores y el detalle, sin dibujarse. Elige un nodo para iluminar su cadena.',
   },
   'bmd.colourBy': { en: 'Colour by', es: 'Colorear por' },
   'bmd.glens.criticality': { en: 'Criticality', es: 'Criticidad' },
