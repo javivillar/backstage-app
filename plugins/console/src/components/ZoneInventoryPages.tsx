@@ -161,6 +161,21 @@ export const ZoneTemplatesPage = () => {
 
 const ST_TABS = ['images', 'datastores', 'backups'] as const;
 
+const JobState = ({ errors, outdated }: { errors: number; outdated: number }) => {
+  const { t } = useI18n();
+  if (errors) return <Badge label={t('inv.bkErrors', { n: errors })} {...TONES.bad} />;
+  if (outdated) return <Badge label={t('inv.bkOutdated', { n: outdated })} {...TONES.warn} />;
+  return <Badge label="OK" {...TONES.ok} />;
+};
+
+/** A VM with backups is fine; one with persistent disks and none is what to look at. */
+const VmBackupState = ({ count, persistentDisks }: { count: number; persistentDisks: number }) => {
+  const { t } = useI18n();
+  if (count > 0) return <Badge label="OK" {...TONES.ok} />;
+  if (persistentDisks > 0) return <Badge label={t('inv.bkMissing')} {...TONES.warn} />;
+  return <Badge label={t('inv.bkNone')} {...TONES.off} />;
+};
+
 const StorageBody = ({ inv }: { inv: Inventory }) => {
   const { t } = useI18n();
   const [tab, setTab] = useTab(ST_TABS);
@@ -224,7 +239,7 @@ const StorageBody = ({ inv }: { inv: Inventory }) => {
                   j.keepLast ?? '—',
                   j.mode ?? '—',
                   day(j.last),
-                  j.errors ? <Badge label={t('inv.bkErrors', { n: j.errors })} {...TONES.bad} /> : j.outdated ? <Badge label={t('inv.bkOutdated', { n: j.outdated })} {...TONES.warn} /> : <Badge label="OK" {...TONES.ok} />,
+                  <JobState errors={j.errors} outdated={j.outdated} />,
                 ])}
               />
             )}
@@ -239,7 +254,7 @@ const StorageBody = ({ inv }: { inv: Inventory }) => {
                   b.job ? inv.backupJobs.find(j => j.id === b.job)?.name ?? b.job : '—',
                   String(b.count),
                   day(b.last),
-                  b.count > 0 ? <Badge label="OK" {...TONES.ok} /> : b.persistentDisks > 0 ? <Badge label={t('inv.bkMissing')} {...TONES.warn} /> : <Badge label={t('inv.bkNone')} {...TONES.off} />,
+                  <VmBackupState count={b.count} persistentDisks={b.persistentDisks} />,
                 ])}
             />
           </Card>
