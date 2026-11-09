@@ -171,6 +171,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.zonesSegregations'), to: '/console/infrastructure/platform' },
         { label: tr('nav.k8sClusters'), to: '/console/clusters' },
         { label: tr('nav.marketplace'), to: '/console/infrastructure/marketplace' },
+        { label: tr('nav.retire'), to: '/console/infrastructure/retire' },
       ],
     });
     groups.push({

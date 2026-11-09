@@ -22,7 +22,7 @@ const gb = (mb?: number) => (typeof mb === 'number' ? `${Math.round(mb / 1024)} 
 const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 
 /** Frame of the platform-wide pages: every zone of the catalog, as the host publishes it. */
-const InfraFrame = ({ title, sub, crumb, children, finding, actions }: { title: string; sub: string; crumb?: string; children: (view: InfraView) => ReactNode; finding?: (view: InfraView) => { text: ReactNode; tone: 'pos' | 'warn' | 'neg' } | undefined; actions?: ReactNode }) => {
+export const InfraFrame = ({ title, sub, crumb, children, finding, actions }: { title: string; sub: string; crumb?: string; children: (view: InfraView) => ReactNode; finding?: (view: InfraView) => { text: ReactNode; tone: 'pos' | 'warn' | 'neg' } | undefined; actions?: ReactNode }) => {
   const { loading, data, error } = useZone();
   const { t } = useI18n();
   const view = data as InfraView | undefined;

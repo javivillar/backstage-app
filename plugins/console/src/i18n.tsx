@@ -58,6 +58,7 @@ const SHELL: Messages = {
   'nav.zonesSegregations': { en: 'Zones and segregations', es: 'Zonas y segregaciones' },
   'nav.k8sClusters': { en: 'Kubernetes clusters', es: 'Clústeres Kubernetes' },
   'nav.marketplace': { en: 'Marketplace', es: 'Marketplace' },
+  'nav.retire': { en: 'Retire', es: 'Retirar' },
   'nav.infrastructure': { en: 'Infrastructure', es: 'Infraestructura' },
   'nav.vms': { en: 'Virtual machines', es: 'Máquinas virtuales' },
   'nav.networks': { en: 'Networks', es: 'Redes' },

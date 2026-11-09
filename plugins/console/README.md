@@ -129,6 +129,7 @@ catalog, the profiles and the free memory in `topology.json` (`summariseZone`: `
 
 | Page | Route | Backend | Git |
 |---|---|---|---|
+| Platform › Retire (destroy a cluster, remove a segregation; type the name to confirm) | `/console/infrastructure/retire` | `POST /api/cluster/infra/clusters/delete`, `POST /api/cluster/infra/segregations/delete` | the same PRs as Marketplace and the programme page |
 | Platform › a programme (networks, security groups, router, cluster, VMs) | `/console/infrastructure/platform/:zone/:program` | `POST /api/cluster/infra/segregations/delete` | PR removing its `[[program]]` (host: `destroy`) |
 | Clusters of the platform › Delete | Marketplace | `POST /api/cluster/infra/clusters/delete` | PR with `"delete": true` (host: `cluster-destroy`) |
 | Scale any cluster, masters only added | `/console/infrastructure/clusters/:zone/:program` | `POST /api/cluster/infra/clusters/scale` (`masters`) | commit to `main` |
