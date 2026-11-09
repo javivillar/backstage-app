@@ -25,6 +25,7 @@ import {
   forceLayout,
   GLASS,
   glassFor,
+  type GlassShape,
   glassPath,
   type Health,
   inStack,
@@ -56,8 +57,8 @@ type View = { k: number; x: number; y: number };
 type Drag = { kind: 'pan'; sx: number; sy: number; v: View } | { kind: 'node'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean };
 
 /** The bands of the layers and the glass around them (Stack); the business glass draws the same with BUSINESS_LAYERS. */
-export const GlassBands = ({ layers, muted }: { layers: Layer[]; muted: string }) => {
-  const g = glassFor(layers);
+export const GlassBands = ({ layers, muted, shape }: { layers: Layer[]; muted: string; shape?: GlassShape }) => {
+  const g = shape ?? glassFor(layers);
   return (
     <g aria-hidden>
       {layers

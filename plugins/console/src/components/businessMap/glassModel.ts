@@ -1,6 +1,6 @@
 import { type Entity, parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
 import type { MapData, MapProcess } from '../../businessMap';
-import { buildGraph, chainOf, type DepLink, type DepNodeModel, type Health } from '../depsModel';
+import { buildGraph, chainOf, type DepLink, type DepNodeModel, type Health, isDomainLayer, isProcessLayer } from '../depsModel';
 
 /**
  * The model of Business map › Glass, shared by the heat map and the matrix: the glass of Portal › Dependencies
@@ -64,15 +64,26 @@ export function mapEntities(map: MapData): Entity[] {
   };
   const children = new Map<string, string[]>();
   const push = (parent: string, child: string) => children.set(parent, [...(children.get(parent) ?? []), child]);
+  // a subdomain under its domain; a sub-process under its parent process when the view draws it, else under its domain
+  const drawn = new Set(map.processes.map(p => normRef(p.ref)));
   for (const d of map.domains) if (d.parent) push(normRef(d.parent), normRef(d.ref));
-  for (const p of map.processes) push(normRef(p.domain), normRef(p.ref));
+  for (const p of map.processes) push(p.parent && drawn.has(normRef(p.parent)) ? normRef(p.parent) : normRef(p.domain), normRef(p.ref));
   const out: Entity[] = [];
   for (const d of map.domains) {
     const ref = normRef(d.ref);
-    out.push(entity('Domain', ref, d.title, { type: 'business-area' }, (children.get(ref) ?? []).map(targetRef => ({ type: 'hasPart', targetRef }))));
+    const spec = { type: 'business-area', ...(d.parent ? { subdomainOf: normRef(d.parent) } : {}) };
+    out.push(entity('Domain', ref, d.title, spec, (children.get(ref) ?? []).map(targetRef => ({ type: 'hasPart', targetRef }))));
   }
   for (const p of map.processes)
-    out.push(entity('BusinessProcess', normRef(p.ref), p.title, { criticality: p.criticality, owner: p.owner }, p.dependsOn.map(d => ({ type: 'dependsOn', targetRef: normRef(d) }))));
+    out.push(
+      entity(
+        'BusinessProcess',
+        normRef(p.ref),
+        p.title,
+        { criticality: p.criticality, owner: p.owner, ...(p.parent ? { parentProcess: normRef(p.parent) } : {}) },
+        [...p.dependsOn.map(d => ({ type: 'dependsOn', targetRef: normRef(d) })), ...(children.get(normRef(p.ref)) ?? []).map(targetRef => ({ type: 'hasPart', targetRef }))],
+      ),
+    );
   return out;
 }
 
@@ -121,7 +132,7 @@ export function businessGraph(map: MapData, catalog: Entity[], health: (e: Entit
     keep.add(p);
     chain.forEach(id => keep.add(id));
   }
-  full.nodes.filter(n => n.layer === 'dom').forEach(n => keep.add(n.id));
+  full.nodes.filter(n => isDomainLayer(n.layer)).forEach(n => keep.add(n.id));
   const nodes = full.nodes.filter(n => keep.has(n.id));
   const links = full.links.filter(l => keep.has(l.source) && keep.has(l.target));
   const above = new Map<string, string[]>();
@@ -133,7 +144,7 @@ export function businessGraph(map: MapData, catalog: Entity[], health: (e: Entit
 export function criticalityOf(g: BusinessGraph, id: string): Criticality | undefined {
   const own = g.processes.get(id);
   if (own) return own.criticality;
-  if (g.byId.get(id)?.layer === 'dom') return strictest([...downFrom(id, g.links)].map(x => g.processes.get(x)?.criticality));
+  if (isDomainLayer(g.byId.get(id)?.layer ?? 'ext')) return strictest([...downFrom(id, g.links)].map(x => g.processes.get(x)?.criticality));
   return strictest((g.above.get(id) ?? []).map(p => g.processes.get(p)?.criticality));
 }
 
@@ -157,7 +168,7 @@ export const worstCheck = (cs: Check[]): Check => cs.reduce<Check>((w, c) => (CH
 
 /** layers that are build time (framework lines, development services): not in the RPO/RTO check */
 const BUILD_TIME = new Set(['fwk']);
-const BUSINESS = new Set(['dom', 'proc', 'biz']);
+const BUSINESS = new Set(['dom', 'sub', 'proc', 'subp', 'biz']);
 
 /** The check of a process: the worst of the elements of its chain, or the map's own result when none says more. */
 export function processCheck(g: BusinessGraph, ref: string): Check {
@@ -185,8 +196,8 @@ export function continuityOf(g: BusinessGraph, id: string): Check | 'na' {
   const n = g.byId.get(id);
   if (!n) return 'unknown';
   if (BUILD_TIME.has(n.layer)) return 'na';
-  if (n.layer === 'proc') return processCheck(g, id);
-  if (n.layer === 'dom') return worstCheck([...downFrom(id, g.links)].filter(x => g.processes.has(x)).map(x => processCheck(g, x)));
+  if (isProcessLayer(n.layer)) return processCheck(g, id);
+  if (isDomainLayer(n.layer)) return worstCheck([...downFrom(id, g.links)].filter(x => g.processes.has(x)).map(x => processCheck(g, x)));
   const ownCheck = (x: DepNodeModel) => {
     const procs = (g.above.get(x.id) ?? []).map(p => g.processes.get(p)).filter((p): p is MapProcess => !!p);
     return worstCheck(procs.map(p => checkOf(needsOf(p), deliversOf(x.entity))));
@@ -252,7 +263,9 @@ export function radiusOf(g: BusinessGraph, id: string): number {
   const n = g.byId.get(id);
   if (!n) return 30;
   if (n.layer === 'dom') return 44;
+  if (n.layer === 'sub') return 40;
   if (n.layer === 'proc') return 36;
+  if (n.layer === 'subp') return 32;
   if (n.layer === 'biz') return 38;
   return Math.min(70, 24 + blastOf(g, id).weight * 6);
 }
@@ -270,8 +283,8 @@ export const litOf = (g: BusinessGraph, id: string) => chainOf(id, g.links);
 export function affectedBy(g: BusinessGraph, id: string): MapProcess[] {
   const n = g.byId.get(id);
   let refs: string[] = [];
-  if (n?.layer === 'proc') refs = [id];
-  else if (n?.layer === 'dom') refs = [...downFrom(id, g.links)].filter(x => g.processes.has(x));
+  if (n && isProcessLayer(n.layer)) refs = [id];
+  else if (n && isDomainLayer(n.layer)) refs = [...downFrom(id, g.links)].filter(x => g.processes.has(x));
   else refs = g.above.get(id) ?? [];
   return refs
     .map(r => g.processes.get(r))

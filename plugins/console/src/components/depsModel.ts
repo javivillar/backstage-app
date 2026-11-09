@@ -5,13 +5,21 @@ import { classify, segmentOf } from './classify';
  * The model of Portal › Dependencies: the layers of the Refresquito reference architecture (business applications on
  * top, the foundations below, what is outside the zone apart) and the dependencies between the elements of the catalog.
  */
-export type Layer = 'dom' | 'proc' | 'biz' | 'fwk' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
+export type Layer = 'dom' | 'sub' | 'proc' | 'subp' | 'biz' | 'fwk' | 'app' | 'dat' | 'ops' | 'dev' | 'obs' | 'sec' | 'inf' | 'ext';
 export const LAYERS: Layer[] = ['biz', 'fwk', 'app', 'dat', 'ops', 'dev', 'obs', 'sec', 'inf', 'ext'];
-/** the business glass (Business map › Glass): the business domains and processes on top of the same layers */
-export const BUSINESS_LAYERS: Layer[] = ['dom', 'proc', ...LAYERS];
+/**
+ * the business glass (Business continuity › Glass): the four levels of the business model on top of the same layers:
+ * level-1 domains, subdomains, processes and sub-processes (APQC levels 4-5), then the business services · applications
+ */
+export const BUSINESS_LAYERS: Layer[] = ['dom', 'sub', 'proc', 'subp', ...LAYERS];
+/** a band of the business model: domains (levels 1-2) or processes (levels 3-4) */
+export const isDomainLayer = (l: Layer) => l === 'dom' || l === 'sub';
+export const isProcessLayer = (l: Layer) => l === 'proc' || l === 'subp';
 export const LAYER_INFO: Record<Layer, { label: string; colour: string }> = {
-  dom: { label: 'Business domains', colour: '#E2553F' },
-  proc: { label: 'Business processes', colour: '#F0604D' },
+  dom: { label: 'Level 1 · Business domains', colour: '#D94A36' },
+  sub: { label: 'Level 2 · Subdomains', colour: '#E2553F' },
+  proc: { label: 'Level 3 · Business processes', colour: '#F0604D' },
+  subp: { label: 'Level 4 · Sub-processes', colour: '#F76A55' },
   biz: { label: 'Business services · applications', colour: '#FF6B5B' },
   fwk: { label: 'Development services · frameworks', colour: '#FF7D5C' },
   app: { label: 'Application services · APP', colour: '#FF8A5C' },
@@ -56,8 +64,8 @@ export function layerOf(e: Entity): Layer {
     const type = String(e.spec?.type ?? '');
     if (/external|smtp|internet|saas/.test(type) || e.metadata.annotations?.['refresquito.io/external']) return 'ext';
   }
-  if (e.kind === 'Domain') return 'dom';
-  if (e.kind === 'BusinessProcess') return 'proc';
+  if (e.kind === 'Domain') return e.spec?.subdomainOf ? 'sub' : 'dom';
+  if (e.kind === 'BusinessProcess') return e.spec?.parentProcess ? 'subp' : 'proc';
   // what the service says (catalog.services.<name>.layer of refresquito-services) wins over any guess
   const declared = e.metadata.annotations?.['refresquito.io/layer'];
   if (declared && DECLARABLE.has(declared)) return declared as Layer;
@@ -199,13 +207,20 @@ export function buildGraph(
       if (r.type === 'dependsOn') add(me, r.targetRef, 'depends on', 'dep');
       if (r.type === 'dependencyOf') add(r.targetRef, me, 'depends on', 'dep');
       if (r.type === 'consumesApi') for (const p of providers.get(r.targetRef) ?? []) add(me, p, `${parseEntityRef(r.targetRef).name} API`, 'api');
-      if (e.kind === 'System' && r.type === 'hasPart' && byRef.get(r.targetRef)?.spec?.type === 'business-application') add(me, r.targetRef, 'application', 'dep');
+      // a business service to its application: of type business-application, or a repository made of an instance
+      // (petstore, the aerospace-iberia test applications: spec.type service)
+      if (e.kind === 'System' && r.type === 'hasPart') {
+        const app = byRef.get(r.targetRef);
+        if (app && (app.spec?.type === 'business-application' || (app.kind === 'Component' && app.spec?.type !== 'application-instance' && !app.metadata.annotations?.['refresquito.io/application'] && catalogueCategory(app, all) === 'business')))
+          add(me, r.targetRef, 'application', 'dep');
+      }
       if (e.spec?.type === 'business-application' && r.type === 'hasSubcomponent') add(me, r.targetRef, 'instance', 'dep');
       // a business application and the components it is made of (spec.subcomponentOf: its instance, its services); not
       // a framework and its lines, so an application on one line does not reach the others
       if (e.kind === 'Component' && r.type === 'hasPart' && byRef.get(r.targetRef)?.kind === 'Component' && catalogueCategory(e, byRef) === 'business')
         add(me, r.targetRef, byRef.get(r.targetRef)?.spec?.type === 'application-instance' ? 'instance' : 'part', 'dep');
       if (e.kind === 'Domain' && r.type === 'hasPart') add(me, r.targetRef, byRef.get(r.targetRef)?.kind === 'Domain' ? 'subdomain' : 'process', 'dep');
+      if (e.kind === 'BusinessProcess' && r.type === 'hasPart') add(me, r.targetRef, 'sub-process', 'dep');
     }
   }
   const deg = new Map<string, number>();
@@ -319,10 +334,23 @@ export const layerY = (k: Layer, layers: Layer[] = LAYERS) =>
   k === 'ext' ? (layers.indexOf('inf') - MID) * BAND_H + BAND_H * 1.6 : (layers.indexOf(k) - MID) * BAND_H;
 export const nodeY = (k: Layer, layers: Layer[] = LAYERS) => layerY(k, layers) - 28;
 export type GlassShape = { top: number; bottom: number; halfTop: number; halfBottom: number };
-/** the outline of the glass for some layers */
-export function glassFor(layers: Layer[]): GlassShape {
+/** the outline of the glass for some layers; halfTop widens it (the business glass takes the shape of the screen) */
+export function glassFor(layers: Layer[], halfTop = 1080): GlassShape {
   const inner = layers.filter(k => k !== 'ext');
-  return { top: layerY(inner[0], layers) - BAND_H / 2, bottom: layerY(inner[inner.length - 1], layers) + BAND_H / 2, halfTop: 1080, halfBottom: 900 };
+  return { top: layerY(inner[0], layers) - BAND_H / 2, bottom: layerY(inner[inner.length - 1], layers) + BAND_H / 2, halfTop, halfBottom: (halfTop * 900) / 1080 };
+}
+
+/**
+ * The glass that fills a box of width × height (px) for some layers: as wide as the box allows, never narrower than
+ * the usual one. The view box around it keeps margins for the bubbles and the label of the external layer.
+ */
+export function glassToFill(layers: Layer[], width: number, height: number): { shape: GlassShape; box: { x0: number; y0: number; x1: number; y1: number } } {
+  const base = glassFor(layers);
+  const y0 = base.top - 120;
+  const y1 = (layers.includes('ext') ? layerY('ext', layers) : base.bottom) + 120;
+  const aspect = width > 0 && height > 0 ? width / height : 0;
+  const halfTop = Math.max(base.halfTop, (aspect * (y1 - y0)) / 2 - 80);
+  return { shape: glassFor(layers, halfTop), box: { x0: -halfTop - 80, x1: halfTop + 80, y0, y1 } };
 }
 export const GLASS = glassFor(LAYERS);
 /** the half width of the glass at a height */
@@ -334,8 +362,7 @@ export function glassPath(g: GlassShape = GLASS): string {
 }
 
 /** Stack: every layer spread across the glass, each node near its neighbours of the other layers (barycentres). */
-export function stackLayout(nodes: DepNodeModel[], links: DepLink[], layers: Layer[] = LAYERS): Map<string, { x: number; y: number }> {
-  const g = glassFor(layers);
+export function stackLayout(nodes: DepNodeModel[], links: DepLink[], layers: Layer[] = LAYERS, g: GlassShape = glassFor(layers)): Map<string, { x: number; y: number }> {
   const by = new Map<Layer, DepNodeModel[]>();
   nodes.forEach(n => by.set(n.layer, [...(by.get(n.layer) ?? []), n]));
   const pos = new Map<string, { x: number; y: number }>();
