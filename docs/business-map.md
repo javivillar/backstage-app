@@ -246,7 +246,9 @@ support categories of a loaded APQC model).
   | Framework support | lifecycle and `refresquito.io/supported-until` of the line of its pro instances |
 
   A lens whose source fails shows "no data" and the rest of the page works.
-- **Glass**: the Dependencies glass with domains and processes on top; colour by criticality (inherited down),
+- **Glass**: the Dependencies glass with the four levels of the model on top (level-1 domains, subdomains, processes,
+  sub-processes), then the business services · applications and the platform layers; the glass takes the shape of the
+  screen (as wide as its box, down to the bottom of the window); colour by criticality (inherited down),
   continuity (gaps flow up), framework support or health; the size of a service is its blast radius; picking a node
   lights its whole chain. A big model (an APQC PCF has thousands of processes) is cut down before it is drawn:
   - *Only what is linked to applications* (on by default): the processes with no application, their own or inherited,

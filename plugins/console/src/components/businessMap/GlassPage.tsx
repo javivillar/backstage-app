@@ -7,12 +7,12 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { consoleEntityPath } from '../classify';
 import { GlassBands } from '../DependencyExplorer';
-import { BUSINESS_LAYERS, buildGraph, type DepNodeModel, glassFor, LAYER_INFO, layerY, stackLayout } from '../depsModel';
+import { BUSINESS_LAYERS, buildGraph, type DepNodeModel, glassToFill, isDomainLayer, isProcessLayer, LAYER_INFO, stackLayout } from '../depsModel';
 import { choose, EmptyState, Pill, TitleRow, type Tone } from '../ui';
 import { BusinessMapTabs } from './BusinessMapTabs';
 import { type Dot, Legend, NamespacePicker, Segmented, useDots } from './DashboardParts';
@@ -44,7 +44,7 @@ const LEGENDS: Record<GlassLens, Array<[Dot, string]>> = {
   health: [['ok', 'bmd.lg.healthy'], ['warn', 'bmd.lg.degraded'], ['bad', 'bmd.lg.down'], ['none', 'bmd.lg.noData']],
 };
 const critTone: Record<string, Tone> = { critical: 'neg', important: 'warn', standard: 'neu' };
-const BUSINESS = new Set(['dom', 'proc', 'biz']);
+const BUSINESS = new Set(['dom', 'sub', 'proc', 'subp', 'biz']);
 /** at most this many level-1 domains picked at once (the glass stays readable) */
 const MAX_DOMAINS = 3;
 const cut = (s: string, n = 24) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -101,7 +101,28 @@ export const BusinessGlassPage = () => {
   const [lens, setLens] = useState<GlassLens>('criticality');
   const [picked, setPicked] = useState<string | null | undefined>();
   const [now] = useState(() => Date.now());
-  const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS) : new Map<string, { x: number; y: number }>()), [graph]);
+  // the glass fills what is left of the screen: as wide as its box, down to the bottom of the window
+  const glassBox = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = glassBox.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const next = { w: Math.round(r.width), h: Math.round(Math.max(520, window.innerHeight - r.top - 16)) };
+      setSize(s => (s.w === next.w && s.h === next.h ? s : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [graph]);
+  const filled = useMemo(() => glassToFill(BUSINESS_LAYERS, size.w, size.h), [size]);
+  const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS, filled.shape) : new Map<string, { x: number; y: number }>()), [graph, filled]);
 
   const crumbs: Array<[string, string?]> = [[t('nav.portal'), '/console'], [t('bmd.crumb'), '/console/business-map'], [t('bmd.glass.title')]];
   const title = namespace ? `${t('bmd.glass.title')} · ${namespace}` : t('bmd.glass.title');
@@ -120,8 +141,7 @@ export const BusinessGlassPage = () => {
   const sel = picked === undefined ? fromUrl : picked ?? undefined;
   const selected = sel ? graph.byId.get(sel) : undefined;
   const lit = selected ? litOf(graph, selected.id) : undefined;
-  const g = glassFor(BUSINESS_LAYERS);
-  const box = { x0: -g.halfTop - 80, x1: g.halfTop + 80, y0: g.top - 120, y1: layerY('ext', BUSINESS_LAYERS) + 120 };
+  const box = filled.box;
   const toggle = (id: string) => setPicked(sel === id ? null : id);
   const fullProcs = new Map(data.full.processes.map(p => [normRef(p.ref), p]));
   const openOrClose = (id: string) => {
@@ -137,8 +157,8 @@ export const BusinessGlassPage = () => {
       setOpts({ open: new Set([...opts.open, group.scope]) });
       return;
     }
-    if (n.layer === 'dom' && !opts.search) openOrClose(n.id);
-    else if (n.layer === 'proc' && fullProcs.get(n.id)?.subprocesses?.length && !opts.search) openOrClose(n.id);
+    if (isDomainLayer(n.layer) && !opts.search) openOrClose(n.id);
+    else if (isProcessLayer(n.layer) && fullProcs.get(n.id)?.subprocesses?.length && !opts.search) openOrClose(n.id);
     toggle(n.id);
   };
   const roots = data.full.domains.filter(d => !d.parent);
@@ -276,7 +296,7 @@ export const BusinessGlassPage = () => {
         </Box>
         <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '4px 12px', m: 0, fontSize: 13, '& dt': { color: 'text.secondary' }, '& dd': { m: 0, overflowWrap: 'anywhere' } }}>
           <dt>{t('bmd.glass.criticality')}</dt>
-          <dd>{crit ? `${t(`bmd.crit.${crit}`)}${proc || selected.layer === 'dom' ? '' : ` (${t('bmd.glass.inherited')})`}` : '—'}</dd>
+          <dd>{crit ? `${t(`bmd.crit.${crit}`)}${proc || isDomainLayer(selected.layer) ? '' : ` (${t('bmd.glass.inherited')})`}` : '—'}</dd>
           <dt>{k2}</dt>
           <dd>{v2}</dd>
           <dt>{t('bmd.lens.continuity')}</dt>
@@ -370,9 +390,16 @@ export const BusinessGlassPage = () => {
         <EmptyState title={t('bmd.noProcesses')}>{t('bmd.noProcesses.hint')}</EmptyState>
       ) : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <Box sx={{ flex: '999 1 640px', minWidth: 0, py: 1.5 }}>
-            <svg role="img" aria-label={t('bmd.glass.title')} viewBox={`${box.x0} ${box.y0} ${box.x1 - box.x0} ${box.y1 - box.y0}`} width="100%" style={{ display: 'block', maxHeight: '78vh' }}>
-              <GlassBands layers={BUSINESS_LAYERS} muted={muted} />
+          <Box ref={glassBox} sx={{ flex: '999 1 640px', minWidth: 0, py: 1.5 }}>
+            <svg
+              role="img"
+              aria-label={t('bmd.glass.title')}
+              viewBox={`${box.x0} ${box.y0} ${box.x1 - box.x0} ${box.y1 - box.y0}`}
+              width="100%"
+              height={size.h || undefined}
+              style={{ display: 'block' }}
+            >
+              <GlassBands layers={BUSINESS_LAYERS} muted={muted} shape={filled.shape} />
               <g>
                 {graph.links.map(l => {
                   const a = pos.get(l.source);

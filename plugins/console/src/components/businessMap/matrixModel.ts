@@ -19,7 +19,7 @@ export type MatrixGroup = { ref: string; title: string; rows: MatrixRow[] };
 export type Matrix = { columns: Column[]; groups: MatrixGroup[]; footer: Map<string, { deps: number; gaps: number }> };
 
 const isPlatform = (n: DepNodeModel) =>
-  n.entity.kind === 'Component' && !['dom', 'proc', 'biz', 'fwk'].includes(n.layer) && (n.entity.spec?.type === 'platform-service' || classify(n.entity) === 'service');
+  n.entity.kind === 'Component' && !['dom', 'sub', 'proc', 'subp', 'biz', 'fwk'].includes(n.layer) && (n.entity.spec?.type === 'platform-service' || classify(n.entity) === 'service');
 const isLine = (n: DepNodeModel) => n.entity.kind === 'Component' && n.layer === 'fwk' && n.entity.spec?.type !== 'development-service';
 
 /** a cell that is not "meets" / "supported" */

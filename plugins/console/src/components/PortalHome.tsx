@@ -12,7 +12,7 @@ import { useConsoleConfig } from '../config';
 import { type AppOverview, useClusterOverview } from '../overview';
 import { Badge } from './Badge';
 import { classify, consoleEntityPath } from './classify';
-import { catalogueCategory, type Layer, SERVICE_LAYERS } from './depsModel';
+import { catalogueCategory, type Layer, ownerRef, SERVICE_LAYERS } from './depsModel';
 import { TONES } from './Flow';
 import { NeedsAttention } from './NeedsAttention';
 import { useI18n } from '../i18n';
@@ -20,7 +20,7 @@ import { useRq } from '../theme/consoleTheme';
 import { Kpis, TitleRow } from './ui';
 import { Seg } from './ui-portal';
 
-const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.type', 'spec.lifecycle', 'spec.system', 'spec.owner'];
+const FIELDS = ['kind', 'metadata.name', 'metadata.namespace', 'metadata.title', 'metadata.annotations', 'metadata.labels', 'metadata.tags', 'spec.type', 'spec.lifecycle', 'spec.system', 'spec.owner', 'relations'];
 
 function useComponents() {
   const catalog = useApi(catalogApiRef);
@@ -42,7 +42,7 @@ function useComponents() {
 }
 
 /** The groups (and the user) the signed-in user owns through, as entity refs. */
-function useOwnership() {
+export function useOwnership() {
   const identity = useApi(identityApiRef);
   const [refs, setRefs] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -59,7 +59,7 @@ function useOwnership() {
 }
 
 /** The entities starred in the portal (the same stars as the classic pages), when the app has that API. */
-function useStarred() {
+export function useStarred() {
   const api = useApiHolder().get(starredEntitiesApiRef);
   const [refs, setRefs] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -70,25 +70,21 @@ function useStarred() {
   return refs;
 }
 
-export const ownerRef = (owner?: string) => {
-  if (!owner) return undefined;
-  const o = owner.toLowerCase();
-  if (o.includes(':')) return o.includes('/') ? o : o.replace(':', ':default/');
-  return `group:default/${o}`;
-};
+export { ownerRef };
 
 const HEALTH_DOT: Record<string, string> = { Healthy: TONES.ok.fg, Progressing: TONES.info.fg, Degraded: TONES.bad.fg, Missing: TONES.bad.fg, Suspended: TONES.off.fg };
 
 /** One component of the catalogue: what it is (icon), its name, owner and system, and its state in Argo CD. */
-const EntityCard = ({ e, app }: { e: Entity; app?: AppOverview }) => {
+const EntityCard = ({ e, app, byRef }: { e: Entity; app?: AppOverview; byRef: Map<string, Entity> }) => {
   const t = useRq();
   const { t: tr } = useI18n();
   const ann = e.metadata.annotations ?? {};
   const sp = (e.spec ?? {}) as { owner?: string; system?: string; lifecycle?: string };
-  const kind = classify(e);
+  // a Refresquito service says its band (APP, DAT · INT, …); a development service is a framework, line or library;
+  // a component made of an application instance is a business application
+  const category = catalogueCategory(e, byRef);
+  const kind = category === 'business' ? 'business' : classify(e);
   const business = kind === 'business';
-  // a Refresquito service says its band (APP, DAT · INT, …); a development service is a framework, line or library
-  const category = catalogueCategory(e);
   let what = category && category !== 'business' ? tr(`cat.layer.${category}`) : tr('cat.service');
   if (business) what = tr('cat.business');
   else if (kind === 'development') what = tr('cat.developmentOne');
@@ -140,6 +136,7 @@ export const PortalHome = () => {
   const [text, setText] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const health = useMemo(() => new Map((ov.data?.apps ?? []).map(a => [a.name, a] as const)), [ov.data]);
+  const byRef = useMemo(() => new Map(items.map(e => [stringifyEntityRef(e), e] as const)), [items]);
   if (loading) return <Progress />;
   const t = text.trim().toLowerCase();
   const match = (e: Entity) =>
@@ -152,7 +149,7 @@ export const PortalHome = () => {
     if (f === 'all') return true;
     if (f === 'mine') return owns(e);
     if (f === 'favourites') return starred.has(stringifyEntityRef(e));
-    return catalogueCategory(e) === f;
+    return catalogueCategory(e, byRef) === f;
   };
   const filters: Filter[] = ['all', 'business', ...SERVICE_LAYERS, 'mine', 'favourites'];
   const counts = new Map(filters.map(f => [f, items.filter(keep(f)).length]));
@@ -164,8 +161,8 @@ export const PortalHome = () => {
     return h && h !== 'Healthy' ? 0 : 1;
   };
   const shown = items.filter(e => match(e) && keep(filter)(e)).sort((a, b) => {
-    const ca = classify(a) === 'business' ? 0 : 1;
-    const cb = classify(b) === 'business' ? 0 : 1;
+    const ca = catalogueCategory(a, byRef) === 'business' ? 0 : 1;
+    const cb = catalogueCategory(b, byRef) === 'business' ? 0 : 1;
     return bad(a) - bad(b) || ca - cb || a.metadata.name.localeCompare(b.metadata.name);
   });
   const where = [cfg.cluster.zone, cfg.cluster.program].filter(Boolean).join(' / ');
@@ -203,7 +200,7 @@ export const PortalHome = () => {
       ) : (
         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))' }}>
           {shown.map(e => (
-            <EntityCard key={stringifyEntityRef(e)} e={e} app={health.get(e.metadata.name)} />
+            <EntityCard key={stringifyEntityRef(e)} e={e} app={health.get(e.metadata.name)} byRef={byRef} />
           ))}
         </Box>
       )}
