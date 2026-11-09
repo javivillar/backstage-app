@@ -180,6 +180,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.vms'), to: '/console/infrastructure/vms' },
         { label: tr('nav.networks'), to: '/console/infrastructure/networks' },
         { label: tr('nav.securityGroups'), to: '/console/infrastructure/security-groups' },
+        { label: tr('nav.templates'), to: '/console/infrastructure/templates' },
+        { label: tr('nav.zoneStorage'), to: '/console/infrastructure/storage' },
       ],
     });
   } else if (layer === 'cluster') {

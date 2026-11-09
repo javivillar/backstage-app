@@ -29,10 +29,12 @@ const ZONE_TABS: Array<[string, string]> = [
   ['nav.vms', '/console/infrastructure/vms'],
   ['nav.networks', '/console/infrastructure/networks'],
   ['nav.securityGroups', '/console/infrastructure/security-groups'],
+  ['nav.templates', '/console/infrastructure/templates'],
+  ['nav.zoneStorage', '/console/infrastructure/storage'],
 ];
 
 /** Frame of the zone pages: title row, the tabs of the zone, freshness, errors, the zone chosen (the one of this cluster). */
-const ZoneFrame = ({ title, children, finding, actions }: { title: string; children: (zone: Zone, view: ZoneView) => ReactNode; finding?: (zone: Zone, view: ZoneView) => ReactNode; actions?: ReactNode }) => {
+export const ZoneFrame = ({ title, children, finding, actions }: { title: string; children: (zone: Zone, view: ZoneView) => ReactNode; finding?: (zone: Zone, view: ZoneView) => ReactNode; actions?: ReactNode }) => {
   const cfg = useConsoleConfig();
   const { t } = useI18n();
   const rqT = useRq();

@@ -62,6 +62,8 @@ const SHELL: Messages = {
   'nav.vms': { en: 'Virtual machines', es: 'Máquinas virtuales' },
   'nav.networks': { en: 'Networks', es: 'Redes' },
   'nav.securityGroups': { en: 'Security groups', es: 'Grupos de seguridad' },
+  'nav.templates': { en: 'Templates', es: 'Plantillas' },
+  'nav.zoneStorage': { en: 'Storage', es: 'Almacenamiento' },
   'nav.cluster': { en: 'Cluster {cluster}', es: 'Clúster {cluster}' },
   'nav.overview': { en: 'Overview', es: 'Resumen' },
   'nav.applications': { en: 'Applications', es: 'Aplicaciones' },

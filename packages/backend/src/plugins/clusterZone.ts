@@ -77,6 +77,17 @@ export type ReconcileStep = { file?: string; zone?: string; program?: string; ac
 /** What the host did following main (configuration.py reconcile). */
 export type ActionResult = { file: string; kind: string; zone?: string; program?: string; vm?: string; requested_by?: string; state: string; detail?: string; at?: string };
 export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[]; actions?: ActionResult[] };
+/** Read-only copy of the Templates and Storage sections of OpenNebula (topology.py inventory_view; secrets already hidden). */
+export type Inventory = {
+  vmTemplates: Array<{ id: string; name: string; owner?: string; group?: string; registered?: string; vrouter: boolean; cpu?: string; vcpu?: string; memoryMb: number; disks: string[]; networks: string[]; instances: string[]; text: string }>;
+  serviceTemplates: Array<{ id: string; name: string; deployment?: string; registered?: string; roles: Array<{ name: string; cardinality?: number; templateId?: string }>; networks: string[]; instances: Array<{ name: string; state?: string }>; text: string }>;
+  vmGroups: Array<{ id: string; name: string; roles: Array<{ name: string; policy?: string; vms: string[] }>; text: string }>;
+  vnTemplates: Array<{ id: string; name: string; driver?: string; vlan?: string; ranges: string[]; text: string }>;
+  images: Array<{ id: string; name: string; type: string; datastore: string; sizeMb: number; persistent: boolean; state: string; registered?: string; vms: string[] }>;
+  datastores: Array<{ id: string; name: string; type: string; dsMad?: string; tmMad?: string; state: string; totalMb: number; freeMb: number; usedMb: number; images: number; clusters: string[] }>;
+  backupJobs: Array<{ id: string; name: string; vms: string[]; keepLast?: string; mode?: string; datastore?: string; last?: string; schedule: string[]; outdated: number; errors: number }>;
+  vmBackups: Array<{ vm: string; id: string; job?: string; count: number; last?: string; persistentDisks: number }>;
+};
 export type ZoneView = {
   generated?: string;
   /** domain of the names: <vm>.<zone>.<program>.<domain> */
@@ -86,6 +97,7 @@ export type ZoneView = {
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
+  inventory?: Inventory;
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
   zones: Zone[];
@@ -134,6 +146,40 @@ function network(x: Raw): ZoneNetwork {
     state: x.state || undefined,
     leases: Array.isArray(x.leases) ? x.leases.length : 0,
     drift: Array.isArray(x.drift) ? x.drift.map(str) : [],
+  };
+}
+
+const when = (v: unknown) => (typeof v === 'number' && v > 0 ? new Date(v * 1000).toISOString() : undefined);
+const strs = (v: unknown) => (Array.isArray(v) ? v.map(str) : []);
+const list = (v: unknown): Raw[] => (Array.isArray(v) ? v : []);
+
+/** The inventory of topology.json in the shape of the console (undefined when the host did not read OpenNebula). */
+export function inventory(raw: Raw | undefined | null): Inventory | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  return {
+    vmTemplates: list(raw.vm_templates).map(t => ({
+      id: str(t.id), name: str(t.name), owner: t.owner || undefined, group: t.group || undefined, registered: when(t.registered), vrouter: !!t.vrouter,
+      cpu: t.cpu || undefined, vcpu: t.vcpu || undefined, memoryMb: Number(t.memory_mb ?? 0), disks: strs(t.disks), networks: strs(t.networks), instances: strs(t.instances), text: str(t.text),
+    })),
+    serviceTemplates: list(raw.service_templates).map(t => ({
+      id: str(t.id), name: str(t.name), deployment: t.deployment || undefined, registered: when(t.registered),
+      roles: list(t.roles).map(r => ({ name: str(r.name), cardinality: typeof r.cardinality === 'number' ? r.cardinality : undefined, templateId: r.template_id ? str(r.template_id) : undefined })),
+      networks: strs(t.networks), instances: list(t.instances).map(i => ({ name: str(i.name), state: i.state ? str(i.state) : undefined })), text: str(t.text),
+    })),
+    vmGroups: list(raw.vm_groups).map(g => ({ id: str(g.id), name: str(g.name), roles: list(g.roles).map(r => ({ name: str(r.name), policy: r.policy || undefined, vms: strs(r.vms) })), text: str(g.text) })),
+    vnTemplates: list(raw.vn_templates).map(n => ({ id: str(n.id), name: str(n.name), driver: n.driver || undefined, vlan: n.vlan || undefined, ranges: strs(n.ranges), text: str(n.text) })),
+    images: list(raw.images).map(i => ({
+      id: str(i.id), name: str(i.name), type: str(i.type), datastore: str(i.datastore), sizeMb: Number(i.size_mb ?? 0), persistent: !!i.persistent, state: str(i.state), registered: when(i.registered), vms: strs(i.vms),
+    })),
+    datastores: list(raw.datastores).map(d => ({
+      id: str(d.id), name: str(d.name), type: str(d.type), dsMad: d.ds_mad || undefined, tmMad: d.tm_mad || undefined, state: str(d.state),
+      totalMb: Number(d.total_mb ?? 0), freeMb: Number(d.free_mb ?? 0), usedMb: Number(d.used_mb ?? 0), images: Number(d.images ?? 0), clusters: strs(d.clusters),
+    })),
+    backupJobs: list(raw.backup_jobs).map(j => ({
+      id: str(j.id), name: str(j.name), vms: strs(j.vms), keepLast: j.keep_last || undefined, mode: j.mode || undefined, datastore: j.datastore || undefined,
+      last: when(j.last), schedule: strs(j.schedule), outdated: Number(j.outdated ?? 0), errors: Number(j.errors ?? 0),
+    })),
+    vmBackups: list(raw.vm_backups).map(b => ({ vm: str(b.vm), id: str(b.id), job: b.job || undefined, count: Number(b.count ?? 0), last: when(b.last), persistentDisks: Number(b.persistent_disks ?? 0) })),
   };
 }
 
@@ -206,6 +252,7 @@ export function summariseZone(raw: Raw): ZoneView {
     capacity: raw.capacity ? { freeMemoryMb: raw.capacity.schedulable_memory_mb ?? raw.capacity.free_memory_mb ?? undefined, reservedMemoryMb: raw.capacity.reserved_memory_mb ?? undefined, schedulableMemoryMb: raw.capacity.schedulable_memory_mb ?? undefined } : undefined,
     reconcile: rc ? { started: rc.started, finished: rc.finished, error: rc.error ?? null, segregation: rc.segregation ?? null, clusters: Array.isArray(rc.clusters) ? rc.clusters : [], actions: Array.isArray(rc.actions) ? rc.actions : [] } : undefined,
     consoleVms: cv && Array.isArray(cv.vms) ? { applied: cv.applied ? str(cv.applied) : undefined, vms: cv.vms as ConsoleVmStatus[] } : undefined,
+    inventory: inventory(raw.inventory),
     warnings: (raw.warnings ?? []).map(str),
     host: h
       ? {

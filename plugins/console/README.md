@@ -10,7 +10,7 @@ Tech Insights, OpenCost…); the console stores nothing of its own.
 
 | Layer | Shown in | Content |
 |---|---|---|
-| Infrastructure | every cluster (acts only from an admin programme) | Platform (zone catalog, segregations, capacity), Marketplace (OneKE profiles, new clusters), the zone: VMs, networks, security groups |
+| Infrastructure | every cluster (acts only from an admin programme) | Platform (zone catalog, segregations, capacity), Marketplace (OneKE profiles, new clusters), the zone: VMs, networks, security groups, templates, storage |
 | Cluster | every cluster | overview: nodes, Argo CD applications, storage (backend plugin `cluster`); topology, CIS nodes, images |
 | Portal | every cluster | software catalog: business applications and Refresquito services, and the page of each entity |
 
@@ -44,6 +44,9 @@ namespace (kube-state-metrics + kubelet). Backups are not published as metrics y
   `/vulnerabilities` (findings per image). The classic tabs keep working, restyled (`ClassicFrame entity`).
 - **Zone layer** (read-only): `/console/infrastructure` (+ vms, networks, security-groups) from `GET /api/cluster/zone`:
   `topology.json` that the OpenNebula host publishes every 5 min in the ConfigMap `refresquito-topology`.
+  `templates` (VM, service, virtual router, VM group and network templates with their definition) and `storage`
+  (images, datastores, backup jobs and the backups of each VM) read its `inventory` (`topology.py inventory_view`,
+  secrets hidden by the host; `summariseZone` → `inventory`). Read only: nothing there creates or changes anything.
 - **Actions**: `POST /api/cluster/actions/{sync,restart}` through Argo CD (the credentials of the Argo CD plugin),
   only `console.actions.groups` (default backstage-admin); logged, shown in Changes.
 - **Assistants** and **Manage** menus: the classic pages inside the console.
