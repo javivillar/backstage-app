@@ -171,6 +171,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.zonesSegregations'), to: '/console/infrastructure/platform' },
         { label: tr('nav.k8sClusters'), to: '/console/clusters' },
         { label: tr('nav.marketplace'), to: '/console/infrastructure/marketplace' },
+        { label: tr('nav.retire'), to: '/console/infrastructure/retire' },
       ],
     });
     groups.push({
@@ -180,6 +181,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.vms'), to: '/console/infrastructure/vms' },
         { label: tr('nav.networks'), to: '/console/infrastructure/networks' },
         { label: tr('nav.securityGroups'), to: '/console/infrastructure/security-groups' },
+        { label: tr('nav.templates'), to: '/console/infrastructure/templates' },
+        { label: tr('nav.zoneStorage'), to: '/console/infrastructure/storage' },
       ],
     });
   } else if (layer === 'cluster') {

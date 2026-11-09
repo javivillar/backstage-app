@@ -53,10 +53,23 @@ export type ZoneView = {
   generated?: string;
   domain?: string;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
+  inventory?: Inventory;
   warnings: string[];
   host?: { name: string; cpus?: number; memoryGiB?: number; availableGiB?: number; supernet?: string; interfaces: Array<{ name: string; addresses: string[]; up: boolean }> };
   zones: Zone[];
   drift: DriftItem[];
+};
+
+/** Read-only copy of the Templates and Storage sections of OpenNebula (topology.py inventory_view; secrets already hidden). */
+export type Inventory = {
+  vmTemplates: Array<{ id: string; name: string; owner?: string; group?: string; registered?: string; vrouter: boolean; cpu?: string; vcpu?: string; memoryMb: number; disks: string[]; networks: string[]; instances: string[]; text: string }>;
+  serviceTemplates: Array<{ id: string; name: string; deployment?: string; registered?: string; roles: Array<{ name: string; cardinality?: number; templateId?: string }>; networks: string[]; instances: Array<{ name: string; state?: string }>; text: string }>;
+  vmGroups: Array<{ id: string; name: string; roles: Array<{ name: string; policy?: string; vms: string[] }>; text: string }>;
+  vnTemplates: Array<{ id: string; name: string; driver?: string; vlan?: string; ranges: string[]; text: string }>;
+  images: Array<{ id: string; name: string; type: string; datastore: string; sizeMb: number; persistent: boolean; state: string; registered?: string; vms: string[] }>;
+  datastores: Array<{ id: string; name: string; type: string; dsMad?: string; tmMad?: string; state: string; totalMb: number; freeMb: number; usedMb: number; images: number; clusters: string[] }>;
+  backupJobs: Array<{ id: string; name: string; vms: string[]; keepLast?: string; mode?: string; datastore?: string; last?: string; schedule: string[]; outdated: number; errors: number }>;
+  vmBackups: Array<{ vm: string; id: string; job?: string; count: number; last?: string; persistentDisks: number }>;
 };
 
 export const useZone = () => useClusterGet<ZoneView>('/zone', 120_000);

@@ -1,4 +1,4 @@
-import { summariseZone } from './clusterZone';
+import { inventory, summariseZone } from './clusterZone';
 
 const raw = {
   generated: '2026-11-01T10:00:00',
@@ -47,5 +47,24 @@ describe('summariseZone', () => {
       { zone: 'nato', program: 'sirtap', kind: 'network', name: 'nato-sirtap-pub', detail: 'VLAN 2005 in OpenNebula, 2001 in network.toml' },
       { zone: 'nato', program: 'sirtap', kind: 'security group', name: 'sg-nato-sirtap-pub', detail: 'rule not in the design: inbound TCP 8443 anywhere' },
     ]);
+  });
+});
+
+describe('inventory', () => {
+  it('maps the templates and storage of OpenNebula to the console shape', () => {
+    const inv = inventory({
+      vm_templates: [{ id: '11', name: 'Service OneKE 1.33-master', vrouter: false, vcpu: '4', memory_mb: 6144, disks: ['node 0.1.2'], networks: ['priv'], instances: ['master-0'], text: 'VCPU = "4"', registered: 1760000000 }],
+      service_templates: [{ id: '2', name: 'Service OneKE 1.33', roles: [{ name: 'master', cardinality: 1, template_id: '11' }], instances: [{ name: 'oneke-nato-sirtap', state: '2' }], text: '{}' }],
+      images: [{ id: '6', name: 'node 0.1.2', type: 'OS', datastore: 'default', size_mb: 25600, persistent: false, state: 'USED', vms: ['master-0'] }],
+      datastores: [{ id: '1', name: 'default', type: 'image', state: 'READY', total_mb: 1000, free_mb: 600, used_mb: 400, images: 1, clusters: ['0'] }],
+      backup_jobs: [{ id: '0', name: 'daily', vms: ['master-0'], keep_last: '7', last: 1762600000, schedule: [], outdated: 0, errors: 1 }],
+      vm_backups: [{ vm: 'master-0', id: '27', count: 2, last: 1762600000, persistent_disks: 0 }],
+    })!;
+    expect(inv.vmTemplates[0]).toMatchObject({ memoryMb: 6144, instances: ['master-0'], registered: '2025-10-09T08:53:20.000Z' });
+    expect(inv.serviceTemplates[0].roles[0]).toEqual({ name: 'master', cardinality: 1, templateId: '11' });
+    expect(inv.datastores[0]).toMatchObject({ usedMb: 400, totalMb: 1000 });
+    expect(inv.backupJobs[0]).toMatchObject({ errors: 1, last: '2025-11-08T11:06:40.000Z' });
+    expect(inv.vmGroups).toEqual([]);
+    expect(inventory(null)).toBeUndefined();
   });
 });
