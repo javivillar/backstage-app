@@ -12,6 +12,8 @@ export const LAYERS: Layer[] = ['biz', 'fwk', 'app', 'dat', 'ops', 'dev', 'obs',
  * level-1 domains, subdomains, processes and sub-processes (APQC levels 4-5), then the business services · applications
  */
 export const BUSINESS_LAYERS: Layer[] = ['dom', 'sub', 'proc', 'subp', ...LAYERS];
+/** what the business glass draws: the four levels of the model and the business services · applications */
+export const BUSINESS_GLASS_LAYERS: Layer[] = ['dom', 'sub', 'proc', 'subp', 'biz'];
 /** a band of the business model: domains (levels 1-2) or processes (levels 3-4) */
 export const isDomainLayer = (l: Layer) => l === 'dom' || l === 'sub';
 export const isProcessLayer = (l: Layer) => l === 'proc' || l === 'subp';

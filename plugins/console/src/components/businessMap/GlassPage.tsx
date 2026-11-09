@@ -12,7 +12,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { consoleEntityPath } from '../classify';
 import { GlassBands } from '../DependencyExplorer';
-import { BUSINESS_LAYERS, buildGraph, type DepNodeModel, glassToFill, isDomainLayer, isProcessLayer, LAYER_INFO, stackLayout } from '../depsModel';
+import { BUSINESS_GLASS_LAYERS, buildGraph, type DepNodeModel, glassToFill, isDomainLayer, isProcessLayer, LAYER_INFO, stackLayout } from '../depsModel';
 import { choose, EmptyState, Pill, TitleRow, type Tone } from '../ui';
 import { BusinessMapTabs } from './BusinessMapTabs';
 import { type Dot, Legend, NamespacePicker, Segmented, useDots } from './DashboardParts';
@@ -121,8 +121,14 @@ export const BusinessGlassPage = () => {
       window.removeEventListener('resize', measure);
     };
   }, [graph]);
-  const filled = useMemo(() => glassToFill(BUSINESS_LAYERS, size.w, size.h), [size]);
-  const pos = useMemo(() => (graph ? stackLayout(graph.nodes, graph.links, BUSINESS_LAYERS, filled.shape) : new Map<string, { x: number; y: number }>()), [graph, filled]);
+  const filled = useMemo(() => glassToFill(BUSINESS_GLASS_LAYERS, size.w, size.h), [size]);
+  // only the business bands are drawn; the platform below still counts for the lenses, the detail and the matrix
+  const drawn = useMemo(() => {
+    const nodes = (graph?.nodes ?? []).filter(n => BUSINESS_GLASS_LAYERS.includes(n.layer));
+    const ids = new Set(nodes.map(n => n.id));
+    return { nodes, links: (graph?.links ?? []).filter(l => ids.has(l.source) && ids.has(l.target)) };
+  }, [graph]);
+  const pos = useMemo(() => stackLayout(drawn.nodes, drawn.links, BUSINESS_GLASS_LAYERS, filled.shape), [drawn, filled]);
 
   const crumbs: Array<[string, string?]> = [[t('nav.portal'), '/console'], [t('bmd.crumb'), '/console/business-map'], [t('bmd.glass.title')]];
   const title = namespace ? `${t('bmd.glass.title')} · ${namespace}` : t('bmd.glass.title');
@@ -399,9 +405,9 @@ export const BusinessGlassPage = () => {
               height={size.h || undefined}
               style={{ display: 'block' }}
             >
-              <GlassBands layers={BUSINESS_LAYERS} muted={muted} shape={filled.shape} />
+              <GlassBands layers={BUSINESS_GLASS_LAYERS} muted={muted} shape={filled.shape} />
               <g>
-                {graph.links.map(l => {
+                {drawn.links.map(l => {
                   const a = pos.get(l.source);
                   const b = pos.get(l.target);
                   if (!a || !b) return null;
@@ -421,7 +427,7 @@ export const BusinessGlassPage = () => {
                   );
                 })}
               </g>
-              <g>{graph.nodes.map(node)}</g>
+              <g>{drawn.nodes.map(node)}</g>
             </svg>
           </Box>
           <Box component="aside" aria-label={t('bmd.selected')} sx={{ flex: '1 0 300px', maxWidth: { md: 360 }, boxSizing: 'border-box', py: 2, pl: { md: 2.5 }, borderLeft: { md: 1 }, borderColor: 'divider', display: 'grid', gap: 1.5, alignContent: 'start' }}>
