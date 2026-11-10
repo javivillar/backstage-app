@@ -50,6 +50,34 @@ describe('summariseZone', () => {
   });
 });
 
+describe('the interconnection in the zone view', () => {
+  it('reads the site role, the kind of each segregation and the component of a VM', () => {
+    const z = summariseZone({
+      ...raw,
+      site: { role: 'core' },
+      zones: [
+        {
+          name: 'nato', enabled: true, status: 'complete',
+          programs: [
+            { name: 'landing', n: 3, kind: 'landing', id: 'nato-landing', status: 'complete', ok: true, vms: [{ id: '40', name: 'vm-nato-landing-apisix-m2m-0', state: 'ACTIVE', role: 'vm', console: true, component: 'apisix', traffic: 'm2m', nics: [{ ip: '10.102.3.10' }] }] },
+            { name: 'sirtap', n: 1, id: 'nato-sirtap', status: 'complete', ok: true, vms: [{ id: '21', name: 'master-0', state: 'ACTIVE', role: 'master' }] },
+          ],
+        },
+      ],
+    });
+    expect(z.site).toEqual({ role: 'core' });
+    expect(z.catalog![0].programs.map(p => [p.name, p.kind])).toEqual([['landing', 'landing'], ['sirtap', undefined]]);
+    expect(z.zones[0].programs[0]).toMatchObject({ kind: 'landing', vms: [{ component: 'apisix', traffic: 'm2m', ips: ['10.102.3.10'] }] });
+    expect(z.zones[0].programs[1].vms[0].component).toBeUndefined();
+    expect(summariseZone({ ...raw, site: { role: 'edge' } }).site).toEqual({ role: 'edge' });
+  });
+
+  it('a topology.json from before it has no site (read as a core site by who uses it)', () => {
+    expect(summariseZone(raw).site).toBeUndefined();
+    expect(summariseZone(raw).zones[0].programs[0].kind).toBeUndefined();
+  });
+});
+
 describe('inventory', () => {
   it('maps the templates and storage of OpenNebula to the console shape', () => {
     const inv = inventory({

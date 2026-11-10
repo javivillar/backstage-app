@@ -1,4 +1,4 @@
-import { actionRequest, addSegregation, deleteCluster, enableZone, refuseCluster, removeSegregation, scaleCluster, tomlPrograms, withoutProgram } from './clusterInfra';
+import { actionRequest, addSegregation, type AddedSegregation, deleteCluster, enableZone, kindOf, refuseCluster, removeSegregation, scaleCluster, segregationExceptions, siteRole, tomlPrograms, withoutProgram } from './clusterInfra';
 import type { ZoneView } from './clusterZone';
 
 const TOML = `[general]
@@ -56,7 +56,7 @@ describe('infrastructure as code from the console', () => {
     expect(nato).toMatchObject({ n: 6, enabled: false }); // 5 is the highest (a400m in OpenNebula), 4 never reused
     expect((nato as { text: string }).text.endsWith('[[program]]\nzone = "nato"\nn = 6\nname = "eurofighter"\n')).toBe(true);
     const occar = addSegregation(TOML, view(), 'occar', 'a400m') as { text: string; n: number; enabled: boolean };
-    expect(occar).toMatchObject({ n: 1, enabled: true });
+    expect(occar).toMatchObject({ n: 2, common: 1, enabled: true }); // the first segregation of a zone brings its common
     expect(occar.text).toContain('enabled = true\n\n[[zone]]\nname = "nato"');
     expect(addSegregation(TOML, view(), 'nato', 'cistest')).toMatch(/already/);
     expect(addSegregation(TOML, view(), 'nato', 'Bad_Name')).toMatch(/name/);
@@ -86,11 +86,13 @@ describe('infrastructure as code from the console', () => {
     expect(scaleCluster(view(), { zone: 'nato', program: 'sirtap', workers: 2, storage: 1 }, { ...ask, workers: 2 }, 'u')).toMatch(/already/);
   });
 
-  it('removes a segregation block and nothing else', () => {
-    const t = `${TOML}\n[[exception]]\nfrom = "nato/sirtap"\nto = "nato/cistest"\n`;
+  it('removes a segregation block and the exceptions that name it, nothing else', () => {
+    const t = `${TOML}\n[[exception]]\nfrom = "nato/sirtap"\nto = "nato/cistest"\n\n[[exception]]\nfrom = "occar/a400m"\nto = "nato/sirtap"\n`;
     const out = withoutProgram(t, 'nato', 'cistest')!;
     expect(tomlPrograms(out)).toEqual([{ zone: 'nato', n: 1, name: 'sirtap' }]);
-    expect(out).toContain('[[exception]]\nfrom = "nato/sirtap"');
+    expect(out).not.toContain('nato/cistest');
+    expect(out).toContain('[[exception]]\nfrom = "occar/a400m"\nto = "nato/sirtap"\n');
+    expect(out).toContain('[general]\nx = 1\n\n[[zone]]');
     expect(withoutProgram(t, 'nato', 'nope')).toBeUndefined();
     const v = view();
     expect(removeSegregation(TOML, v, [], 0, ['nato/sirtap'], 'nato', 'sirtap')).toMatch(/this console/);
@@ -125,5 +127,192 @@ describe('infrastructure as code from the console', () => {
     expect(actionRequest(view(), [], vms, { kind: 'vm-reboot', zone: 'nato', program: 'a400m', vm: 'other' }, 'u')).toMatch(/no VM/);
     expect(actionRequest(view(), [], vms, { kind: 'cluster-start', zone: 'nato', program: 'a400m' }, 'u')).toMatch(/no cluster/);
     expect(actionRequest(view(), [], vms, { kind: 'rm', zone: 'nato', program: 'a400m' }, 'u')).toMatch(/one of/);
+  });
+});
+
+const ok = (x: AddedSegregation | string): AddedSegregation => {
+  if (typeof x === 'string') throw new Error(x);
+  return x;
+};
+/** A site: its role, and the zones of the catalog with what the host knows of them. */
+const site = (role: 'core' | 'edge' | undefined, programs: Record<string, Array<{ name: string; n: number; kind?: string }>>, live: Record<string, Array<{ name: string; vms?: number; kind?: string }>> = {}): ZoneView => ({
+  warnings: [], drift: [],
+  ...(role ? { site: { role } } : {}),
+  catalog: Object.entries(programs).map(([name, ps]) => ({ name, status: ps.length ? 'complete' : 'reserved', enabled: ps.length > 0, maxProgramN: 9, programs: ps.map(p => ({ ...p, declared: true, ok: true })) })),
+  zones: Object.entries(live).map(([name, ps]) => ({
+    name, status: 'complete',
+    programs: ps.map(p => ({ name: p.name, id: `${name}-${p.name}`, status: '', ok: true, kind: p.kind, networks: [], securityGroups: [], vms: Array.from({ length: p.vms ?? 0 }, (_, i) => ({ id: `${i}`, name: `vm-${i}`, state: 'RUNNING', role: 'vm', ips: [] })) })),
+  })),
+});
+
+const BASE = `[site]
+role = "core"
+
+[[zone]]
+name = "diflim"
+enabled = false
+
+[[zone]]
+name = "nato"
+enabled = true
+
+# [[exception]]
+# from = "occar/program1"
+# to = "occar/program2"
+
+# ---------------------------------------------------------------------------------
+# Programs. install and add-program append a block here with the next free n.
+
+[[program]]
+zone = "nato"
+n = 1
+name = "sirtap"
+`;
+
+describe('segregation kinds, common and the exceptions of the interconnection', () => {
+  it('reads the kind of a programme and the role of the site', () => {
+    expect(tomlPrograms(`${BASE}\n[[program]]\nzone = "nato"\nn = 3\nname = "landing"\nkind = "landing"   # the gateways\n`)).toEqual([{ zone: 'nato', n: 1, name: 'sirtap' }, { zone: 'nato', n: 3, name: 'landing', kind: 'landing' }]);
+    expect(kindOf('sirtap')).toBe('programme');
+    expect(kindOf('common')).toBe('common'); // an older topology.json has no kind: the reserved name says it
+    expect(kindOf('landing', 'landing')).toBe('landing');
+    expect(kindOf('sirtap', 'nonsense')).toBe('programme');
+    expect(siteRole({})).toBe('core');
+    expect(siteRole({ site: { role: 'edge' } })).toBe('edge');
+  });
+
+  it('the first segregation of a zone brings its common and the exception to ClamAV', () => {
+    const v = site('core', { diflim: [], nato: [{ name: 'sirtap', n: 1 }] });
+    const out = ok(addSegregation(BASE, v, 'diflim', 'efa'));
+    expect(out).toMatchObject({ program: 'efa', kind: 'programme', n: 2, common: 1, enabled: true, also: ['diflim/common', 'exception to ClamAV'] });
+    expect(out.text).toContain('name = "diflim"\nenabled = true');
+    expect(out.text.endsWith(
+      '[[program]]\nzone = "diflim"\nn = 1\nname = "common"\nkind = "common"\n\n' +
+      '[[program]]\nzone = "diflim"\nn = 2\nname = "efa"\n\n' +
+      '[[exception]]\nfrom = "diflim/efa"\nto = "diflim/common"\nprotocol = "TCP"\nports = "3310"\nreason = "diflim/efa scans files with the ClamAV of diflim/common"\n',
+    )).toBe(true);
+    expect(tomlPrograms(out.text).filter(p => p.zone === 'diflim')).toEqual([{ zone: 'diflim', n: 1, name: 'common', kind: 'common' }, { zone: 'diflim', n: 2, name: 'efa' }]);
+    expect(out.exceptions).toEqual([{ from: 'diflim/efa', to: 'diflim/common', protocol: 'TCP', ports: '3310', reason: expect.any(String) }]);
+    // what was there stays as it was
+    expect(out.text.startsWith(BASE.replace('name = "diflim"\nenabled = false', 'name = "diflim"\nenabled = true').replace(/\n+$/, ''))).toBe(true);
+  });
+
+  it('a zone that already has its common gets only the programme and its exception', () => {
+    const toml = ok(addSegregation(BASE, site('core', { diflim: [], nato: [] }), 'diflim', 'efa')).text;
+    const v = site('core', { diflim: [{ name: 'common', n: 1, kind: 'common' }, { name: 'efa', n: 2 }], nato: [] });
+    const out = ok(addSegregation(toml, v, 'diflim', 'tornado'));
+    expect(out).toMatchObject({ n: 3, enabled: false, also: ['exception to ClamAV'] });
+    expect(out.common).toBeUndefined();
+    expect(tomlPrograms(out.text).filter(p => p.name === 'common')).toHaveLength(1);
+    expect(out.exceptions.map(e => `${e.from}>${e.to}:${e.ports}`)).toEqual(['diflim/tornado>diflim/common:3310']);
+  });
+
+  it('a zone from before the common (nato) gets no common and no exception', () => {
+    const v = site(undefined, { nato: [{ name: 'sirtap', n: 1 }] });
+    const out = ok(addSegregation(BASE, v, 'nato', 'eurofighter'));
+    expect(out).toMatchObject({ n: 2, also: [], exceptions: [] });
+    expect(out.text).not.toContain('"common"');
+    expect(out.text.match(/\[\[exception\]\]/g)).toHaveLength(1); // the commented example only
+  });
+
+  it('a programme only live in OpenNebula counts: the zone is not empty', () => {
+    const v = site('core', { diflim: [{ name: 'old', n: 4 }] });
+    v.catalog![0].programs[0].declared = false;
+    const out = ok(addSegregation(BASE, v, 'diflim', 'efa'));
+    expect(out).toMatchObject({ n: 5, also: [] });
+    expect(out.common).toBeUndefined();
+  });
+
+  it('a landing zone on a core site: its fixed name, common, and the edge proxy of every programme', () => {
+    const toml = `${BASE}\n[[program]]\nzone = "nato"\nn = 2\nname = "common"\nkind = "common"\n\n[[program]]\nzone = "nato"\nn = 3\nname = "cistest"\n`;
+    const v = site('core', { nato: [{ name: 'sirtap', n: 1 }, { name: 'common', n: 2, kind: 'common' }, { name: 'cistest', n: 3 }] });
+    const out = ok(addSegregation(toml, v, 'nato', 'whatever', 'landing'));
+    expect(out).toMatchObject({ program: 'landing', kind: 'landing', n: 4, also: ['exception to ClamAV', '2 exception(s) to the edge proxy'] });
+    expect(out.text).toContain('[[program]]\nzone = "nato"\nn = 4\nname = "landing"\nkind = "landing"\n');
+    expect(out.exceptions.map(e => `${e.from}>${e.to}:${e.protocol}/${e.ports}`)).toEqual(['nato/landing>nato/common:TCP/3310', 'nato/landing>nato/sirtap:TCP/443', 'nato/landing>nato/cistest:TCP/443']);
+    // the name asked is ignored for a landing zone, also when it is missing
+    expect(ok(addSegregation(toml, v, 'nato', '', 'landing')).program).toBe('landing');
+    // a missing role is a core site
+    expect(ok(addSegregation(toml, { ...v, site: undefined }, 'nato', '', 'landing')).kind).toBe('landing');
+  });
+
+  it('a landing zone as the first segregation of a zone still brings common', () => {
+    const out = ok(addSegregation(BASE, site('core', { diflim: [] }), 'diflim', '', 'landing'));
+    expect(out).toMatchObject({ program: 'landing', n: 2, common: 1, enabled: true });
+    expect(out.exceptions.map(e => `${e.from}>${e.to}`)).toEqual(['diflim/landing>diflim/common']);
+  });
+
+  it('a new programme in a zone with a landing zone is reached by it', () => {
+    const toml = `${BASE}\n[[program]]\nzone = "nato"\nn = 2\nname = "common"\nkind = "common"\n\n[[program]]\nzone = "nato"\nn = 3\nname = "landing"\nkind = "landing"\n`;
+    const v = site('core', { nato: [{ name: 'sirtap', n: 1 }, { name: 'common', n: 2, kind: 'common' }, { name: 'landing', n: 3, kind: 'landing' }] });
+    const out = ok(addSegregation(toml, v, 'nato', 'a400m'));
+    expect(out.exceptions.map(e => `${e.from}>${e.to}:${e.ports}`)).toEqual(['nato/a400m>nato/common:3310', 'nato/landing>nato/a400m:443']);
+    expect(out.also).toEqual(['exception to ClamAV', '1 exception(s) to the edge proxy']);
+    // without a landing zone declared in the file, nothing points at it
+    expect(segregationExceptions('nato', 'a400m', 'programme', [{ zone: 'nato', n: 1, name: 'sirtap' }])).toEqual([]);
+  });
+
+  it('refuses a kind that does not fit the site, a second one, and the reserved names', () => {
+    const core = site('core', { nato: [{ name: 'sirtap', n: 1 }, { name: 'landing', n: 2, kind: 'landing' }], diflim: [] });
+    const edge = site('edge', { nato: [{ name: 'sirtap', n: 1 }] });
+    expect(addSegregation(BASE, core, 'diflim', '', 'integration')).toMatch(/edge site.*core site/);
+    expect(addSegregation(BASE, edge, 'nato', '', 'landing')).toMatch(/core site.*edge site/);
+    expect(ok(addSegregation(BASE, edge, 'nato', '', 'integration'))).toMatchObject({ program: 'integration', kind: 'integration' });
+    expect(ok(addSegregation(BASE, edge, 'nato', '', 'integration')).text).toContain('name = "integration"\nkind = "integration"\n');
+    expect(addSegregation(BASE, core, 'nato', '', 'landing')).toMatch(/nato\/landing already exists/);
+    for (const name of ['common', 'landing', 'integration']) expect(addSegregation(BASE, core, 'diflim', name)).toMatch(/reserved name/);
+    expect(addSegregation(BASE, core, 'diflim', 'efa', 'common')).toMatch(/kind is one of programme, landing, integration/);
+    expect(addSegregation(BASE, core, 'diflim', 'efa', 'cluster')).toMatch(/kind is one of/);
+    // common needs a number too: the zone has one left
+    const full = site('core', { diflim: [] });
+    full.catalog![0].maxProgramN = 1;
+    expect(addSegregation(BASE, full, 'diflim', 'efa')).toMatch(/No free programme numbers/);
+  });
+
+  it('only a programme gets a Kubernetes cluster', () => {
+    const v = { ...site('core', { nato: [{ name: 'landing', n: 2, kind: 'landing' }, { name: 'common', n: 3 }, { name: 'a400m', n: 4 }] }), kubernetes: { profiles: [profile], defaultProfile: 'standard' } };
+    expect(refuseCluster(v, [], { zone: 'nato', program: 'landing', profile: 'standard' })).toMatch(/landing segregation: only a programme/);
+    expect(refuseCluster(v, [], { zone: 'nato', program: 'common', profile: 'standard' })).toMatch(/common segregation/);
+    expect(refuseCluster(v, [], { zone: 'nato', program: 'a400m', profile: 'standard' })).toBeUndefined();
+  });
+
+  it('removing a segregation takes its exceptions and keeps the comments around', () => {
+    const v = site('core', { diflim: [], nato: [] });
+    const one = ok(addSegregation(BASE, v, 'diflim', 'efa')).text;
+    const two = ok(addSegregation(one, site('core', { diflim: [{ name: 'common', n: 1, kind: 'common' }, { name: 'efa', n: 2 }] }), 'diflim', '', 'landing')).text;
+    expect(two.match(/^\[\[exception\]\]$/gm)).toHaveLength(3); // efa > common, landing > common, landing > efa
+    const live = site('core', { diflim: [{ name: 'common', n: 1, kind: 'common' }, { name: 'efa', n: 2 }, { name: 'landing', n: 3, kind: 'landing' }] });
+    const out = removeSegregation(two, live, [], 0, [], 'diflim', 'efa') as { text: string };
+    expect(tomlPrograms(out.text).filter(p => p.zone === 'diflim').map(p => p.name)).toEqual(['common', 'landing']);
+    expect(out.text).not.toContain('diflim/efa');
+    expect(out.text.match(/^\[\[exception\]\]$/gm)).toHaveLength(1);
+    expect(out.text).toContain('from = "diflim/landing"\nto = "diflim/common"');
+    expect(out.text).not.toMatch(/\n\n\n/);
+    // removing the first programme of the file leaves the heading comment of the section where it was
+    const first = removeSegregation(two, live, [], 0, [], 'nato', 'sirtap') as { text: string };
+    expect(first.text).toContain('# Programs. install and add-program append a block here with the next free n.\n\n[[program]]\nzone = "diflim"');
+    expect(first.text).toContain('# [[exception]]\n# from = "occar/program1"');
+    // a block followed by the comment of the next one: the comment stays
+    const commented = `${BASE}\n# the test cluster\n[[program]]\nzone = "nato"\nn = 2\nname = "cistest"\n`;
+    expect(withoutProgram(commented, 'nato', 'sirtap')).toContain('# the test cluster\n[[program]]\nzone = "nato"\nn = 2');
+  });
+
+  it('common goes last; a landing zone goes after its components', () => {
+    const toml = ok(addSegregation(BASE, site('core', { diflim: [] }), 'diflim', 'efa')).text;
+    const both = site('core', { diflim: [{ name: 'common', n: 1, kind: 'common' }, { name: 'efa', n: 2 }] });
+    expect(removeSegregation(toml, both, [], 0, [], 'diflim', 'common')).toMatch(/removed last, after diflim\/efa/);
+    const alone = removeSegregation(toml, both, [], 0, [], 'diflim', 'efa') as { text: string };
+    expect(alone.text).not.toContain('[[exception]]\nfrom');
+    // efa is gone from git but the host has not destroyed it yet: common still waits
+    expect(removeSegregation(alone.text, both, [], 0, [], 'diflim', 'common')).toMatch(/removed last/);
+    const last = removeSegregation(alone.text, site('core', { diflim: [{ name: 'common', n: 1, kind: 'common' }] }), [], 0, [], 'diflim', 'common') as { text: string };
+    expect(tomlPrograms(last.text).filter(p => p.zone === 'diflim')).toEqual([]);
+    // a common without its kind in an older file is still the common
+    expect(removeSegregation(toml.replace('kind = "common"\n', ''), both, [], 0, [], 'diflim', 'common')).toMatch(/removed last/);
+
+    const landing = `${BASE}\n[[program]]\nzone = "nato"\nn = 3\nname = "landing"\nkind = "landing"\n`;
+    const cat = { nato: [{ name: 'sirtap', n: 1 }, { name: 'landing', n: 3, kind: 'landing' }] };
+    expect(removeSegregation(landing, site('core', cat, { nato: [{ name: 'landing', vms: 2, kind: 'landing' }] }), [], 0, [], 'nato', 'landing')).toMatch(/2 VM\(s\): delete its components first/);
+    expect(removeSegregation(landing, site('core', cat, { nato: [{ name: 'landing', kind: 'landing' }] }), [], 1, [], 'nato', 'landing')).toMatch(/1 VM\(s\): delete its components first/);
+    expect(removeSegregation(landing, site('core', cat, { nato: [{ name: 'landing', kind: 'landing' }] }), [], 0, [], 'nato', 'landing')).toHaveProperty('text');
   });
 });

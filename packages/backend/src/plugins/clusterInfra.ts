@@ -15,16 +15,36 @@ export const SCALE_LIMITS = { workers: 8, storage: 3, masters: 5 };
 export type ClusterFile = { zone: string; program: string; profile?: string; masters?: number; workers?: number; storage?: number; delete?: boolean; requested_by?: string; requested_at?: string };
 export const clusterFileName = (zone: string, program: string) => `${zone}-${program}.json`;
 
-/** The [[program]] blocks of network.toml: zone and n. */
-export function tomlPrograms(text: string): Array<{ zone: string; n: number; name: string }> {
-  const out: Array<{ zone: string; n: number; name: string }> = [];
+/** What a segregation is: a programme, the common services of its zone, or the interconnection zone of the site. */
+export const SEGREGATION_KINDS = ['programme', 'common', 'landing', 'integration'] as const;
+export type SegregationKind = (typeof SEGREGATION_KINDS)[number];
+/** Names nobody gives a programme: the name and the kind of these segregations are the same word. */
+export const RESERVED_NAMES: readonly string[] = ['common', 'landing', 'integration'];
+/** The kinds asked from the console (common comes by itself with the first segregation of a zone). */
+export const ASKED_KINDS = ['programme', 'landing', 'integration'] as const;
+export type SiteRole = 'core' | 'edge';
+
+/** The kind of a segregation: what network.toml or the host says, else its reserved name, else a programme. */
+export function kindOf(name: string, kind?: string): SegregationKind {
+  if (kind && (SEGREGATION_KINDS as readonly string[]).includes(kind)) return kind as SegregationKind;
+  return RESERVED_NAMES.includes(name) ? (name as SegregationKind) : 'programme';
+}
+/** The role of this OpenNebula installation: a core site (landing zones) unless the host says edge. */
+export const siteRole = (view: Pick<ZoneView, 'site'>): SiteRole => (view.site?.role === 'edge' ? 'edge' : 'core');
+
+export type TomlProgram = { zone: string; n: number; name: string; kind?: string };
+
+/** The [[program]] blocks of network.toml: zone, n, name and the kind when it says one. */
+export function tomlPrograms(text: string): TomlProgram[] {
+  const out: TomlProgram[] = [];
   for (const block of text.split(/^\[\[program\]\]\s*$/m).slice(1)) {
     const body = block.split(/^\[/m)[0];
     const get = (k: string) => body.match(new RegExp(`^\\s*${k}\\s*=\\s*"?([^"\\n#]+?)"?\\s*(#.*)?$`, 'm'))?.[1]?.trim();
     const zone = get('zone');
     const n = Number(get('n'));
     const name = get('name');
-    if (zone && name && Number.isInteger(n)) out.push({ zone, n, name });
+    const kind = get('kind');
+    if (zone && name && Number.isInteger(n)) out.push({ zone, n, name, ...(kind ? { kind } : {}) });
   }
   return out;
 }
@@ -48,48 +68,143 @@ export function enableZone(text: string, zone: string): string {
   throw new Error(`Zone ${zone} is not in the catalog of network.toml.`);
 }
 
+export type TomlException = { from: string; to: string; protocol: 'TCP' | 'UDP'; ports: string; reason: string };
+/** The port of the ClamAV of common, and the one of the cluster edge proxy of a programme. */
+const CLAMAV = { protocol: 'TCP' as const, ports: '3310' };
+const HTTPS = { protocol: 'TCP' as const, ports: '443' };
+
+const programBlock = (zone: string, n: number, name: string, kind: SegregationKind) => `[[program]]\nzone = "${zone}"\nn = ${n}\nname = "${name}"\n${kind === 'programme' ? '' : `kind = "${kind}"\n`}`;
+const exceptionBlock = (e: TomlException) => `[[exception]]\nfrom = "${e.from}"\nto = "${e.to}"\nprotocol = "${e.protocol}"\nports = "${e.ports}"\nreason = "${e.reason}"\n`;
+
 /**
- * network.toml with a new programme (segregation) in a zone of the catalog, enabling the zone when it is reserved.
- * n: the highest used in network.toml or OpenNebula + 1, never reused (configuration.add_program). Returns the new
- * text and n, or the reason it cannot be done.
+ * The exceptions a new segregation brings (design 2026-11-10): a programme reaches the ClamAV of common; a landing or
+ * integration zone reaches it too and the edge proxy of every programme of its zone; a new programme is reached by
+ * the landing zone of its zone. declared: the programmes of the zone in the file with the new ones; only
+ * destinations that are there.
  */
-export function addSegregation(text: string, view: ZoneView, zone: string, program: string): { text: string; n: number; enabled: boolean } | string {
-  if (!PROGRAM_NAME.test(program)) return 'The programme name: lowercase letters, digits and "-", up to 31, starting with a letter or digit.';
+export function segregationExceptions(zone: string, name: string, kind: SegregationKind, declared: TomlProgram[]): TomlException[] {
+  const id = `${zone}/${name}`;
+  const has = (k: SegregationKind) => declared.some(p => kindOf(p.name, p.kind) === k);
+  const out: TomlException[] = [];
+  if (kind === 'common') return out;
+  if (has('common')) out.push({ from: id, to: `${zone}/common`, ...CLAMAV, reason: `${id} scans files with the ClamAV of ${zone}/common` });
+  if (kind === 'programme') {
+    if (has('landing')) out.push({ from: `${zone}/landing`, to: id, ...HTTPS, reason: `the gateways of ${zone}/landing reach the edge proxy of ${id}` });
+    return out;
+  }
+  for (const p of declared.filter(x => kindOf(x.name, x.kind) === 'programme')) {
+    out.push({ from: id, to: `${zone}/${p.name}`, ...HTTPS, reason: `the gateways of ${id} reach the edge proxy of ${zone}/${p.name}` });
+  }
+  return out;
+}
+
+export type AddedSegregation = {
+  text: string;
+  /** the name written (landing and integration have a fixed one) */
+  program: string;
+  kind: SegregationKind;
+  n: number;
+  enabled: boolean;
+  /** n of the common segregation created with it (the first segregation of a zone) */
+  common?: number;
+  exceptions: TomlException[];
+  /** what the change adds besides the segregation, for the title of the pull request */
+  also: string[];
+};
+
+/**
+ * network.toml with a new segregation in a zone of the catalog, enabling the zone when it is reserved. kind: a
+ * programme (default), or the landing zone (core site) or integration zone (edge site) of the zone, whose name is the
+ * kind. The first segregation of a zone brings its common, and each one the exceptions of segregationExceptions.
+ * n: the highest used in network.toml or OpenNebula + 1, never reused (configuration.add_program). Returns the new
+ * text and what it added, or the reason it cannot be done.
+ */
+export function addSegregation(text: string, view: ZoneView, zone: string, program: string, kind: string = 'programme'): AddedSegregation | string {
+  if (!(ASKED_KINDS as readonly string[]).includes(kind)) return `The kind is one of ${ASKED_KINDS.join(', ')}.`;
+  const k = kind as (typeof ASKED_KINDS)[number];
+  const name = k === 'programme' ? program : k;
+  if (k === 'programme') {
+    if (!PROGRAM_NAME.test(name)) return 'The programme name: lowercase letters, digits and "-", up to 31, starting with a letter or digit.';
+    if (RESERVED_NAMES.includes(name)) return `${name} is a reserved name: ${name === 'common' ? 'the common segregation comes by itself with the first segregation of a zone' : `ask it as the ${name} zone`}.`;
+  }
+  const role = siteRole(view);
+  if (k === 'landing' && role !== 'core') return 'A landing zone belongs to a core site, and this is an edge site: ask its integration zone.';
+  if (k === 'integration' && role !== 'edge') return 'An integration zone belongs to an edge site, and this is a core site: ask its landing zone.';
   const z = (view.catalog ?? []).find(c => c.name === zone);
   if (!z) return `There is no zone ${zone} in the catalog.`;
   const declared = tomlPrograms(text).filter(p => p.zone === zone);
-  if (declared.some(p => p.name === program) || z.programs.some(p => p.name === program)) return `${zone}/${program} already exists.`;
+  if (declared.some(p => p.name === name) || z.programs.some(p => p.name === name)) return `${zone}/${name} already exists.`;
   const used = [...declared.map(p => p.n), ...z.programs.map(p => p.n).filter((n): n is number => typeof n === 'number')];
-  const n = Math.max(0, ...used) + 1;
+  const first = declared.length === 0 && z.programs.length === 0;
+  const next = Math.max(0, ...used) + 1;
+  const n = first ? next + 1 : next;
   if (n > (z.maxProgramN ?? 99)) return `No free programme numbers left in zone ${zone}.`;
   let out = text;
   const enabled = !z.enabled;
   if (enabled) out = enableZone(out, zone);
-  out = `${out.replace(/\n+$/, '')}\n\n[[program]]\nzone = "${zone}"\nn = ${n}\nname = "${program}"\n`;
-  return { text: out, n, enabled };
+  const blocks: string[] = [];
+  const after = [...declared];
+  if (first) {
+    blocks.push(programBlock(zone, next, 'common', 'common'));
+    after.push({ zone, n: next, name: 'common', kind: 'common' });
+  }
+  blocks.push(programBlock(zone, n, name, k));
+  const exceptions = segregationExceptions(zone, name, k, after);
+  blocks.push(...exceptions.map(exceptionBlock));
+  out = `${out.replace(/\n+$/, '')}\n\n${blocks.join('\n')}`;
+  const also = [
+    ...(first ? [`${zone}/common`] : []),
+    ...(exceptions.some(e => e.to === `${zone}/common`) ? ['exception to ClamAV'] : []),
+    ...(exceptions.some(e => e.ports === HTTPS.ports) ? [`${exceptions.filter(e => e.ports === HTTPS.ports).length} exception(s) to the edge proxy`] : []),
+  ];
+  return { text: out, program: name, kind: k, n, enabled, ...(first ? { common: next } : {}), exceptions, also };
 }
 
-/** network.toml without the [[program]] block of zone/program (the host then destroys it). */
-export function withoutProgram(text: string, zone: string, program: string): string | undefined {
-  const lines = text.split('\n');
+/** The [[table]] blocks of a TOML text: head line, and the end of its keys (comments and blank lines after them stay). */
+function tomlBlocks(lines: string[], table: string): Array<{ from: number; to: number; body: string[] }> {
   const heads = [...lines.flatMap((l, i) => (/^\s*\[/.test(l) ? [i] : [])), lines.length];
+  const out: Array<{ from: number; to: number; body: string[] }> = [];
   for (let h = 0; h < heads.length - 1; h++) {
-    const [i, end] = [heads[h], heads[h + 1]];
-    if (lines[i].trim() !== '[[program]]') continue;
-    const body = lines.slice(i, end);
-    const has = (k: string, v: string) => body.some(l => new RegExp(`^\\s*${k}\\s*=\\s*"${v}"`).test(l));
-    if (!(has('zone', zone) && has('name', program))) continue;
-    let from = i;
-    while (from > 0 && lines[from - 1].trim() === '') from--;
-    const out = [...lines.slice(0, from), ...(end < lines.length ? ['', ...lines.slice(end)] : [])].join('\n');
-    return `${out.replace(/\n+$/, '')}\n`;
+    const i = heads[h];
+    if (lines[i].trim() !== `[[${table}]]`) continue;
+    let end = heads[h + 1];
+    // what follows the last key belongs to the next block (its heading comment), not to this one
+    while (end > i + 1 && /^\s*(#.*)?$/.test(lines[end - 1])) end--;
+    out.push({ from: i, to: end, body: lines.slice(i, end) });
   }
-  return undefined;
+  return out;
+}
+
+/** A TOML text without the [[table]] blocks that match, and without the blank lines they leave behind. */
+function withoutBlocks(text: string, table: string, drop: (body: string[]) => boolean): { text: string; removed: number } {
+  const lines = text.split('\n');
+  const gone = tomlBlocks(lines, table).filter(b => drop(b.body));
+  for (const b of [...gone].reverse()) {
+    let from = b.from;
+    while (from > 0 && lines[from - 1].trim() === '') from--;
+    lines.splice(from, b.to - from, ...(from > 0 && b.to < lines.length && lines[b.to].trim() !== '' ? [''] : []));
+  }
+  return { text: gone.length ? `${lines.join('\n').replace(/\n+$/, '')}\n` : text, removed: gone.length };
+}
+
+const hasKey = (body: string[], k: string, v: string) => body.some(l => new RegExp(`^\\s*${k}\\s*=\\s*"${v}"`).test(l));
+
+/**
+ * network.toml without the [[program]] block of zone/program (the host then destroys it) and without every
+ * [[exception]] from or to it (the host rejects an exception that names a programme that is not there).
+ */
+export function withoutProgram(text: string, zone: string, program: string): string | undefined {
+  const out = withoutBlocks(text, 'program', b => hasKey(b, 'zone', zone) && hasKey(b, 'name', program));
+  if (!out.removed) return undefined;
+  const id = `${zone}/${program}`;
+  return withoutBlocks(out.text, 'exception', b => hasKey(b, 'from', id) || hasKey(b, 'to', id)).text;
 }
 
 /**
  * Removing a segregation: never an admin programme (the console runs there), never one with a cluster (asked or
- * running) or VMs (they would be destroyed with its networks). Returns the new network.toml or the reason.
+ * running) or VMs (they would be destroyed with its networks: the components of a landing or integration zone are
+ * deleted first), and common goes last, when no other segregation of its zone is left. Returns the new network.toml
+ * (without the exceptions that name it) or the reason.
  */
 export function removeSegregation(text: string, view: ZoneView, files: ClusterFile[], vmCount: number, admins: string[], zone: string, program: string): string | { text: string } {
   const id = `${zone}/${program}`;
@@ -97,8 +212,15 @@ export function removeSegregation(text: string, view: ZoneView, files: ClusterFi
   const live = view.zones.find(z => z.name === zone)?.programs.find(p => p.name === program);
   if (live?.cluster) return `${id} has the cluster ${live.cluster.name}: delete the cluster first.`;
   if (files.some(f => f.zone === zone && f.program === program && !f.delete)) return `A cluster of ${id} is asked in git: delete it first.`;
+  const declared = tomlPrograms(text).filter(p => p.zone === zone);
+  const kind = kindOf(program, declared.find(p => p.name === program)?.kind ?? live?.kind);
   const vms = (live?.vms ?? []).filter(v => v.role !== 'zone router').length + vmCount;
-  if (vms > 0) return `${id} has ${vms} VM(s): delete them first.`;
+  if (vms > 0) return `${id} has ${vms} VM(s): delete ${kind === 'landing' || kind === 'integration' ? 'its components' : 'them'} first.`;
+  if (kind === 'common') {
+    const others = new Set([...declared.map(p => p.name), ...((view.catalog ?? []).find(c => c.name === zone)?.programs ?? []).map(p => p.name)]);
+    others.delete(program);
+    if (others.size) return `${id} holds the services shared by the zone: it is removed last, after ${[...others].sort().map(o => `${zone}/${o}`).join(', ')}.`;
+  }
   const out = withoutProgram(text, zone, program);
   if (!out) return `${id} is not in network.toml.`;
   return { text: out };
@@ -119,6 +241,8 @@ export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone:
   const z = view.catalog?.find(c => c.name === req.zone);
   const known = z?.programs.find(p => p.name === req.program);
   if (!z || !known) return `There is no segregation ${req.zone}/${req.program} yet: create it first (its pull request merged and applied).`;
+  const kind = kindOf(known.name, known.kind);
+  if (kind !== 'programme') return `${req.zone}/${req.program} is a ${kind} segregation: only a programme has a Kubernetes cluster.`;
   const live = view.zones.find(x => x.name === req.zone)?.programs.find(p => p.name === req.program);
   if (live?.cluster) return `${req.zone}/${req.program} already has a cluster (${live.cluster.name}): scale it from its cluster.`;
   if (files.some(f => f.zone === req.zone && f.program === req.program)) return `A cluster for ${req.zone}/${req.program} is already asked.`;

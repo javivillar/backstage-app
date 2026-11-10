@@ -6,33 +6,104 @@
  * fail is refused at once; the state of each VM is read from its Workspace.
  */
 
+/** A component of the interconnection (policy.json "components"): its fixed image and what may be chosen. */
+export type ComponentPolicy = { image: string; kinds: string[]; traffic?: string[]; cpu: number[]; memory_mb: number[]; disk_gb: number[]; cpu_model?: string };
 export type VmPolicy = {
   images: Record<string, string>;
   sizes: Record<string, { cpu: number; memory_mb: number; disk_gb: number }>;
   limits: { vms?: number; cpu?: number; memory_mb?: number };
+  /** missing in a chart older than the interconnection: no component can be asked */
+  components?: Record<string, ComponentPolicy>;
+  component_limits?: { vms?: number; cpu?: number; memory_mb?: number };
 };
-export type VmRequest = { zone: string; program: string; name: string; size: string; image: string; requested_by?: string; requested_at?: string };
+/** A VM file: a plain VM (size and image of the policy) or a component (its own cpu, memory and disk; the image is the component's). */
+export type VmRequest = {
+  zone: string;
+  program: string;
+  name: string;
+  size?: string;
+  image?: string;
+  component?: string;
+  traffic?: string;
+  cpu?: number;
+  memory_mb?: number;
+  disk_gb?: number;
+  requested_by?: string;
+  requested_at?: string;
+};
+export type ComponentRequest = { zone: string; program: string; component: string; traffic?: string; cpu: number; memory_mb: number; disk_gb: number };
 
 export const VM_NAME = /^[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?$/;
 export const vmFileName = (v: { zone: string; program: string; name: string }) => `${v.zone}-${v.program}-${v.name}.json`;
+
+/** What a VM file takes of its segregation: a component says it itself, a plain VM through its size. */
+const weight = (policy: VmPolicy, x: VmRequest) => ({
+  cpu: x.component ? Number(x.cpu ?? 0) : policy.sizes[x.size ?? '']?.cpu ?? 0,
+  memory_mb: x.component ? Number(x.memory_mb ?? 0) : policy.sizes[x.size ?? '']?.memory_mb ?? 0,
+});
 
 /** Why a new request cannot be accepted, or undefined. programs: "zone/program" managed from this console. */
 export function refuse(policy: VmPolicy, existing: VmRequest[], v: VmRequest, programs: string[]): string | undefined {
   if (!VM_NAME.test(v.name)) return 'The name: lowercase letters, digits and "-", up to 32.';
   if (!programs.includes(`${v.zone}/${v.program}`)) return `There is no programme ${v.zone}/${v.program} managed from this console.`;
-  if (!policy.sizes[v.size]) return `The size is one of ${Object.keys(policy.sizes).join(', ')}.`;
-  if (!policy.images[v.image]) return `The image is one of ${Object.keys(policy.images).join(', ')}.`;
+  if (!v.size || !policy.sizes[v.size]) return `The size is one of ${Object.keys(policy.sizes).join(', ')}.`;
+  if (!v.image || !policy.images[v.image]) return `The image is one of ${Object.keys(policy.images).join(', ')}.`;
   if (existing.some(x => x.zone === v.zone && x.program === v.program && x.name === v.name)) return `There is already a VM ${v.name} in ${v.program}.`;
-  const mine = existing.filter(x => x.zone === v.zone && x.program === v.program);
+  // the components of a segregation have limits of their own (component_limits)
+  const mine = existing.filter(x => x.zone === v.zone && x.program === v.program && !x.component);
   const size = policy.sizes[v.size];
   const used = {
     vms: mine.length + 1,
-    cpu: mine.reduce((t, x) => t + (policy.sizes[x.size]?.cpu ?? 0), 0) + size.cpu,
-    memory_mb: mine.reduce((t, x) => t + (policy.sizes[x.size]?.memory_mb ?? 0), 0) + size.memory_mb,
+    cpu: mine.reduce((t, x) => t + weight(policy, x).cpu, 0) + size.cpu,
+    memory_mb: mine.reduce((t, x) => t + weight(policy, x).memory_mb, 0) + size.memory_mb,
   };
   const over = (['vms', 'cpu', 'memory_mb'] as const).filter(k => policy.limits[k] !== undefined && used[k] > policy.limits[k]!);
   if (over.length) return `Over the limits of the programme: ${over.map(k => `${k} ${policy.limits[k]}`).join(', ')}.`;
   return undefined;
+}
+
+/** The segregations that hold components: the landing zone of a core site, the integration zone of an edge site. */
+export const COMPONENT_PROGRAMS: readonly string[] = ['landing', 'integration'];
+
+/**
+ * Why a component cannot be asked, or undefined: the rules of the chart for a file with "component" (the component
+ * exists and fits the kind of the segregation, traffic for the ones that have it and only for them, cpu, memory and
+ * disk from its lists, component_limits per segregation). programs: "zone/program" that exist in this site.
+ */
+export function refuseComponent(policy: VmPolicy, existing: VmRequest[], v: ComponentRequest, programs: string[]): string | undefined {
+  if (!policy.components || !Object.keys(policy.components).length) return 'Interconnection components are not available yet: the policy of console-vms-oneke has no components.';
+  if (!COMPONENT_PROGRAMS.includes(v.program)) return 'A component goes in the landing zone (core site) or the integration zone (edge site) of a zone.';
+  if (!programs.includes(`${v.zone}/${v.program}`)) return `There is no ${v.program} zone in ${v.zone} yet: create ${v.zone}/${v.program} first (its pull request merged and applied).`;
+  const c = policy.components[v.component];
+  if (!c) return `The component is one of ${Object.keys(policy.components).join(', ')}.`;
+  if (!c.kinds.includes(v.program)) return `${v.component} goes only in ${c.kinds.join(' or ')} zones.`;
+  if (c.traffic?.length) {
+    if (!v.traffic || !c.traffic.includes(v.traffic)) return `The traffic of ${v.component} is one of ${c.traffic.join(', ')}.`;
+  } else if (v.traffic) {
+    return `${v.component} has no traffic to choose.`;
+  }
+  const fields: Array<['cpu' | 'memory_mb' | 'disk_gb', string]> = [['cpu', 'vCPU'], ['memory_mb', 'memory (MB)'], ['disk_gb', 'disk (GB)']];
+  for (const [k, label] of fields) {
+    if (!c[k].includes(v[k])) return `The ${label} of ${v.component} is one of ${c[k].join(', ')}.`;
+  }
+  const limits = policy.component_limits ?? {};
+  const mine = existing.filter(x => x.zone === v.zone && x.program === v.program && x.component);
+  const used = {
+    vms: mine.length + 1,
+    cpu: mine.reduce((t, x) => t + weight(policy, x).cpu, 0) + v.cpu,
+    memory_mb: mine.reduce((t, x) => t + weight(policy, x).memory_mb, 0) + v.memory_mb,
+  };
+  const over = (['vms', 'cpu', 'memory_mb'] as const).filter(k => limits[k] !== undefined && used[k] > limits[k]!);
+  if (over.length) return `Over the limits of the components of ${v.zone}/${v.program}: ${over.map(k => `${k} ${limits[k]}`).join(', ')}.`;
+  return undefined;
+}
+
+/** The name of a new component: <component>[-<traffic>]-<n>, the first n nobody has (taken: names in git or asked). */
+export function componentName(taken: string[], component: string, traffic?: string): string {
+  const base = `${component}${traffic ? `-${traffic}` : ''}`;
+  for (let n = 0; ; n++) {
+    if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
+  }
 }
 
 /** A file change of a pull request: text to write, or null to delete the file. */
