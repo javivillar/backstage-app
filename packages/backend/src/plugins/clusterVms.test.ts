@@ -69,11 +69,11 @@ describe('VMs of the console as code', () => {
 const withComponents: VmPolicy = {
   ...policy,
   components: {
-    apisix: { image: 'refresquito-apisix-coraza-ubuntu2404-0.1.4', kinds: ['landing', 'integration'], traffic: ['u2m', 'm2m'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [10, 20, 40], cpu_model: 'host-passthrough' },
+    apisix: { image: 'refresquito-apisix-coraza-ubuntu2404-0.1.4', kinds: ['landing', 'integration'], traffic: ['u2m', 'm2m'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [20, 40, 80], cpu_model: 'host-passthrough' },
     sftpgo: { image: 'refresquito-sftpgo-ubuntu2404-0.1.2', kinds: ['landing'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [20, 50, 100] },
     kafka: { image: 'refresquito-kafka-ubuntu2404-0.1.0', kinds: ['landing'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [10, 20, 40] },
   },
-  component_limits: { vms: 3, cpu: 8, memory_mb: 16384 },
+  component_limits: { vms: 3, cpu: 8, memory_mb: 16384 }, // smaller than the chart's (6, 16, 32768) to test them,
 };
 const comp = (over: Partial<ComponentRequest> = {}): ComponentRequest => ({ zone: 'nato', program: 'landing', component: 'apisix', traffic: 'm2m', cpu: 2, memory_mb: 4096, disk_gb: 20, ...over });
 
@@ -113,6 +113,11 @@ describe('interconnection components as VM files', () => {
     expect(refuseComponent(withComponents, [{ ...file('a', 4, 8192), zone: 'occar' }, { ...file('b', 4, 8192), zone: 'occar' }], comp(), programs)).toBeUndefined();
     // and a plain VM is not counted against the components, nor a component against the plain VMs
     expect(refuse(withComponents, [file('a', 4, 8192), file('b', 4, 8192)], { ...plain, name: 'x', size: 'small' }, programs)).toBeUndefined();
+  });
+
+  it('refuses a disk the image does not fit in and numbers sent as text', () => {
+    expect(refuseComponent(withComponents, [], comp({ disk_gb: 10 }), programs)).toMatch(/disk \(GB\) of apisix is one of 20, 40, 80/);
+    expect(refuseComponent(withComponents, [], comp({ cpu: '2' as unknown as number }), programs)).toMatch(/vCPU/);
   });
 
   it('names a component <component>[-<traffic>]-<n> with the first free n', () => {

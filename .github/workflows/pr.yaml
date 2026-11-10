@@ -42,5 +42,10 @@ jobs:
           yarn --cwd packages/backend test src/plugins/manageModel src/plugins/businessMap
           yarn --cwd plugins/console test src/components/EntityData src/components/EntityGrafana src/components/monitoringModel src/components/manage src/components/classifyTypes src/components/businessService src/components/depsModel src/components/businessMap src/pages src/paths
 
+      - name: Test the interconnection, the segregations and the architecture views of the console
+        run: |
+          yarn --cwd packages/backend test src/plugins/clusterInfra src/plugins/clusterVms src/plugins/clusterZone
+          yarn --cwd plugins/console test src/interconnection src/components/clusterArchModel src/components/Interconnection src/components/InfraPages src/components/ClusterOverviewPage
+
       - name: Build backend
         run: yarn build:backend

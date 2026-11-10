@@ -7,7 +7,7 @@ import { groupFailures } from './CisClusterPage';
 import { ProgrammePage, VmDetailPage } from './InfraDetail';
 import { Route, Routes } from 'react-router-dom';
 import { ClusterScalePage } from './ClusterScalePage';
-import { catalogLanes, MarketplacePage, PlatformPage } from './InfraPages';
+import { MarketplacePage } from './MarketplacePage';
 
 const standard = {
   name: 'standard', default: true, description: 'HA control plane', counts: { vnf: 1, master: 2, worker: 2, storage: 1 }, memoryMb: 57344,
@@ -62,30 +62,29 @@ const wrap = (children: ReactNode, route?: string) =>
   );
 
 describe('Infrastructure layer', () => {
-  it('draws the catalog: enabled zones first, reserved ones empty', () => {
-    const lanes = catalogLanes(zone.catalog);
-    expect(lanes.map(l => l.label)).toEqual(['NATO', 'OCCAR']);
-    expect(lanes[0].nodes.map(n => n.title)).toEqual(['nato/sirtap', 'nato/a400m']);
-    expect(lanes[1].nodes[0]).toMatchObject({ title: 'Reserved', dashed: true });
+  it('names what a pull request of the console asks', () => {
     expect(pullKind({ number: 1, title: '', url: '', created: '', branch: 'console/cluster-nato-a-1' })).toBe('New cluster');
+    expect(pullKind({ number: 1, title: '', url: '', created: '', branch: 'console/seg-nato-a-1' })).toBe('New segregation');
   });
 
-  it('asks a new segregation through a pull request', async () => {
-    await wrap(<PlatformPage />);
-    expect(await screen.findByText('1 / 2')).toBeInTheDocument();
+  it('asks a new segregation through a pull request, from the Marketplace', async () => {
+    await wrap(<MarketplacePage />);
+    expect(await screen.findByText('Core site')).toBeInTheDocument(); // a topology.json without site role is a core
     expect(await screen.findByText('#5')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Programme/), { target: { value: 'eurofighter' } });
     expect(screen.getByText('nato/eurofighter · n=3')).toBeInTheDocument();
+    expect(screen.getByText(/nato is from before the common segregation/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open the pull request' }));
-    await waitFor(() => expect(posts.find(p => p.url.endsWith('/infra/segregations'))?.body).toEqual({ zone: 'nato', program: 'eurofighter' }));
+    await waitFor(() => expect(posts.find(p => p.url.endsWith('/infra/segregations'))?.body).toEqual({ zone: 'nato', program: 'eurofighter', kind: 'programme' }));
     expect(await screen.findByText(/Pull request #9 opened for nato\/eurofighter/)).toBeInTheDocument();
   });
 
   it('offers the profiles that fit and creates a cluster in a programme without one', async () => {
-    await wrap(<MarketplacePage />);
+    await wrap(<MarketplacePage />, '/?tab=clusters');
     expect(await screen.findByText('OneKE · standard')).toBeInTheDocument();
     expect(screen.getByText('Does not fit now')).toBeInTheDocument(); // 56 GB > 30 GB free
     fireEvent.click(screen.getAllByRole('button', { name: 'Create with this profile' })[0]); // minimal
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open the pull request' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Open the pull request' }));
     await waitFor(() => expect(posts.find(p => p.url.endsWith('/infra/clusters'))?.body).toEqual({ zone: 'nato', program: 'a400m', profile: 'minimal' }));
   });

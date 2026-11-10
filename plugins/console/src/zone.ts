@@ -17,6 +17,9 @@ export type ZoneVm = {
   labels?: string;
   console?: boolean;
   requestedBy?: string;
+  /** an interconnection component (apisix, sftpgo, kafka) and, for APISIX, its traffic (u2m, m2m) */
+  component?: string;
+  traffic?: string;
   nics?: Array<{ network: string; ip: string; mac?: string; securityGroups?: string }>;
   disks?: Array<{ image: string; sizeMb: number; datastore?: string; target?: string }>;
   cpuPct?: number;
@@ -32,6 +35,8 @@ export type ZoneProgram = {
   id: string;
   status: string;
   ok: boolean | null;
+  /** programme | common | landing | integration; missing in a topology.json from before the interconnection */
+  kind?: string;
   fqdn?: string;
   cluster?: { name: string; state: string; vip?: string; roles: Record<string, number>; fqdn?: string };
   networks: ZoneNetwork[];
@@ -48,10 +53,12 @@ export type Zone = {
   programs: ZoneProgram[];
 };
 export type DriftItem = { zone: string; program?: string; kind: string; name: string; detail: string };
-export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
+export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; component?: string; traffic?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 export type ZoneView = {
   generated?: string;
   domain?: string;
+  /** what this OpenNebula installation is: a core site (landing zones) or an edge site (an integration zone); missing = core */
+  site?: { role: 'core' | 'edge' };
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
   inventory?: Inventory;
   warnings: string[];
@@ -87,14 +94,35 @@ export function zoneVms(z: Zone): Array<ZoneVm & { program: string }> {
 }
 
 /** GET /api/cluster/zone/vms: the VMs requested from the console (files of console-vms-oneke) and their Workspace. */
+/** A component of the interconnection (policy.json "components"): its fixed image and what may be chosen. */
+export type ComponentPolicy = { image: string; kinds: string[]; traffic?: string[]; cpu: number[]; memory_mb: number[]; disk_gb: number[]; cpu_model?: string };
+export type VmLimits = { vms?: number; cpu?: number; memory_mb?: number };
 export type VmPolicy = {
   images: Record<string, string>;
   sizes: Record<string, { cpu: number; memory_mb: number; disk_gb: number }>;
-  limits: { vms?: number; cpu?: number; memory_mb?: number };
+  limits: VmLimits;
+  /** missing while the chart console-vms-oneke has no interconnection components */
+  components?: Record<string, ComponentPolicy>;
+  component_limits?: VmLimits;
 };
 export type VmState = { synced?: boolean; ready?: boolean; message?: string; outputs?: Record<string, unknown> };
-export type VmRequest = { zone: string; program: string; name: string; size: string; image: string; requested_by?: string; requested_at?: string; state?: VmState };
-export const useVmRequests = () => useClusterGet<{ policy: VmPolicy; vms: VmRequest[]; pulls?: ConsolePull[]; allowed: boolean }>('/zone/vms', 30_000);
+/** A VM file: a plain VM (size and image of the policy) or a component (its own cpu, memory and disk). */
+export type VmRequest = {
+  zone: string;
+  program: string;
+  name: string;
+  size?: string;
+  image?: string;
+  component?: string;
+  traffic?: string;
+  cpu?: number;
+  memory_mb?: number;
+  disk_gb?: number;
+  requested_by?: string;
+  requested_at?: string;
+  state?: VmState;
+};
+export const useVmRequests = () => useClusterGet<{ policy: VmPolicy; vms: VmRequest[]; pulls?: ConsolePull[]; merged?: ConsolePull[]; allowed: boolean }>('/zone/vms', 30_000);
 
 /** Where a VM is, in words: from its Workspace (Argo CD → Crossplane → Terraform → OpenNebula). */
 export function vmStatus(v: VmRequest): { label: string; tone: 'ok' | 'warn' | 'bad' | 'info' | 'off'; detail: string } {
@@ -109,7 +137,7 @@ export function vmStatus(v: VmRequest): { label: string; tone: 'ok' | 'warn' | '
 }
 
 /** Every zone of the catalog (reserved too) and its programmes: where a new segregation can go. */
-export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; declared: boolean; ok: boolean | null; cluster?: string }> };
+export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string }> };
 export type RoleName = 'vnf' | 'master' | 'worker' | 'storage';
 /** A OneKE profile of the marketplace ([kubernetes.profiles] of network.toml). */
 export type ClusterProfile = {
@@ -146,8 +174,10 @@ export const SCALE_LIMITS = { workers: 8, storage: 3, masters: 5 };
 /** What a pull request of the console asks, from its branch. */
 export function pullKind(p: ConsolePull): string {
   const b = p.branch.replace(/^console\//, '');
-  if (b.startsWith('vm-new-')) return 'New VM';
-  if (b.startsWith('vm-del-')) return 'Delete VM';
+  // a VM of a landing or integration zone is a component of the interconnection
+  const component = /^vm-(new|del)-/.test(b) && ['landing', 'integration'].includes(pullTarget(p).program ?? '');
+  if (b.startsWith('vm-new-')) return component ? 'New component' : 'New VM';
+  if (b.startsWith('vm-del-')) return component ? 'Delete component' : 'Delete VM';
   if (b.startsWith('seg-')) return 'New segregation';
   if (b.startsWith('segdel-')) return 'Remove segregation';
   if (b.startsWith('cluster-')) return 'New cluster';
@@ -180,7 +210,7 @@ export function lifecycle(p: ConsolePull, r?: ReconcileStatus): Lifecycle {
   if (!p.merged) return { label: 'Waiting for review', tone: 'warn', detail: 'merge the pull request to go on' };
   const merged = Date.parse(p.merged);
   const kind = pullKind(p);
-  if (kind === 'New VM' || kind === 'Delete VM') return { label: 'Merged', tone: 'info', detail: 'Argo CD and Crossplane do it: see the VM' };
+  if (/ (VM|component)$/.test(kind)) return { label: 'Merged', tone: 'info', detail: 'Argo CD and Crossplane do it: see the VM' };
   const after = (at?: string) => !!at && Date.parse(at) >= merged;
   if (kind === 'New segregation' || kind === 'Remove segregation') {
     const s = r?.segregation;

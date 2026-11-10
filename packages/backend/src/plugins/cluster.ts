@@ -537,11 +537,12 @@ export default createBackendPlugin({
         router.get('/zone/vms', async (req, res) => {
           try {
             const { admin } = await actor(req);
-            const [{ policy, vms }, states, pulls] = await Promise.all([readRequests(), readWorkspaces(), pullsOf(vmRepo)]);
+            const [{ policy, vms }, states, pulls, merged] = await Promise.all([readRequests(), readWorkspaces(), pullsOf(vmRepo), mergedOf(vmRepo)]);
             res.json({
               policy,
               allowed: admin,
               pulls: pulls.filter(p => p.branch.startsWith('console/vm-')),
+              merged: merged.filter(p => p.branch.startsWith('console/vm-')),
               admins,
               vms: vms.map(({ sha: _sha, file: _file, ...v }) => ({ ...v, state: states.get(`vm-${v.zone}-${v.program}-${v.name}`) })),
             });

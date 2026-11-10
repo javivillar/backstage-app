@@ -5,7 +5,7 @@ import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useClusterPost } from '../post';
-import { consoleVmName, type InfraView, pullTarget, useInfra, useVmRequests, useZone, vmHref, vmStatus, type ZoneVm } from '../zone';
+import { consoleVmName, type InfraView, pullTarget, useInfra, useVmRequests, useZone, type VmRequest, vmHref, vmStatus, type ZoneVm } from '../zone';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Card } from './NamespaceSections';
@@ -15,6 +15,7 @@ import { OpsActions } from './OpsActions';
 import { vmRuns } from './ZonePages';
 import { useRq } from '../theme/consoleTheme';
 import { useI18n } from '../i18n';
+import { componentTitle } from '../interconnection';
 import { Id, Kpis, TitleRow, choose } from './ui';
 import { ActionsMenu } from './ui-infra';
 
@@ -261,19 +262,22 @@ export const VmDetailPage = () => {
   const prog = view?.zones.find(z => z.name === zoneName)?.programs.find(p => p.name === progName);
   const programPath = progName ? `/console/infrastructure/platform/${zoneName}/${progName}` : undefined;
   const policy = req.data?.policy;
-  const size = request ? policy?.sizes[request.size] : undefined;
+  // a component of the interconnection says its own cpu, memory and disk; a plain VM through its size
+  const sizeOf = (v: VmRequest) => (v.component ? { cpu: Number(v.cpu ?? 0), memory_mb: Number(v.memory_mb ?? 0), disk_gb: Number(v.disk_gb ?? 0) } : policy?.sizes[v.size ?? '']);
+  const size = request ? sizeOf(request) : undefined;
+  const asked = (v: VmRequest) => (v.component ? `${componentTitle(v.component, v.traffic)} · ${v.cpu} vCPU · ${Number(v.memory_mb ?? 0) / 1024} GiB · ${v.disk_gb} GB` : `${v.image} · ${v.size}`);
   const ip = vm?.ips[0] ?? (request?.state?.outputs?.ip ? String(request.state.outputs.ip) : '');
   const bastion = prog?.cluster?.vip;
   const fqdn = view?.domain && progName ? `${name}.${zoneName}.${progName}.${view.domain}` : '';
   const sg = prog?.securityGroups.find(g => g.role === 'private') ?? prog?.securityGroups.find(() => (vm?.nics ?? []).some(n => n.securityGroups?.split(',').length));
   const disk = vm?.disks?.[0];
   const mine = (req.data?.vms ?? []).filter(v => v.zone === zoneName && v.program === progName);
-  const used = { vms: mine.length, cpu: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.cpu ?? 0), 0), mem: mine.reduce((t, v) => t + (policy?.sizes[v.size]?.memory_mb ?? 0), 0) };
+  const used = { vms: mine.length, cpu: mine.reduce((t, v) => t + (sizeOf(v)?.cpu ?? 0), 0), mem: mine.reduce((t, v) => t + (sizeOf(v)?.memory_mb ?? 0), 0) };
   let ssh = '';
   if (ip) ssh = bastion ? `ssh -J refresquito@${bastion} refresquito@${ip}` : `ssh refresquito@${ip}`;
   const pending = vm?.state === 'PENDING';
   const events: Array<{ at?: string; text: string; when?: string }> = [];
-  if (request?.requested_at) events.push({ at: request.requested_at, text: `Asked from the console by ${(request.requested_by ?? '').replace(/^user:default\//, '')}: ${request.size}, ${request.image}` });
+  if (request?.requested_at) events.push({ at: request.requested_at, text: `Asked from the console by ${(request.requested_by ?? '').replace(/^user:default\//, '')}: ${asked(request)}` });
   for (const h of vm?.history ?? []) {
     events.push({ at: h.start, text: `Deployed on ${h.host}`, when: h.start ? undefined : 'since it was created' });
     if (h.end) events.push({ at: h.end, text: `Left ${h.host}: ${HISTORY_ACTIONS[h.action ?? ''] ?? `action ${h.action}`}` });
@@ -293,7 +297,7 @@ export const VmDetailPage = () => {
           {(vm?.console || request) && <Badge label="console VM" {...TONES.info} />}
         </>
       }
-      sub={[request ? `${request.image} · ${request.size}` : '', progName ? `programme ${zoneName}/${progName}` : '', vm ? `OpenNebula ID ${vm.id}` : ''].filter(Boolean).join(' · ')}
+      sub={[request ? asked(request) : '', progName ? `programme ${zoneName}/${progName}` : '', vm ? `OpenNebula ID ${vm.id}` : ''].filter(Boolean).join(' · ')}
       finding={choose<string | undefined>([[pending, 'Waiting for room in the hosts: it starts by itself when there is room.'], [st && st.tone === 'bad', st?.detail]], undefined)}
       findingTone={pending ? 'warn' : 'neg'}
       actions={
