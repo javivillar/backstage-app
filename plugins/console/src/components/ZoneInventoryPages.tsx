@@ -30,14 +30,14 @@ const imageTone = (state: string) => {
 };
 
 /** The tabs of a page, kept in ?tab= so a link opens the same one. */
-function useTab<T extends string>(tabs: readonly T[]): [T, (t: T) => void] {
+export function useTab<T extends string>(tabs: readonly T[]): [T, (t: T) => void] {
   const [params, setParams] = useSearchParams();
   const asked = params.get('tab') as T | null;
   const tab = asked && tabs.includes(asked) ? asked : tabs[0];
   return [tab, t => setParams({ tab: t }, { replace: true })];
 }
 
-const PageTabs = <T extends string>({ tabs, tab, onChange, label }: { tabs: Array<[T, string]>; tab: T; onChange: (t: T) => void; label: string }) => {
+export const PageTabs = <T extends string>({ tabs, tab, onChange, label }: { tabs: Array<[T, string]>; tab: T; onChange: (t: T) => void; label: string }) => {
   const rq = useRq();
   return (
     <Tabs value={tab} onChange={(_, v) => onChange(v)} aria-label={label} variant="scrollable" sx={{ borderBottom: `1px solid ${rq.border}` }}>

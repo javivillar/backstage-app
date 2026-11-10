@@ -18,9 +18,11 @@ import { ImageCatalogPage } from './ImageCatalogPage';
 import { ContinuityPage, ContinuityServicePage } from './ContinuityPage';
 import { ZoneNetworksPage, ZoneOverviewPage, ZoneSecurityGroupsPage, ZoneVmsPage } from './ZonePages';
 import { ZoneStoragePage, ZoneTemplatesPage } from './ZoneInventoryPages';
-import { RetirePage } from './InfraRetirePage';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
-import { MarketplacePage, PlatformOverviewPage, PlatformPage } from './InfraPages';
+import { PlatformPage } from './InfraPages';
+import { MarketplacePage } from './MarketplacePage';
+import { PlatformOverviewPage } from './PlatformOverviewPage';
+import { InterconnectionPage } from './InterconnectionPage';
 import { ClusterScalePage } from './ClusterScalePage';
 import { ProgrammePage, VmDetailPage } from './InfraDetail';
 import { CisClusterPage } from './CisClusterPage';
@@ -146,7 +148,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/infrastructure/storage" element={<ZoneStoragePage />} />
         <Route path="/infrastructure/platform" element={<PlatformPage />} />
         <Route path="/infrastructure/marketplace" element={<MarketplacePage />} />
-        <Route path="/infrastructure/retire" element={<RetirePage />} />
+        <Route path="/infrastructure/interconnection" element={<InterconnectionPage />} />
         <Route path="/infrastructure/platform/:zone/:program" element={<ProgrammePage />} />
         <Route path="/infrastructure/clusters/:zone/:program" element={<ClusterScalePage />} />
         <Route path="/infrastructure/vm/:name" element={<VmDetailPage />} />

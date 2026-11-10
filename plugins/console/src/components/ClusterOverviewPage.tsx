@@ -15,6 +15,8 @@ import { useRq } from '../theme/consoleTheme';
 import { useI18n } from '../i18n';
 import { Id, Kpis, Pill, Row, Section, TitleRow, choose, type Tone } from './ui';
 import { ActionsMenu, Sub, Table, UseMeter, healthTone, syncTone } from './ui-infra';
+import { ClusterArchitecture } from './ClusterArchitecture';
+import { PageTabs, useTab } from './ZoneInventoryPages';
 
 
 const ok = { bg: '#dcfae5', fg: '#04250e' };
@@ -177,9 +179,15 @@ const TopCosts = () => {
   );
 };
 
-/** Cluster layer: the nodes, Argo CD applications and volumes of this cluster (read from Prometheus by the backend). */
+const TABS = ['summary', 'architecture'] as const;
+
+/**
+ * Cluster layer: the nodes, Argo CD applications and volumes of this cluster (read from Prometheus by the backend).
+ * Its Architecture tab draws what is deployed by the bands of the catalogue (ClusterArchitecture).
+ */
 export const ClusterOverviewPage = () => {
   const cfg = useConsoleConfig();
+  const [tab, setTab] = useTab(TABS);
   const { loading, data, error, reload } = useClusterOverview();
   const infra = useInfra();
   const zoneView = useZone();
@@ -240,6 +248,14 @@ export const ClusterOverviewPage = () => {
       {loading && !data && <Progress />}
       {error && <WarningPanel title={t('cluster.unreadable')} message={error} />}
       {data && (
+        <Box sx={{ mb: 2.5 }}>
+          <PageTabs label={t('nav.overview')} tab={tab} onChange={setTab} tabs={TABS.map(k => [k, t(`ic.tab.${k}`)])} />
+        </Box>
+      )}
+      {data && tab === 'architecture' && (
+        <ClusterArchitecture overview={data} vip={(zoneView.data as InfraView | undefined)?.zones.find(z => z.name === zone)?.programs.find(p => p.name === program)?.cluster?.vip} />
+      )}
+      {data && tab === 'summary' && (
         <>
           <Kpis
             items={[

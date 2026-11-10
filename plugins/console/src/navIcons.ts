@@ -8,7 +8,6 @@ import CodeIcon from '@mui/icons-material/Code';
 import ComputerIcon from '@mui/icons-material/Computer';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DatasetIcon from '@mui/icons-material/Dataset';
-import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EngineeringIcon from '@mui/icons-material/Engineering';
 import BackupIcon from '@mui/icons-material/Backup';
@@ -41,6 +40,7 @@ import SchemaIcon from '@mui/icons-material/Schema';
 import ShieldIcon from '@mui/icons-material/Shield';
 import StorageIcon from '@mui/icons-material/Storage';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import SyncAltIcon from '@mui/icons-material/SyncAlt';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 
@@ -51,7 +51,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/infrastructure/platform': LanIcon,
   '/console/infrastructure/marketplace': StorefrontIcon,
-  '/console/infrastructure/retire': DeleteForeverIcon,
+  '/console/infrastructure/interconnection': SyncAltIcon,
   '/console/infrastructure': MapIcon,
   '/console/infrastructure/overview': DashboardIcon,
   '/console/your-clusters': GridViewIcon,

@@ -13,6 +13,7 @@ import { Table } from './NetworkPage';
 import { useClusterPost } from '../post';
 import { ConfirmBar, PullList, ResultNote, useChange } from './Requests';
 import { useI18n } from '../i18n';
+import { componentTitle } from '../interconnection';
 import { Id } from './ui';
 
 /** Zone › Virtual machines: create a VM (backstage-admin), and the VMs requested from the console with what the host did. */
@@ -123,7 +124,7 @@ export const ZoneVmRequests = ({ zone }: { zone: Zone }) => {
                 </Typography>
               </span>,
               v.program,
-              `${v.size} · ${v.image}`,
+              v.component ? `${componentTitle(v.component, v.traffic)} · ${v.cpu ?? '?'} vCPU · ${(v.memory_mb ?? 0) / 1024} GiB · ${v.disk_gb ?? '?'} GB` : `${v.size} · ${v.image}`,
               <span>
                 <Badge label={st.label} {...TONES[st.tone]} />
                 {st.detail && (

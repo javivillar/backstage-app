@@ -116,8 +116,8 @@ config (it needs **Contents** and **Pull requests** write); the backend checks i
 | Page | Route | Backend | Git |
 |---|---|---|---|
 | Zone › Virtual machines | `/console/infrastructure/vms` | `POST /api/cluster/zone/vms[/delete]` | PR in `console.vms.repo` (refresquito-services), `charts/console-vms-oneke/vms/*.json` → Argo CD + Crossplane |
-| Infrastructure › Platform | `/console/infrastructure/platform` | `POST /api/cluster/infra/segregations` | PR in `console.infra.repo` (opennebula), `[[program]]` appended to `configuration/network.toml` |
-| Infrastructure › Marketplace | `/console/infrastructure/marketplace` | `POST /api/cluster/infra/clusters` | PR adding `configuration/clusters/<zone>-<program>.json` |
+| Platform › Marketplace › Segregations | `/console/infrastructure/marketplace` | `POST /api/cluster/infra/segregations` (`kind`) | PR in `console.infra.repo` (opennebula), `[[program]]` and `[[exception]]` blocks appended to `configuration/network.toml` |
+| Platform › Marketplace › Kubernetes clusters | `/console/infrastructure/marketplace?tab=clusters` | `POST /api/cluster/infra/clusters` | PR adding `configuration/clusters/<zone>-<program>.json` |
 | Cluster › Scale | `/console/cluster/scale` | `POST /api/cluster/infra/clusters/scale` | commit to `main` of the same file |
 
 The PRs live on branches `console/<kind>-…` (`GitHubFiles.pullRequest`); `GET /zone/vms` and `GET /infra` list the open
@@ -129,9 +129,9 @@ catalog, the profiles and the free memory in `topology.json` (`summariseZone`: `
 
 | Page | Route | Backend | Git |
 |---|---|---|---|
-| Platform › Retire (destroy a cluster, remove a segregation; type the name to confirm) | `/console/infrastructure/retire` | `POST /api/cluster/infra/clusters/delete`, `POST /api/cluster/infra/segregations/delete` | the same PRs as Marketplace and the programme page |
 | Platform › a programme (networks, security groups, router, cluster, VMs) | `/console/infrastructure/platform/:zone/:program` | `POST /api/cluster/infra/segregations/delete` | PR removing its `[[program]]` (host: `destroy`) |
-| Clusters of the platform › Delete | Marketplace | `POST /api/cluster/infra/clusters/delete` | PR with `"delete": true` (host: `cluster-destroy`) |
+| Platform › Kubernetes clusters › Delete (type the cluster name) | `/console/clusters` | `POST /api/cluster/infra/clusters/delete` | PR with `"delete": true` (host: `cluster-destroy`) |
+| Platform › Zones and segregations › Remove | `/console/infrastructure/platform` | `POST /api/cluster/infra/segregations/delete` | PR removing its `[[program]]` and every `[[exception]]` that names it |
 | Scale any cluster, masters only added | `/console/infrastructure/clusters/:zone/:program` | `POST /api/cluster/infra/clusters/scale` (`masters`) | commit to `main` |
 | A VM (OpenNebula data, request, Crossplane) | `/console/infrastructure/vm/:name` | `GET /api/cluster/zone` + `/zone/vms` | — |
 | CIS Kubernetes cluster (kube-bench) | `/console/cis-cluster` | `GET /api/sbom/kubebench` (wazuh-oneke >= 0.25.10) | — |
@@ -165,6 +165,32 @@ show the product on hover (`product` of each page in `App.tsx`); Portal › Home
 - **API**: the operations of each provided API read from its OpenAPI definition (JSON, or YAML without a library),
   those without authentication marked, who consumes it, and the APIs it consumes with their provider.
 - **Catalogue** (`PortalHome.tsx`): cards with an icon per kind and the Argo CD state, filter chips and search.
+
+## 1.5: interconnection, common, one place to create
+
+Design: opennebula `docs/superpowers/specs/2026-11-10-interconnection-design.md`. A site is a **core** (landing zones)
+or an **edge** (an integration zone): `site.role` of `topology.json`, a core when it is missing. A segregation has a
+**kind** (`programme`, `common`, `landing`, `integration`; missing: what its name says). Platform menu: Overview,
+Marketplace, Zones and segregations, Kubernetes clusters, Interconnection. **Platform › Retire is gone**: a segregation
+is removed in Zones and segregations, a cluster deleted in Kubernetes clusters.
+
+| Page | Route | Reads | Changes (always a PR) |
+|---|---|---|---|
+| Marketplace › 1 Segregations (programme, landing zone, integration zone) | `/console/infrastructure/marketplace` | `GET /zone` (catalog, `site.role`) | `POST /infra/segregations` `{zone, program, kind}`: the first segregation of a zone also adds `<zone>/common`; exceptions to ClamAV (TCP 3310) and to the edge proxy of the programmes (TCP 443) |
+| Marketplace › 2 Kubernetes clusters | `…/marketplace?tab=clusters` | `GET /zone` (profiles, capacity) | `POST /infra/clusters`, only for programme segregations |
+| Marketplace › 3 Interconnection components (APISIX + Coraza, SFTPGo, Kafka) | `…/marketplace?tab=components` | `GET /zone/vms` (`policy.components`, `component_limits`) | `POST /zone/vms` `{zone, program, component, traffic?, cpu, memory_mb, disk_gb}`: a VM file `vms/<zone>-<program>-<component>[-<traffic>]-<n>.json` of console-vms-oneke |
+| Zones and segregations (read-only, Remove) | `/console/infrastructure/platform` | `GET /zone`, `/infra`, `/zone/vms` | `POST /infra/segregations/delete`; refused with a cluster or VMs, `common` goes last |
+| Kubernetes clusters (Open, Scale, Delete) | `/console/clusters` | `GET /zone`, `/infra` | `POST /infra/clusters/delete` after typing the cluster name; never the cluster of this console |
+| Interconnection (read-only: path, zones, components, requests) | `/console/infrastructure/interconnection` | `GET /zone` (VMs with `component`, `traffic`), `GET /zone/vms` (files, Workspaces, pull requests) | `POST /zone/vms/delete` |
+| Overview › Summary, Architecture | `/console/infrastructure/overview[?tab=architecture]` | `GET /zone`, `/infra`, `/zone/vms` | — |
+| Cluster › Overview › Architecture | `/console/cluster?tab=architecture` | `GET /overview`, `/network`, `/zone`, the catalog | — |
+
+The model is `src/interconnection.ts` (kinds, the pieces a zone should have, the path, what needs attention) and
+`components/clusterArchModel.ts` (the bands of the catalogue with `depsModel.ts`). Backend rules: `clusterInfra.ts`
+(`addSegregation`, `segregationExceptions`, `removeSegregation`) and `clusterVms.ts` (`refuseComponent`, the same rules
+as the chart). The other site of the interconnection is another OpenNebula: nothing of it is read, so the pages show a
+placeholder and "no edge site connected yet" rather than data. The two diagrams take every colour from the console
+theme (`useArchColours`: day and night).
 
 ## Configuration
 

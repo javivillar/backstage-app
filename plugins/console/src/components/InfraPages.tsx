@@ -1,25 +1,28 @@
-import { Progress, WarningPanel } from '@backstage/core-components';
+import { Link, Progress, WarningPanel } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { type ReactNode, useState } from 'react';
-import { Link } from '@backstage/core-components';
 import { useClusterPost } from '../post';
-import { type CatalogZone, type ClusterProfile, type InfraView, type ReconcileStatus, SCALE_LIMITS, useInfra, useZone, vmHref } from '../zone';
+import { kindCounts, removalBlock, type Seg, type SegKind, segregations, siteRole, type Why } from '../interconnection';
+import { type ClusterProfile, type InfraView, pullTarget, type ReconcileStatus, useInfra, useVmRequests, useZone } from '../zone';
 import { Badge } from './Badge';
-import { Flow, type FlowLane, TONES, type Tone } from './Flow';
+import { TONES, type Tone } from './Flow';
+import { KindPill, SitePill } from './InterParts';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
 import { ConfirmBar, RequestsTable, ResultNote, useChange } from './Requests';
 import { useRq } from '../theme/consoleTheme';
 import { useI18n } from '../i18n';
-import { Attention, Facts, Kpis, Row, Section, TitleRow } from './ui';
-import { vmRuns } from './ZonePages';
+import { Kpis, Pill, TitleRow, choose, type Tone as PillTone } from './ui';
 
 const gb = (mb?: number) => (typeof mb === 'number' ? `${Math.round(mb / 1024)} GB` : '—');
-const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
+const PILL_TONE: Record<Tone, PillTone> = { ok: 'pos', warn: 'warn', bad: 'neg', info: 'info', off: 'neu' };
+
+/** "3 programmes · 3 common · 1 landing": the kinds that exist. */
+export function kindsNote(counts: Record<SegKind, number>, t: (k: string, v?: Record<string, string | number>) => string): string {
+  return (['programme', 'common', 'landing', 'integration'] as const).filter(k => counts[k] > 0).map(k => t(`ic.count.${k}`, { n: counts[k] })).join(' · ');
+}
 
 /** Frame of the platform-wide pages: every zone of the catalog, as the host publishes it. */
 export const InfraFrame = ({ title, sub, crumb, children, finding, actions }: { title: string; sub: string; crumb?: string; children: (view: InfraView) => ReactNode; finding?: (view: InfraView) => { text: ReactNode; tone: 'pos' | 'warn' | 'neg' } | undefined; actions?: ReactNode }) => {
@@ -46,7 +49,7 @@ export const InfraFrame = ({ title, sub, crumb, children, finding, actions }: { 
 };
 
 /** No room for a new cluster: the smallest profile does not fit in the memory free above the host reserve. */
-function roomFinding(view: InfraView, t: (k: string, v?: Record<string, string | number>) => string) {
+export function roomFinding(view: InfraView, t: (k: string, v?: Record<string, string | number>) => string) {
   const free = view.capacity?.freeMemoryMb;
   const smallest = Math.min(...(view.kubernetes?.profiles ?? []).map(p => p.memoryMb));
   if (typeof free !== 'number' || !Number.isFinite(smallest)) return undefined;
@@ -55,26 +58,11 @@ function roomFinding(view: InfraView, t: (k: string, v?: Record<string, string |
     : { text: t('infra.room', { free: gb(free) }), tone: 'pos' as const };
 }
 
-function programState(p: { declared: boolean; ok: boolean | null }): [string, Tone] {
+export function programState(p: { declared: boolean; ok: boolean | null }): [string, Tone] {
   if (!p.declared) return ['Not in network.toml', 'warn'];
   if (p.ok) return ['Applied', 'ok'];
   if (p.ok === false) return ['Incomplete', 'warn'];
   return ['Declared', 'info'];
-}
-
-/** The zones of the catalog as lanes, their programmes (segregations) as nodes. */
-export function catalogLanes(catalog: CatalogZone[]): FlowLane[] {
-  return [...catalog]
-    .sort((a, b) => Number(b.enabled) - Number(a.enabled))
-    .map(z => ({
-      label: `${z.label ?? z.name}${z.block ? ` · ${z.block}` : ''}`,
-      nodes: z.programs.length
-        ? z.programs.map(p => {
-            const [state, tone] = programState(p);
-            return { title: `${z.name}/${p.name}`, sub: `n=${p.n ?? '?'}${p.cluster ? ` · cluster ${p.cluster}` : ' · no cluster'}`, state, tone, href: `/console/infrastructure/platform/${z.name}/${p.name}` };
-          })
-        : [{ title: z.enabled ? 'No programme yet' : 'Reserved', sub: z.enabled ? 'enabled, empty' : 'a new segregation enables it', tone: 'off' as Tone, dashed: true }],
-    }));
 }
 
 export function stepTone(state: string): Tone {
@@ -87,12 +75,6 @@ function lastRun(s: ReconcileStatus): string {
   if (s.finished) return new Date(s.finished).toLocaleString();
   if (s.started) return `started ${new Date(s.started).toLocaleString()}`;
   return '—';
-}
-
-function segregationHelp(taken: boolean, nameOk: boolean, z: CatalogZone | undefined, program: string, nextN?: number): string {
-  if (taken) return 'It already exists in this zone';
-  if (program && !nameOk) return 'Lowercase letters, digits and "-"';
-  return `${z?.name ?? '…'}/${program || '…'} · n=${nextN ?? '?'}${z && !z.enabled ? ' · enables the zone' : ''}`;
 }
 
 /** What the host did following main (configuration.py reconcile, every 5 minutes). */
@@ -136,64 +118,130 @@ export const ReconcileCard = ({ status, only }: { status?: ReconcileStatus; only
   );
 };
 
-/** Infrastructure › Platform: every zone of the catalog, its segregations, the host capacity; a new segregation by PR. */
+/** Why a segregation stays, in words. */
+const blockText = (why: Why, t: (k: string, v?: Record<string, string | number>) => string) => t(why.key, why.vars);
+
+/**
+ * Platform › Zones and segregations: every zone of the catalog and its segregations with their kind. Read-only except
+ * Remove, which opens a pull request (or says why it cannot yet); new ones are created in the Marketplace.
+ */
 export const PlatformPage = () => {
   const infra = useInfra();
   const zone = useZone();
+  const vms = useVmRequests();
   const post = useClusterPost();
   const { note, busy, run } = useChange(() => { infra.reload(); zone.reload(); });
-  const [form, setForm] = useState({ zone: '', program: '' });
+  const [confirm, setConfirm] = useState<Seg | undefined>();
   const isSeg = (p: { branch: string }) => /^console\/seg(del)?-/.test(p.branch);
   const { t } = useI18n();
+  const rq = useRq();
+  const market = '/console/infrastructure/marketplace';
   return (
-    <InfraFrame title={t('infra.platformTitle')} sub={t('infra.platformSub')} finding={v => roomFinding(v, t)} actions={<Button variant="contained" href="#new-segregation">{t('infra.newSeg')}</Button>}>
+    <InfraFrame
+      title={t('infra.platformTitle')}
+      sub={t('ic.zones.sub')}
+      finding={v => roomFinding(v, t)}
+      actions={<Button variant="outlined" component={Link as any} to={market}>{t('ic.createInMarket')}</Button>}
+    >
       {view => {
         const catalog = view.catalog ?? [];
-        const z = catalog.find(c => c.name === (form.zone || catalog.find(x => x.enabled)?.name));
-        const nextN = z ? Math.max(0, ...z.programs.map(p => p.n ?? 0)) + 1 : undefined;
-        const nameOk = PROGRAM_NAME.test(form.program);
-        const taken = !!z?.programs.some(p => p.name === form.program);
-        const programmes = catalog.reduce((sum, c) => sum + c.programs.length, 0);
+        const role = siteRole(view);
+        const segs = segregations(view);
+        const counts = kindCounts(segs);
+        const pending = (infra.data?.pulls ?? []).filter(p => /^console\/segdel-/.test(p.branch)).map(p => pullTarget(p)).map(x => `${x.zone}/${x.program}`);
+        const ctx = { admins: infra.data?.admins ?? [], askedClusters: (infra.data?.clusters ?? []).filter(c => !c.delete).map(c => `${c.zone}/${c.program}`), pending, allowed: !!infra.data?.allowed };
+        const files = (s: Seg) => (vms.data?.vms ?? []).filter(v => v.zone === s.zone && v.program === s.name).length;
+        const sub = (s: Seg) => {
+          const what = choose<string>(
+            [
+              [s.kind === 'common', 'ClamAV'],
+              [s.kind === 'landing' || s.kind === 'integration', t('ic.zones.components', { n: Math.max(s.vms, files(s)) })],
+              [s.cluster, `cluster ${s.cluster}`],
+            ],
+            t('ic.zones.noCluster'),
+          );
+          return `n=${s.n ?? '?'} · ${what}`;
+        };
         return (
           <>
             <Kpis
               items={[
                 { label: t('infra.zonesEnabled'), value: `${catalog.filter(c => c.enabled).length} / ${catalog.length}`, note: t('infra.zonesNote') },
-                { label: t('zone.programmes'), value: programmes, note: t('infra.withCluster', { n: catalog.reduce((sum, c) => sum + c.programs.filter(x => x.cluster).length, 0) }) },
+                { label: t('ic.segregations'), value: segs.length, note: kindsNote(counts, t) },
                 { label: t('infra.memNewVm'), value: gb(view.capacity?.freeMemoryMb), note: t('infra.memNote', { r: gb(view.capacity?.reservedMemoryMb) }), tone: (view.capacity?.freeMemoryMb ?? 1) < 4096 ? 'bad' : undefined },
                 { label: t('infra.hosts'), value: view.host ? `${view.host.cpus ?? '?'} CPU · ${view.host.memoryGiB ?? '?'} GiB` : '—', note: view.host?.name },
               ]}
             />
-            <Card title={t('nav.zonesSegregations')} sub={t('infra.lanesSub')}>
-              <Flow lanes={catalogLanes(catalog)} label="Zones of the catalog and their programmes" />
-            </Card>
-            <Box id="new-segregation" />
-            <Card title={t('infra.newSegTitle')} sub={t('infra.newSegSub')}>
-              {!infra.data?.allowed && infra.data && <Typography variant="body2" color="text.secondary">{t('infra.onlyAdminSeg')}</Typography>}
-              <Box component="form" onSubmit={e => { e.preventDefault(); run(() => post('/infra/segregations', { zone: z?.name ?? '', program: form.program }), a => t('infra.segOpened', { n: a.pull?.number ?? '', target: `${z?.name}/${form.program}` })).then(ok => ok && setForm(f => ({ ...f, program: '' }))); }} sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', alignItems: 'start' }}>
-                <TextField select size="small" label={t('shell.zone')} value={z?.name ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}>
-                  {catalog.map(c => (
-                    <MenuItem key={c.name} value={c.name}>
-                      {c.label ?? c.name} ({c.name}){c.enabled ? '' : ' · reserved'}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  size="small"
-                  label={t('zone.programme')}
-                  required
-                  value={form.program}
-                  onChange={e => setForm(f => ({ ...f, program: e.target.value.toLowerCase() }))}
-                  error={!!form.program && (!nameOk || taken)}
-                  helperText={segregationHelp(taken, nameOk, z, form.program, nextN)}
-                />
-                <Button type="submit" variant="outlined" disabled={busy || !infra.data?.allowed || !z || !nameOk || taken} sx={{ justifySelf: 'start' }}>
-                  {t('vmr.openPr')}
-                </Button>
+            {confirm && (
+              <ConfirmBar
+                text={t('ic.zones.confirm', { id: confirm.id })}
+                onYes={() => {
+                  const c = confirm;
+                  setConfirm(undefined);
+                  run(() => post('/infra/segregations/delete', { zone: c.zone, program: c.name }), a => t('ic.zones.removeOpened', { n: a.pull?.number ?? '', id: c.id }));
+                }}
+                onNo={() => setConfirm(undefined)}
+              />
+            )}
+            <ResultNote note={note} />
+            <Card
+              title={t('nav.zonesSegregations')}
+              sub={
+                <>
+                  <SitePill role={role} /> {t(`ic.zones.lanes.${role}`)} <Link to={market}>{t('nav.marketplace')}</Link>.
+                </>
+              }
+            >
+              <Box role="group" aria-label={t('nav.zonesSegregations')} sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(210px, 100%), 1fr))', alignItems: 'start' }}>
+                {[...catalog]
+                  .sort((a, b) => Number(b.enabled) - Number(a.enabled))
+                  .map(z => {
+                    const mine = segs.filter(s => s.zone === z.name);
+                    return (
+                      <Box key={z.name} sx={{ display: 'grid', gap: 1, minWidth: 0 }}>
+                        <Typography component="h3" sx={{ fontSize: 11, fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, m: 0 }}>
+                          {z.label ?? z.name}
+                          {z.block ? ` · ${z.block}` : ''}
+                        </Typography>
+                        {mine.length === 0 && (
+                          <Box sx={{ border: `1px dashed ${rq.control}`, borderRadius: '8px', p: 1.5, display: 'grid', gap: 0.5 }}>
+                            <Box component="span" sx={{ fontWeight: 600 }}>{z.enabled ? t('ic.zones.empty') : t('ic.reserved')}</Box>
+                            <Typography variant="caption" color="text.secondary">{t('ic.zones.reservedSub')}</Typography>
+                          </Box>
+                        )}
+                        {mine.map(s => {
+                          const why = removalBlock(s, segs, { ...ctx, vmFiles: files(s) });
+                          const [state, tone] = programState(s);
+                          return (
+                            <Box key={s.id} data-testid={`seg-${s.id}`} sx={{ border: `1px solid ${rq.border}`, borderRadius: '8px', bgcolor: rq.sheet, p: 1.5, display: 'grid', gap: 0.75, minWidth: 0 }}>
+                              <Link to={`/console/infrastructure/platform/${s.zone}/${s.name}`} style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+                                {s.id}
+                              </Link>
+                              <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                                {sub(s)}
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                <KindPill kind={s.kind} />
+                                <Pill tone={PILL_TONE[tone]}>{state}</Pill>
+                              </Box>
+                              {why ? (
+                                <Typography variant="caption" color="text.secondary">
+                                  {blockText(why, t)}
+                                </Typography>
+                              ) : (
+                                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => setConfirm(s)} aria-label={t('ic.zones.removeId', { id: s.id })} sx={{ justifySelf: 'start' }}>
+                                  {t('ic.zones.remove')}
+                                </Button>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    );
+                  })}
               </Box>
-              <ResultNote note={note} />
             </Card>
-            <Card title={t('infra.requests')} sub={t('infra.requestsSegSub')}>
+            <Card title={t('infra.requests')} sub={t('ic.zones.requestsSub')}>
               <RequestsTable open={infra.data?.pulls ?? []} merged={infra.data?.merged ?? []} reconcile={view.reconcile} only={isSeg} />
             </Card>
             <ReconcileCard status={view.reconcile} />
@@ -204,7 +252,7 @@ export const PlatformPage = () => {
   );
 };
 
-const ProfileCard = ({ p, free, onPick, picked }: { p: ClusterProfile; free?: number; onPick: () => void; picked: boolean }) => {
+export const ProfileCard = ({ p, free, onPick, picked }: { p: ClusterProfile; free?: number; onPick: () => void; picked: boolean }) => {
   const fits = typeof free !== 'number' || p.memoryMb <= free;
   const nodes = (['master', 'worker', 'storage'] as const).filter(r => p.counts[r] > 0);
   const rqT = useRq();
@@ -238,217 +286,5 @@ const ProfileCard = ({ p, free, onPick, picked }: { p: ClusterProfile; free?: nu
         {picked ? t('infra.chosen') : t('infra.createWith')}
       </Button>
     </Box>
-  );
-};
-
-/** Every OneKE cluster of the platform, with Scale and Delete (not the cluster of this console). */
-export const ClustersCard = ({
-  view,
-  infra,
-  onDelete,
-}: {
-  view: InfraView;
-  infra?: { allowed: boolean; admins?: string[]; clusters: Array<{ zone: string; program: string; delete?: boolean }> };
-  onDelete: (zone: string, program: string, name: string) => void;
-}) => {
-  const { t } = useI18n();
-  return (
-  <Card title={t('infra.clustersTitle')} sub={t('infra.clustersSub')}>
-    <Table
-      head={[t('zone.programme'), t('shell.cluster'), t('cluster.nodes'), t('zone.state'), '']}
-      rows={view.zones.flatMap(z =>
-        z.programs
-          .filter(p => p.cluster)
-          .map(p => {
-            const id = `${z.name}/${p.name}`;
-            const own = (infra?.admins ?? []).includes(id);
-            const deleting = infra?.clusters.some(c => c.zone === z.name && c.program === p.name && c.delete);
-            const running = !deleting && /RUNNING/.test(p.cluster!.state);
-            return [
-              <Link to={`/console/infrastructure/platform/${z.name}/${p.name}`}>{id}</Link>,
-              p.cluster!.name,
-              Object.entries(p.cluster!.roles ?? {}).map(([r, n]) => `${n} ${r}`).join(' · '),
-              <Badge label={deleting ? 'Being deleted' : p.cluster!.state} {...TONES[running ? 'ok' : 'warn']} />,
-              <Box sx={{ display: 'flex', gap: 0.5 }}>
-                <Button size="small" variant="outlined" component={Link} to={`/console/infrastructure/clusters/${z.name}/${p.name}`} disabled={deleting}>
-                  {t('nav.scale')}
-                </Button>
-                {!own && infra?.allowed && (
-                  <Button size="small" color="error" disabled={deleting} onClick={() => onDelete(z.name, p.name, p.cluster!.name)}>
-                    {t('vmr.delete')}
-                  </Button>
-                )}
-              </Box>,
-            ];
-          }),
-      )}
-    />
-  </Card>
-  );
-};
-
-/** Infrastructure › Marketplace: the OneKE profiles; a new cluster in a segregation by PR. */
-export const MarketplacePage = () => {
-  const infra = useInfra();
-  const zone = useZone();
-  const post = useClusterPost();
-  const { note, busy, run } = useChange(() => { infra.reload(); zone.reload(); });
-  const [form, setForm] = useState({ target: '', profile: '', workers: '' });
-  const isCluster = (p: { branch: string }) => /^console\/cluster(del)?-/.test(p.branch);
-  const [confirm, setConfirm] = useState<{ zone: string; program: string; name: string } | undefined>();
-  const pick = (name: string) => {
-    setForm(f => ({ ...f, profile: name }));
-    // the form is under the cards: bring it into view
-    setTimeout(() => document.getElementById('create-cluster')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }), 0);
-  };
-  const { t } = useI18n();
-  return (
-    <InfraFrame title={t('nav.marketplace')} crumb={t('nav.marketplace')} sub={t('infra.marketSub')} finding={v => roomFinding(v, t)}>
-      {view => {
-        const profiles = view.kubernetes?.profiles ?? [];
-        const profile = profiles.find(p => p.name === (form.profile || view.kubernetes?.defaultProfile)) ?? profiles[0];
-        const asked = new Set((infra.data?.clusters ?? []).map(c => `${c.zone}/${c.program}`));
-        const targets = (view.catalog ?? []).flatMap(z => z.programs.filter(p => p.declared && !p.cluster && !asked.has(`${z.name}/${p.name}`)).map(p => `${z.name}/${p.name}`));
-        const target = form.target || targets[0] || '';
-        const [tz, tp] = target.split('/');
-        const workers = form.workers === '' ? undefined : Number(form.workers);
-        const need = profile ? profile.memoryMb + ((workers ?? profile.counts.worker) - profile.counts.worker) * profile.roles.worker.memory_mb : 0;
-        const free = view.capacity?.freeMemoryMb;
-        return (
-          <>
-            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))' }}>
-              {profiles.map(p => (
-                <ProfileCard key={p.name} p={p} free={free} picked={p.name === profile?.name} onPick={() => pick(p.name)} />
-              ))}
-            </Box>
-            <Box id="create-cluster" />
-            <Card title={t('infra.createCluster')} sub={t('infra.createClusterSub')}>
-              {!infra.data?.allowed && infra.data && <Typography variant="body2" color="text.secondary">{t('infra.onlyAdminCluster')}</Typography>}
-              {targets.length === 0 ? (
-                <Typography color="text.secondary">{t('infra.noTarget')}</Typography>
-              ) : (
-                <Box component="form" onSubmit={e => { e.preventDefault(); run(() => post('/infra/clusters', { zone: tz, program: tp, profile: profile?.name ?? '', ...(workers !== undefined ? { workers } : {}) }), a => t('infra.clusterOpened', { n: a.pull?.number ?? '', target })); }} sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', alignItems: 'start' }}>
-                  <TextField select size="small" label={t('zone.programme')} value={target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))}>
-                    {targets.map(x => (
-                      <MenuItem key={x} value={x}>
-                        {x}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField select size="small" label={t('infra.profile')} value={profile?.name ?? ''} onChange={e => setForm(f => ({ ...f, profile: e.target.value }))}>
-                    {profiles.map(p => (
-                      <MenuItem key={p.name} value={p.name}>
-                        {p.name}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <TextField
-                    size="small"
-                    type="number"
-                    label={t('infra.workers')}
-                    value={form.workers}
-                    placeholder={String(profile?.counts.worker ?? '')}
-                    onChange={e => setForm(f => ({ ...f, workers: e.target.value }))}
-                    inputProps={{ min: 0, max: SCALE_LIMITS.workers }}
-                    helperText={t('infra.needs', { need: gb(need), free: gb(free) })}
-                    error={typeof free === 'number' && need > free}
-                  />
-                  <Button type="submit" variant="contained" disabled={busy || !infra.data?.allowed || !profile || (typeof free === 'number' && need > free)} sx={{ justifySelf: 'start' }}>
-                    {t('vmr.openPr')}
-                  </Button>
-                </Box>
-              )}
-              <ResultNote note={note} />
-            </Card>
-            <ClustersCard view={view} infra={infra.data} onDelete={(z, program, name) => setConfirm({ zone: z, program, name })} />
-            {confirm && (
-              <ConfirmBar
-                text={t('infra.confirmDelete', { name: confirm.name, target: `${confirm.zone}/${confirm.program}` })}
-                onYes={() => {
-                  const c = confirm;
-                  setConfirm(undefined);
-                  run(() => post('/infra/clusters/delete', { zone: c.zone, program: c.program }), a => t('infra.deleteOpened', { n: a.pull?.number ?? '', target: `${c.zone}/${c.program}` }));
-                }}
-                onNo={() => setConfirm(undefined)}
-              />
-            )}
-            <Card title={t('infra.requests')} sub={t('infra.requestsClusterSub')}>
-              <RequestsTable open={infra.data?.pulls ?? []} merged={infra.data?.merged ?? []} reconcile={view.reconcile} only={isCluster} />
-            </Card>
-            <ReconcileCard status={view.reconcile} />
-          </>
-        );
-      }}
-    </InfraFrame>
-  );
-};
-
-/** Platform › Overview: zones, programmes, clusters, room in the hosts and what needs attention, in one page. */
-export const PlatformOverviewPage = () => {
-  const infra = useInfra();
-  const { t } = useI18n();
-  return (
-    <InfraFrame title={t('infra.platformTitle')} sub={t('infra.overviewSub')} finding={v => roomFinding(v, t)} actions={<Button variant="contained" component={Link as any} to="/console/infrastructure/marketplace">{t('infra.createCluster')}</Button>}>
-      {view => {
-        const catalog = view.catalog ?? [];
-        const programmes = view.zones.flatMap(z => z.programs.map(p => ({ zone: z.name, p })));
-        const clusters = programmes.filter(x => x.p.cluster);
-        const running = clusters.filter(x => /RUNNING/.test(x.p.cluster!.state)).length;
-        const vms = programmes.flatMap(x => x.p.vms);
-        const waiting = vms.filter(v => v.state === 'PENDING');
-        const drift = view.drift ?? [];
-        const attention = [
-          ...clusters.filter(x => !/RUNNING/.test(x.p.cluster!.state)).map(x => ({ tone: 'neg' as const, label: t('shell.cluster'), what: t('infra.att.cluster', { name: x.p.cluster!.name, state: x.p.cluster!.state }), action: { label: t('nav.k8sClusters'), to: '/console/clusters' } })),
-          ...waiting.map(v => ({ tone: 'warn' as const, label: 'VM', what: t('infra.att.vm', { name: v.name }), action: { label: t('clusters.open'), to: vmHref(v.name) } })),
-          ...(drift.length ? [{ tone: 'warn' as const, label: t('infra.att.design'), what: t('zone.finding.drift', { n: drift.length }), action: { label: t('nav.infrastructure'), to: '/console/infrastructure' } }] : []),
-          ...programmes.filter(x => !x.p.cluster).map(x => ({ tone: 'neu' as const, label: t('zone.programme'), what: t('infra.att.noCluster', { name: `${x.zone}/${x.p.name}` }), action: { label: t('clusters.create'), to: '/console/infrastructure/marketplace' } })),
-        ];
-        return (
-          <>
-            <Kpis
-              items={[
-                { label: t('infra.zonesEnabled'), value: `${catalog.filter(c => c.enabled).length} / ${catalog.length}` },
-                { label: t('zone.programmes'), value: programmes.length, note: t('infra.withCluster', { n: clusters.length }) },
-                { label: t('nav.k8sClusters'), value: `${running} / ${clusters.length}`, note: t('infra.running'), tone: running < clusters.length ? 'bad' : undefined },
-                { label: t('infra.memNewVm'), value: gb(view.capacity?.freeMemoryMb), note: t('infra.memNote', { r: gb(view.capacity?.reservedMemoryMb) }), tone: (view.capacity?.freeMemoryMb ?? 1) < 4096 ? 'bad' : undefined },
-                { label: 'VMs', value: `${vms.filter(v => vmRuns(v.state)).length} / ${vms.length}`, note: t('infra.running') },
-              ]}
-            />
-            {attention.length > 0 && (
-              <Section title={t('infra.attention')} meta={attention.length}>
-                <Attention items={attention} />
-              </Section>
-            )}
-            <Row spans={[8, 4]}>
-              <Section title={t('infra.clustersTitle')} flush>
-                <Table
-                  head={[t('shell.cluster'), t('zone.programme'), t('cluster.nodes'), t('zone.state')]}
-                  rows={clusters.map(x => [
-                    <Link to={`/console/infrastructure/platform/${x.zone}/${x.p.name}`}>{x.p.cluster!.name}</Link>,
-                    `${x.zone}/${x.p.name}`,
-                    Object.entries(x.p.cluster!.roles ?? {}).map(([r, n]) => `${n} ${r}`).join(' · '),
-                    <Badge label={x.p.cluster!.state} {...TONES[/RUNNING/.test(x.p.cluster!.state) ? 'ok' : 'warn']} />,
-                  ])}
-                />
-              </Section>
-              <Section title={view.host?.name ?? t('infra.hosts')}>
-                <Facts
-                  labelWidth={110}
-                  items={[
-                    ['CPU', view.host?.cpus !== undefined ? `${view.host.cpus}` : '—'],
-                    [t('cluster.memory'), view.host?.memoryGiB !== undefined ? `${view.host.memoryGiB} GiB` : '—'],
-                    [t('infra.reserve'), gb(view.capacity?.reservedMemoryMb)],
-                    [t('infra.freeVms'), gb(view.capacity?.freeMemoryMb)],
-                  ]}
-                />
-              </Section>
-            </Row>
-            <Section title={t('infra.requests')} meta={t('infra.last7')}>
-              <RequestsTable open={infra.data?.pulls ?? []} merged={infra.data?.merged ?? []} reconcile={view.reconcile} />
-            </Section>
-          </>
-        );
-      }}
-    </InfraFrame>
   );
 };

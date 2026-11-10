@@ -24,6 +24,9 @@ export type ZoneVm = {
   labels?: string;
   console?: boolean;
   requestedBy?: string;
+  /** an interconnection component (VM tags REFRESQUITO_COMPONENT, REFRESQUITO_TRAFFIC): apisix, sftpgo, kafka; u2m | m2m */
+  component?: string;
+  traffic?: string;
   nics?: Array<{ network: string; ip: string; mac?: string; securityGroups?: string }>;
   disks?: Array<{ image: string; sizeMb: number; datastore?: string; target?: string }>;
   cpuPct?: number;
@@ -39,6 +42,8 @@ export type ZoneProgram = {
   id: string;
   status: string;
   ok: boolean | null;
+  /** programme | common | landing | integration (missing in an older topology.json: read as its name says) */
+  kind?: string;
   fqdn?: string;
   cluster?: { name: string; state: string; vip?: string; roles: Record<string, number>; fqdn?: string };
   networks: ZoneNetwork[];
@@ -56,9 +61,9 @@ export type Zone = {
 };
 export type DriftItem = { zone: string; program?: string; kind: 'network' | 'security group' | 'router' | 'cluster'; name: string; detail: string };
 /** What vms-apply did with each VM requested from the console (configuration/vms.py of opennebula). */
-export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
+export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; component?: string; traffic?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 /** Every zone of the catalog (reserved ones too) with its programmes: where a new segregation can go. */
-export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; declared: boolean; ok: boolean | null; cluster?: string }> };
+export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string }> };
 /** A OneKE profile of [kubernetes.profiles]: the marketplace. */
 export type ClusterProfile = {
   name: string;
@@ -92,6 +97,8 @@ export type ZoneView = {
   generated?: string;
   /** domain of the names: <vm>.<zone>.<program>.<domain> */
   domain?: string;
+  /** what this OpenNebula installation is ([site] role of network.toml): a core site unless it says edge */
+  site?: { role: 'core' | 'edge' };
   catalog?: CatalogZone[];
   kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
@@ -124,6 +131,8 @@ function vm(x: Raw): ZoneVm {
     labels: x.labels || undefined,
     console: x.console === true ? true : undefined,
     requestedBy: x.requested_by || undefined,
+    component: x.component ? str(x.component) : undefined,
+    traffic: x.traffic ? str(x.traffic) : undefined,
     nics: Array.isArray(x.nics) ? x.nics.map((n: Raw) => ({ network: str(n.network), ip: str(n.ip), mac: n.mac || undefined, securityGroups: n.security_groups || undefined })) : undefined,
     disks: Array.isArray(x.disks) ? x.disks.map((d: Raw) => ({ image: str(d.image), sizeMb: Number(d.size_mb ?? 0), datastore: d.datastore || undefined, target: d.target || undefined })) : undefined,
     cpuPct: typeof x.cpu_pct === 'number' ? x.cpu_pct : undefined,
@@ -209,7 +218,7 @@ export function summariseZone(raw: Raw): ZoneView {
         const c = p.cluster;
         const cluster = c ? { name: str(c.name), state: str(c.state), vip: c.vip || undefined, roles: c.roles ?? {}, fqdn: c.fqdn || undefined } : undefined;
         if (cluster && /not read|failed|error/i.test(cluster.state)) drift.push({ zone, program, kind: 'cluster', name: cluster.name, detail: `OneFlow says: ${cluster.state}` });
-        return { name: program, id: str(p.id), status: str(p.status), ok: typeof p.ok === 'boolean' ? p.ok : null, fqdn: p.fqdn || undefined, cluster, networks, securityGroups, vms: (p.vms ?? []).map(vm) };
+        return { name: program, id: str(p.id), status: str(p.status), ok: typeof p.ok === 'boolean' ? p.ok : null, kind: p.kind ? str(p.kind) : undefined, fqdn: p.fqdn || undefined, cluster, networks, securityGroups, vms: (p.vms ?? []).map(vm) };
       });
       return { name: zone, label: z.label || undefined, status: str(z.status), block: z.block || undefined, router, transit, programs };
     });
@@ -222,13 +231,14 @@ export function summariseZone(raw: Raw): ZoneView {
     enabled: !!z.enabled,
     block: z.block || undefined,
     maxProgramN: typeof z.max_program_n === 'number' ? z.max_program_n : undefined,
-    programs: (z.programs ?? []).map((p: Raw) => ({ name: str(p.name), n: typeof p.n === 'number' ? p.n : undefined, declared: p.declared !== false, ok: typeof p.ok === 'boolean' ? p.ok : null, cluster: p.cluster?.name || undefined })),
+    programs: (z.programs ?? []).map((p: Raw) => ({ name: str(p.name), n: typeof p.n === 'number' ? p.n : undefined, kind: p.kind ? str(p.kind) : undefined, declared: p.declared !== false, ok: typeof p.ok === 'boolean' ? p.ok : null, cluster: p.cluster?.name || undefined })),
   }));
   const k = raw.kubernetes;
   const rc = raw.reconcile;
   return {
     generated: raw.generated ? str(raw.generated) : undefined,
     domain: raw.domain ? str(raw.domain) : undefined,
+    site: raw.site && typeof raw.site === 'object' ? { role: raw.site.role === 'edge' ? 'edge' : 'core' } : undefined,
     catalog,
     kubernetes: k && Array.isArray(k.profiles)
       ? {

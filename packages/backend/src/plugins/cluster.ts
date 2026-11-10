@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
-import { type ConsolePull, GitHubFiles, refuse, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
+import { type ComponentRequest, componentName, type ConsolePull, GitHubFiles, refuse, refuseComponent, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
 import { actionRequest, addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
 import { NAMESPACE_NAME, type NamespaceLive, readNamespace } from './clusterNamespace';
@@ -537,11 +537,12 @@ export default createBackendPlugin({
         router.get('/zone/vms', async (req, res) => {
           try {
             const { admin } = await actor(req);
-            const [{ policy, vms }, states, pulls] = await Promise.all([readRequests(), readWorkspaces(), pullsOf(vmRepo)]);
+            const [{ policy, vms }, states, pulls, merged] = await Promise.all([readRequests(), readWorkspaces(), pullsOf(vmRepo), mergedOf(vmRepo)]);
             res.json({
               policy,
               allowed: admin,
               pulls: pulls.filter(p => p.branch.startsWith('console/vm-')),
+              merged: merged.filter(p => p.branch.startsWith('console/vm-')),
               admins,
               vms: vms.map(({ sha: _sha, file: _file, ...v }) => ({ ...v, state: states.get(`vm-${v.zone}-${v.program}-${v.name}`) })),
             });
@@ -591,14 +592,28 @@ export default createBackendPlugin({
           `Asked from the Refresquito console by \`${user}\`.\n\n\`\`\`json\n${JSON.stringify(fields, null, 2)}\n\`\`\`\n`;
 
         adminAction('/zone/vms', 'create or delete VMs', async (b, user) => {
-          const v: VmRequest = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image, requested_by: user, requested_at: new Date().toISOString() };
           const [{ policy, vms }, pulls] = await Promise.all([readRequests(), pullsOf(vmRepo)]);
+          const asked = (name: string) => pulls.some(p => p.branch.startsWith(`console/vm-new-${b.zone}-${b.program}-${name}-`));
+          // a component of the interconnection: fixed image, its own cpu, memory and disk, a name given here
+          if (b.component) {
+            const c: ComponentRequest = { zone: b.zone, program: b.program, component: b.component, ...(b.traffic ? { traffic: b.traffic } : {}), cpu: Number(b.cpu), memory_mb: Number(b.memory_mb), disk_gb: Number(b.disk_gb) };
+            const no = refuseComponent(policy, vms, c, await zonePrograms());
+            if (no) return no;
+            const base = `${c.component}${c.traffic ? `-${c.traffic}` : ''}`;
+            // names in git, and the ones of the open pull requests (console/vm-new-<zone>-<program>-<name>-<time>)
+            const inPulls = pulls.flatMap(p => p.branch.match(new RegExp(`^console/vm-new-${c.zone}-${c.program}-(${base}-\\d+)-[0-9a-z]+$`))?.[1] ?? []);
+            const name = componentName([...vms.filter(x => x.zone === c.zone && x.program === c.program).map(x => x.name), ...inPulls], c.component, c.traffic);
+            const v: VmRequest = { zone: c.zone, program: c.program, name, component: c.component, ...(c.traffic ? { traffic: c.traffic } : {}), cpu: c.cpu, memory_mb: c.memory_mb, disk_gb: c.disk_gb, requested_by: user, requested_at: new Date().toISOString() };
+            const message = `console: create component ${name} in ${v.zone}/${v.program} (${policy.components?.[c.component]?.image ?? c.component}, ${c.cpu} vCPU, ${c.memory_mb} MB, ${c.disk_gb} GB)`;
+            const pull = await vmRepo.pullRequest(`vm-new-${vmFileName(v).replace(/\.json$/, '')}`, message, `${body(v, user)}\nOnce merged, Argo CD and Crossplane create the VM from the fixed image of the component, on the public network of ${v.zone}/${v.program}.\n`, [{ path: `${vmChart}/vms/${vmFileName(v)}`, text: `${JSON.stringify(v, null, 2)}\n` }]);
+            return { message, pull };
+          }
+          const v: VmRequest = { zone: b.zone, program: b.program, name: b.name, size: b.size, image: b.image, requested_by: user, requested_at: new Date().toISOString() };
           const no = refuse(policy, vms, v, await zonePrograms());
           if (no) return no;
-          const slug = `vm-new-${vmFileName(v).replace(/\.json$/, '')}`;
-          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for VM ${v.name}.`;
+          if (asked(v.name)) return `There is already a pull request for VM ${v.name}.`;
           const message = `console: create VM ${v.name} in ${v.zone}/${v.program} (${v.size}, ${v.image})`;
-          const pull = await vmRepo.pullRequest(slug, message, body(v, user), [{ path: `${vmChart}/vms/${vmFileName(v)}`, text: `${JSON.stringify(v, null, 2)}\n` }]);
+          const pull = await vmRepo.pullRequest(`vm-new-${vmFileName(v).replace(/\.json$/, '')}`, message, body(v, user), [{ path: `${vmChart}/vms/${vmFileName(v)}`, text: `${JSON.stringify(v, null, 2)}\n` }]);
           return { message, pull };
         });
         adminAction('/zone/vms/delete', 'create or delete VMs', async (b, user) => {
@@ -614,12 +629,14 @@ export default createBackendPlugin({
           const view = await readZone();
           if (!view) return 'The host has not published the topology yet.';
           const [toml, pulls] = await Promise.all([infraRepo.get(`${infraDir}/network.toml`), pullsOf(infraRepo)]);
-          const slug = `seg-${b.zone}-${b.program}`;
-          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for ${b.zone}/${b.program}.`;
-          const out = addSegregation(toml.text, view, b.zone, b.program);
+          const out = addSegregation(toml.text, view, b.zone, b.program ?? '', b.kind || 'programme');
           if (typeof out === 'string') return out;
-          const message = `console: new segregation ${b.zone}/${b.program} (n=${out.n}${out.enabled ? `, enables zone ${b.zone}` : ''})`;
-          const pull = await infraRepo.pullRequest(slug, message, `${body({ zone: b.zone, program: b.program, n: out.n, enablesZone: out.enabled }, user)}\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user.\n`,
+          const id = `${b.zone}/${out.program}`;
+          const slug = `seg-${b.zone}-${out.program}`;
+          if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for ${id}.`;
+          const message = `console: new segregation ${id} (n=${out.n}${out.kind === 'programme' ? '' : `, ${out.kind} zone`}${out.enabled ? `, enables zone ${b.zone}` : ''})${out.also.length ? ` + ${out.also.join(', ')}` : ''}`;
+          const fields = { zone: b.zone, program: out.program, kind: out.kind, n: out.n, enablesZone: out.enabled, ...(out.common !== undefined ? { common: { name: 'common', n: out.common } } : {}), exceptions: out.exceptions.map(e => `${e.from} -> ${e.to} ${e.protocol} ${e.ports}`) };
+          const pull = await infraRepo.pullRequest(slug, message, `${body(fields, user)}\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user${out.common !== undefined ? `, also for ${b.zone}/common (the services shared by the zone, created with its first segregation)` : ''}.\n`,
             [{ path: `${infraDir}/network.toml`, text: out.text }]);
           return { message, pull };
         });
@@ -633,8 +650,8 @@ export default createBackendPlugin({
           const vmCount = vms.vms.filter(v => v.zone === b.zone && v.program === b.program).length;
           const out = removeSegregation(toml.text, view, files, vmCount, admins, b.zone, b.program);
           if (typeof out === 'string') return out;
-          const message = `console: remove segregation ${b.zone}/${b.program}`;
-          const pull = await infraRepo.pullRequest(slug, message, `${body({ zone: b.zone, program: b.program }, user)}\nOnce merged, the host destroys its networks, security groups, group and VDC within 5 minutes (configuration.py reconcile → destroy).\n`,
+          const message = `console: remove segregation ${b.zone}/${b.program} and the exceptions that name it`;
+          const pull = await infraRepo.pullRequest(slug, message, `${body({ zone: b.zone, program: b.program }, user)}\nOnce merged, the host destroys its networks, security groups, group and VDC within 5 minutes (configuration.py reconcile → destroy). Every exception from or to ${b.zone}/${b.program} leaves network.toml with it.\n`,
             [{ path: `${infraDir}/network.toml`, text: out.text }]);
           return { message, pull };
         });
