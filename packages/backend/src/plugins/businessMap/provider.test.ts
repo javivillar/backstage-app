@@ -1,4 +1,4 @@
-import { clearFolderCache } from './githubFolder';
+import { clearFolderCache, setRetryPause } from './githubFolder';
 import { BusinessMapEntityProvider, LOCATION_KEY, providerEntities } from './provider';
 
 // made-up files
@@ -68,7 +68,10 @@ describe('BusinessMapEntityProvider', () => {
     },
   };
   const texts = { data: { repository: { b0: { text: DOMAIN, isTruncated: false }, b1: { text: null, isTruncated: true } } } };
-  beforeEach(() => clearFolderCache());
+  beforeEach(() => {
+    clearFolderCache();
+    setRetryPause(0);
+  });
   const setup = (answers: Array<() => Response>) => {
     const calls: string[] = [];
     const fetchFn = (async (url: string) => {
@@ -99,6 +102,21 @@ describe('BusinessMapEntityProvider', () => {
     expect(s.calls).toHaveLength(4);
     expect((s.mutations[1] as typeof m).entities.map(x => x.entity.metadata.name)).toEqual(['sales', 'sell']);
   });
+  it('a batch GitHub gives up on (504, after trying again) is split in two', async () => {
+    const slow = () => json(504, {});
+    const s = setup([
+      () => json(200, tree),
+      slow,
+      slow,
+      slow,
+      () => json(200, { data: { repository: { b0: { text: DOMAIN, isTruncated: false } } } }),
+      () => json(200, { data: { repository: { b0: { text: PROCESS, isTruncated: false } } } }),
+    ]);
+    await s.connect();
+    expect(await s.p.refresh()).toBe('applied');
+    expect(s.calls).toHaveLength(6);
+    expect((s.mutations[0] as { entities: Array<{ entity: { metadata: { name: string } } }> }).entities.map(x => x.entity.metadata.name)).toEqual(['sales', 'sell']);
+  });
   it('skips the run (no mutation) when GitHub limits the token or answers an error', async () => {
     const limited = setup([() => json(200, { errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }] })]);
     await limited.connect();
@@ -106,7 +124,7 @@ describe('BusinessMapEntityProvider', () => {
     const forbidden = setup([() => json(403, { message: 'rate limit' }, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1794150000' })]);
     await forbidden.connect();
     expect(await forbidden.p.refresh()).toBe('skipped');
-    const down = setup([() => json(502, {})]);
+    const down = setup([() => json(502, {}), () => json(504, {}), () => json(502, {})]);
     await down.connect();
     expect(await down.p.refresh()).toBe('skipped');
     expect([limited.mutations, forbidden.mutations, down.mutations]).toEqual([[], [], []]);
