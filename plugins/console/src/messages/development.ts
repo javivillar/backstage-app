@@ -6,6 +6,17 @@ export const DEVELOPMENT: Messages = {
   'nav.frameworks.hint': { en: 'Lines of each framework, who uses them and what is ending', es: 'Líneas de cada framework, quién las usa y qué termina' },
   'nav.heatmap': { en: 'Application heatmap', es: 'Mapa de calor de aplicaciones' },
   'nav.heatmap.hint': { en: 'Every application against the checks that matter', es: 'Cada aplicación frente a los controles que importan' },
+  'nav.newFramework': { en: 'New framework', es: 'Nuevo framework' },
+  'nav.newFramework.hint': { en: 'Add a framework of your own to the platform', es: 'Añadir un framework propio a la plataforma' },
+  'nf.sub': {
+    en: 'A framework of your own on the platform: its lines, its template and its applications.',
+    es: 'Un framework propio en la plataforma: sus líneas, su plantilla y sus aplicaciones.',
+  },
+  'nf.soon': { en: 'Coming soon', es: 'Próximamente' },
+  'nf.soon.text': {
+    en: 'New framework: add a framework of your own to the platform (its lines, its template, its applications). Coming soon.',
+    es: 'Nuevo framework: añadir un framework propio a la plataforma (sus líneas, su plantilla, sus aplicaciones). Próximamente.',
+  },
   // common
   'dev.development': { en: 'Development', es: 'Desarrollo' },
   'dev.loading': { en: 'Reading the catalog and Tech Insights…', es: 'Leyendo el catálogo y Tech Insights…' },
