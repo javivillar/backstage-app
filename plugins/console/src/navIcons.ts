@@ -86,6 +86,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/heatmap': GridOnIcon,
   '/console/development/python-framework-app': TerminalIcon,
   '/console/development/spring-framework-app': WidgetsIcon,
+  '/console/new-framework': AddCircleIcon,
   '/console/ops-assistant': EngineeringIcon,
   '/console/sec-assistant': ShieldIcon,
   '/console/functional-assistant': LightbulbIcon,

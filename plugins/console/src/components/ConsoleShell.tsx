@@ -229,6 +229,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.heatmap'), to: '/console/heatmap', hint: tr('nav.heatmap.hint') },
         { label: tr('nav.newPython'), to: '/console/development/python-framework-app', hint: tr('nav.newPython.hint') },
         { label: tr('nav.newSpring'), to: '/console/development/spring-framework-app', hint: tr('nav.newSpring.hint') },
+        { label: tr('nav.newFramework'), to: '/console/new-framework', hint: tr('nav.newFramework.hint') },
       ],
     });
     // the applications of the platform (Incidents, Accreditation), the dashboards of everything and the teams that resolve

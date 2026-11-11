@@ -688,12 +688,13 @@ export default createBackendPlugin({
           if (!view) return 'The host has not published the topology yet.';
           const workers = b.workers === undefined || b.workers === '' ? undefined : Number(b.workers);
           const [files, pulls] = await Promise.all([readClusterFiles(), pullsOf(infraRepo)]);
-          const no = refuseCluster(view, files, { zone: b.zone, program: b.program, profile: b.profile, workers });
+          const nodeImage = typeof b.node_image === 'string' && b.node_image ? b.node_image : undefined;
+          const no = refuseCluster(view, files, { zone: b.zone, program: b.program, profile: b.profile, workers, nodeImage });
           if (no) return no;
           const slug = `cluster-${b.zone}-${b.program}`;
           if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for a cluster in ${b.zone}/${b.program}.`;
-          const file: ClusterFile = { zone: b.zone, program: b.program, profile: b.profile, ...(workers !== undefined ? { workers } : {}), requested_by: user, requested_at: new Date().toISOString() };
-          const message = `console: new cluster in ${b.zone}/${b.program} (profile ${b.profile})`;
+          const file: ClusterFile = { zone: b.zone, program: b.program, profile: b.profile, ...(nodeImage ? { node_image: nodeImage } : {}), ...(workers !== undefined ? { workers } : {}), requested_by: user, requested_at: new Date().toISOString() };
+          const message = `console: new cluster in ${b.zone}/${b.program} (profile ${b.profile}${nodeImage ? `, image ${nodeImage}` : ''})`;
           const pull = await infraRepo.pullRequest(slug, message, `${body(file, user)}\nOnce merged, the host creates it within 5 minutes (configuration.py reconcile → cluster-create).\n`,
             [{ path: `${infraDir}/clusters/${clusterFileName(b.zone, b.program)}`, text: `${JSON.stringify(file, null, 2)}\n` }]);
           return { message, pull };

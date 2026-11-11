@@ -78,6 +78,8 @@ export type ClusterProfile = {
   k8sPsa?: string;
   longhorn: boolean;
 };
+/** A node image a new cluster may choose ([kubernetes] node_images of network.toml): its OS and the Kubernetes it carries. */
+export type NodeImage = { name: string; os?: string; kubernetes?: string; default: boolean };
 export type ReconcileStep = { file?: string; zone?: string; program?: string; action: string; state: string; detail?: string; at?: string };
 /** What the host did following main (configuration.py reconcile). */
 export type ActionResult = { file: string; kind: string; zone?: string; program?: string; vm?: string; requested_by?: string; state: string; detail?: string; at?: string };
@@ -100,7 +102,7 @@ export type ZoneView = {
   /** what this OpenNebula installation is ([site] role of network.toml): a core site unless it says edge */
   site?: { role: 'core' | 'edge' };
   catalog?: CatalogZone[];
-  kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
+  kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string; nodeImages?: NodeImage[] };
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
   consoleVms?: { applied?: string; vms: ConsoleVmStatus[] };
@@ -244,6 +246,9 @@ export function summariseZone(raw: Raw): ZoneView {
       ? {
           defaultProfile: k.default_profile || undefined,
           template: k.template || undefined,
+          nodeImages: Array.isArray(k.node_images)
+            ? k.node_images.filter((i: Raw) => i?.name).map((i: Raw) => ({ name: str(i.name), os: i.os ? str(i.os) : undefined, kubernetes: i.kubernetes ? str(i.kubernetes) : undefined, default: !!i.default }))
+            : undefined,
           profiles: k.profiles.map((p: Raw) => ({
             name: str(p.name),
             default: !!p.default,

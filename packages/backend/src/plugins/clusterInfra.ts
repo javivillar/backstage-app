@@ -12,7 +12,7 @@ export const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 /** Limits of what the console may ask (the host checks the memory again). */
 export const SCALE_LIMITS = { workers: 8, storage: 3, masters: 5 };
 
-export type ClusterFile = { zone: string; program: string; profile?: string; masters?: number; workers?: number; storage?: number; delete?: boolean; requested_by?: string; requested_at?: string };
+export type ClusterFile = { zone: string; program: string; profile?: string; node_image?: string; masters?: number; workers?: number; storage?: number; delete?: boolean; requested_by?: string; requested_at?: string };
 export const clusterFileName = (zone: string, program: string) => `${zone}-${program}.json`;
 
 /** What a segregation is: a programme, the common services of its zone, or the interconnection zone of the site. */
@@ -239,7 +239,7 @@ export function deleteCluster(view: ZoneView, file: ClusterFile | undefined, adm
 }
 
 /** What a new cluster asks, or why it cannot be asked. files: the cluster files already in git. */
-export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone: string; program: string; profile: string; workers?: number }): string | undefined {
+export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone: string; program: string; profile: string; workers?: number; nodeImage?: string }): string | undefined {
   const z = view.catalog?.find(c => c.name === req.zone);
   const known = z?.programs.find(p => p.name === req.program);
   if (!z || !known) return `There is no segregation ${req.zone}/${req.program} yet: create it first (its pull request merged and applied).`;
@@ -250,6 +250,9 @@ export function refuseCluster(view: ZoneView, files: ClusterFile[], req: { zone:
   if (files.some(f => f.zone === req.zone && f.program === req.program)) return `A cluster for ${req.zone}/${req.program} is already asked.`;
   const profile = view.kubernetes?.profiles.find(p => p.name === req.profile);
   if (!profile) return `The profile is one of ${(view.kubernetes?.profiles ?? []).map(p => p.name).join(', ')}.`;
+  // the node image (its OS and Kubernetes version) is one the host offers; none asked: the one of the profile
+  const images = view.kubernetes?.nodeImages ?? [];
+  if (req.nodeImage !== undefined && !images.some(i => i.name === req.nodeImage)) return images.length ? `The node image is one of ${images.map(i => i.name).join(', ')}.` : 'This host offers no choice of node image: the profile sets it.';
   if (req.workers !== undefined && !(Number.isInteger(req.workers) && req.workers >= 0 && req.workers <= SCALE_LIMITS.workers)) return `Workers: 0 to ${SCALE_LIMITS.workers}.`;
   const workers = req.workers ?? profile.counts.worker;
   const need = profile.memoryMb + (workers - profile.counts.worker) * profile.roles.worker.memory_mb;

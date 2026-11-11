@@ -104,6 +104,8 @@ export const ZONE: Messages = {
   'infra.noTarget': { en: 'Every programme has a cluster or one asked: create a new segregation first (Platform).', es: 'Todos los programas tienen clúster o uno pedido: crea antes una segregación nueva (Plataforma).' },
   'infra.clusterOpened': { en: 'Pull request #{n} opened: once merged, the host creates the cluster of {target}.', es: 'Pull request #{n} abierto: al fusionarlo, el host crea el clúster de {target}.' },
   'infra.profile': { en: 'Profile', es: 'Perfil' },
+  'infra.nodeImage': { en: 'Node image', es: 'Imagen de los nodos' },
+  'infra.nodeImageHelp': { en: 'Operating system and Kubernetes version of master, worker and storage', es: 'Sistema operativo y versión de Kubernetes de master, worker y storage' },
   'infra.workers': { en: 'Workers', es: 'Workers' },
   'infra.needs': { en: 'needs {need} · {free} free', es: 'necesita {need} · {free} libres' },
   'infra.confirmDelete': { en: 'Delete the cluster {name} of {target}? A pull request asks it; once merged, the host destroys its VMs and their disks (the segregation stays). It cannot be undone.', es: '¿Borrar el clúster {name} de {target}? Un pull request lo pide; al fusionarlo, el host destruye sus VMs y sus discos (la segregación se queda). No se puede deshacer.' },

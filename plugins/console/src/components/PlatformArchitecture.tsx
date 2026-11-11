@@ -2,6 +2,7 @@ import { Link } from '@backstage/core-components';
 import type { SvgIconComponent } from '@mui/icons-material';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import CloudIcon from '@mui/icons-material/Cloud';
+import CodeIcon from '@mui/icons-material/Code';
 import ComputerIcon from '@mui/icons-material/Computer';
 import DnsIcon from '@mui/icons-material/Dns';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -114,7 +115,7 @@ const Cap = ({ children, colour }: { children: ReactNode; colour: string }) => (
   </Box>
 );
 
-const COMPONENT_ICON: Record<string, SvgIconComponent> = { apisix: ShieldIcon, sftpgo: FolderIcon, kafka: HubIcon };
+const COMPONENT_ICON: Record<string, SvgIconComponent> = { apisix: ShieldIcon, sftpgo: FolderIcon, kafka: HubIcon, forge: CodeIcon };
 
 /** A segregation inside its zone lane: the cluster of a programme, the pieces of a landing or integration zone, common. */
 const SegBox = ({ seg, colour, inter }: { seg: Seg; colour: string; inter?: InterZone }) => {

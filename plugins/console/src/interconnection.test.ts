@@ -63,6 +63,9 @@ describe('the model of the interconnection', () => {
     expect(zones[0].common?.id).toBe('nato/common');
     expect(zones[0].programmes.map(p => p.id)).toEqual(['nato/sirtap', 'nato/a400m']);
     expect(zoneSlots('integration', []).map(s => s.key)).toEqual(['apisix-u2m', 'apisix-m2m']);
+    // GitLab + Harbor is optional: a piece of the integration zone only once it is created, never missing
+    const forge = { zone: 'nato', program: 'integration', vm: 'vm-nato-integration-forge-0', name: 'forge-0', component: 'forge', state: 'running' as const, detail: '' };
+    expect(zoneSlots('integration', [forge]).map(s => [s.key, s.state])).toEqual([['apisix-u2m', 'missing'], ['apisix-m2m', 'missing'], ['forge', 'running']]);
     expect(interconnectionAttention(zones)).toEqual([
       { tone: 'neg', key: 'ic.att.landing.m2m', vars: { zone: 'nato/landing' }, to: 'marketplace' },
       { tone: 'warn', key: 'ic.att.waiting', vars: { name: 'vm-nato-landing-kafka-0' }, to: 'interconnection' },
@@ -80,7 +83,7 @@ describe('the model of the interconnection', () => {
   });
 
   it('names and sizes a new component like the backend', () => {
-    expect(policyComponents(interPolicy)).toEqual(['apisix', 'sftpgo', 'kafka']);
+    expect(policyComponents(interPolicy)).toEqual(['apisix', 'sftpgo', 'kafka', 'forge']);
     expect(policyComponents({ ...interPolicy, components: undefined })).toEqual([]);
     expect(policyComponents(undefined)).toEqual([]);
     expect(componentName(['apisix-u2m-0'], 'apisix', 'u2m')).toBe('apisix-u2m-1');
@@ -88,6 +91,8 @@ describe('the model of the interconnection', () => {
     expect(componentName([], 'kafka')).toBe('kafka-0');
     expect(componentTitle('apisix', 'm2m')).toBe('APISIX M2M');
     expect(componentTitle('sftpgo')).toBe('SFTPGo');
+    expect(componentTitle('forge')).toBe('GitLab + Harbor');
+    expect(componentName([], 'forge')).toBe('forge-0');
     expect(overLimits(interPolicy.component_limits, interFiles, 'nato', 'landing', { cpu: 2, memory_mb: 4096 })).toEqual([]);
     expect(overLimits({ vms: 3, cpu: 16, memory_mb: 14000 }, interFiles, 'nato', 'landing', { cpu: 2, memory_mb: 4096 })).toEqual(['vms', 'memory_mb']);
     expect(overLimits(undefined, interFiles, 'nato', 'landing', { cpu: 2, memory_mb: 4096 })).toEqual([]);
