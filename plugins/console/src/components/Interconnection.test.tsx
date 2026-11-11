@@ -98,28 +98,37 @@ describe('Interconnection in the Platform console', () => {
     expect(await screen.findByText(/Pull request #9 opened: once merged, the host removes nato\/a400m/)).toBeInTheDocument();
   });
 
-  it('Marketplace › Segregations: a landing zone on a core site, with its fixed name; the integration zone is not offered', async () => {
+  it('Marketplace › Segregations: a zone that has its landing zone gets neither a second one nor an integration zone', async () => {
     await wrap(<MarketplacePage />);
     expect(await screen.findByText('Core site')).toBeInTheDocument();
     expect(screen.getAllByRole('tab').map(x => x.textContent)).toEqual(['1 · Segregations', '2 · Kubernetes clusters', '3 · Interconnection components']);
-    expect(screen.getByText('Not on a core site: it is created in the console of the edge site')).toBeInTheDocument();
-    // programme is chosen: only the landing zone is left to pick
-    const pick = screen.getAllByRole('button', { name: 'Create this segregation' });
-    expect(pick).toHaveLength(1);
-    fireEvent.click(pick[0]);
-    const name = screen.getByLabelText('Name (fixed)');
-    expect(name).toHaveValue('landing');
-    expect(name).toBeDisabled();
-    // nato already has its landing zone
+    // nato already has its landing zone: neither of the two is left to pick, each with its reason
     expect(screen.getByText('nato/landing already exists')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open the pull request' })).toBeDisabled();
+    expect(screen.getByText('nato already has its landing zone: a zone holds a landing zone or an integration zone, never both')).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: 'Create this segregation' })).toHaveLength(0);
     // a reserved name cannot be asked as a programme
-    fireEvent.click(screen.getAllByRole('button', { name: 'Create this segregation' })[0]);
     fireEvent.change(screen.getByLabelText(/Programme/), { target: { value: 'common' } });
     expect(screen.getByText('nato/common already exists')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Programme/), { target: { value: 'integration' } });
     expect(screen.getByText('integration is a reserved name')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open the pull request' })).toBeDisabled();
+  });
+
+  it('Marketplace › Segregations: a zone with neither offers the landing zone and the integration zone, on any site', async () => {
+    // only diflim in the catalog: reserved and empty, on a core site
+    zoneAnswer = { ...interView, catalog: interView.catalog!.filter(c => c.name === 'diflim') };
+    await wrap(<MarketplacePage />);
+    expect(await screen.findByText('Core site')).toBeInTheDocument();
+    // programme is chosen: the landing zone and the integration zone are left to pick
+    const pick = screen.getAllByRole('button', { name: 'Create this segregation' });
+    expect(pick).toHaveLength(2);
+    fireEvent.click(pick[1]);
+    const name = screen.getByLabelText('Name (fixed)');
+    expect(name).toHaveValue('integration');
+    expect(name).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open the pull request' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Open the pull request' }));
+    await waitFor(() => expect(posted('/infra/segregations')).toEqual({ zone: 'diflim', program: 'integration', kind: 'integration' }));
   });
 
   it('Marketplace › Segregations: the first segregation of a zone says it also creates its common', async () => {
@@ -172,11 +181,11 @@ describe('Interconnection in the Platform console', () => {
     expect(screen.queryByRole('button', { name: 'Open the pull request' })).toBeNull();
   });
 
-  it('Marketplace › Interconnection components: asks for the landing zone first', async () => {
+  it('Marketplace › Interconnection components: asks for a landing or integration zone first', async () => {
     zoneAnswer = { ...interView, catalog: interView.catalog!.map(c => ({ ...c, programs: c.programs.filter(p => p.name !== 'landing') })), zones: interView.zones.map(z => ({ ...z, programs: z.programs.filter(p => p.name !== 'landing') })) };
     await wrap(<MarketplacePage />, '/?tab=components');
-    expect(await screen.findByText('This core site has no landing zone yet')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create a landing zone' })).toBeInTheDocument();
+    expect(await screen.findByText('No landing or integration zone yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create a landing or integration zone' })).toBeInTheDocument();
   });
 
   it('Kubernetes clusters: Open, Scale and Delete after typing the name; never the cluster of this console', async () => {
