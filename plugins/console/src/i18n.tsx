@@ -11,6 +11,7 @@ import { BUSINESS_MAP } from './messages/businessMap';
 import { BUSINESS_MAP_DASHBOARDS } from './messages/businessMapDashboards';
 import { DEVELOPMENT } from './messages/development';
 import { INTERCONNECTION } from './messages/interconnection';
+import { ACCESS_ADMIN } from './messages/accessAdmin';
 
 /**
  * The languages of the console: English and Spanish. Texts live in MESSAGES by key; a page calls t('key', {n: 3}).
@@ -118,7 +119,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION, ...ACCESS_ADMIN };
 
 const KEY = 'rq-console-lang';
 

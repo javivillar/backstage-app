@@ -33,6 +33,7 @@ import { ConsoleTheme } from '../theme/consoleTheme';
 import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
+import { AccessAdminPage } from './AccessAdminPage';
 import { BusinessMapPage } from './businessMap/BusinessMapPage';
 import { BusinessExplorerPage } from './businessMap/ExplorerPage';
 import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
@@ -137,6 +138,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/cluster/scale" element={<ClusterScalePage />} />
         <Route path="/cis-cluster" element={<CisClusterPage />} />
         <Route path="/manage" element={<ManageHubPage />} />
+        <Route path="/access-administration" element={<AccessAdminPage />} />
         <Route path="/manage/:id" element={<ManageServicePage />} />
         <Route path="/network" element={<NetworkPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />

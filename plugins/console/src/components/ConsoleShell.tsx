@@ -245,7 +245,12 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
     if (navOf('managers').length)
       groups.push({
         title: tr('nav.manage'),
-        items: [{ label: tr('nav.allServices'), to: '/console/manage' }, ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') }))],
+        items: [
+          { label: tr('nav.allServices'), to: '/console/manage' },
+          ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') })),
+          // who is in the Keycloak groups of each product (AccessAdminPage): its administrators and the portal's
+          { label: tr('nav.accessAdmin'), to: '/console/access-administration', hint: tr('nav.accessAdmin.hint') },
+        ],
       });
   }
 

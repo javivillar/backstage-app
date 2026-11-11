@@ -71,3 +71,36 @@ by the name of its Component (`superset-oneke`), a stage of an application by `r
 `keycloak:create-group` asks for `belongsTo` (the Component the group governs), `grants` and `kind`, and writes the
 tags (`refresquito.component`, `.stage`, `.kind`, `.grants`, and zone/program/classification copied from an object
 already tagged for that component).
+
+## Access administration
+
+`/api/keycloak-manager/access/*` backs console › Portal › Manage › Access administration: the only place of the
+portal that changes who is in a Keycloak group. People are never created there; existing users are added to and
+removed from the groups of a product.
+
+| Route | What |
+| --- | --- |
+| `GET /access/products` | the products the caller administers (every one for `backstage-admin`) |
+| `GET /access/products/:component` | its groups with their members, and its last changes |
+| `GET /access/people?search=` | existing people to add (2 characters or more) |
+| `GET /access/people/:username` | what a person has in the products the caller administers |
+| `PUT` / `DELETE /access/groups/:group/members/:username` | add / remove a person |
+
+Rules (`src/accessModel.ts`, tested in `accessModel.test.ts`):
+
+- A product is a component of the security tags (`refresquito.component`). The Grafana groups of a service
+  (`grafana-<service>-viewers` / `-editors`) are shown with that service.
+- Its administrators are the members of its administrator group: `<product>-admin`, the only group ending in
+  `-admin`, or the one set in `ADMIN_GROUPS` (config `keycloakAdmin.access.admins.<component>: [groups]` replaces the
+  whole table). They add other administrators too.
+- The owner group of a business application (`spec.owner` of its Component) administers its groups.
+- `backstage-admin` administers everything, and only it changes the groups of `PORTAL_ONLY` (config
+  `keycloakAdmin.access.portalOnly`): `headlamp-admin`, `argocd-admin`, `s3-admins`, `backstage-admin`...
+- A product is never left without an administrator.
+- A person who signs in through the hub (an identity provider link) is refused: the spoke maps their groups from the
+  hub at every sign-in (sync mode FORCE), so they are changed in the hub.
+
+Every change is recorded in the table `access_changes` of this plugin's database (who, what, when) and logged;
+without the database no change is made. A change applies the next time the person signs in. The service account
+needs `manage-users`, `view-users` and `query-groups` of `realm-management` (the realm of iam-oneke gives them).
+

@@ -7,6 +7,9 @@ import {
   ownerFromClientAttributes,
 } from './actions';
 import { securityOf, unowned } from './security';
+import { catalogServiceRef } from '@backstage/plugin-catalog-node';
+import { accessRouter } from './accessRoutes';
+import { AccessStore, ensureTable } from './accessStore';
 
 interface KcUser {
   id: string;
@@ -69,9 +72,36 @@ export const keycloakManagerPlugin = createBackendPlugin({
         userInfo: coreServices.userInfo,
         config: coreServices.rootConfig,
         logger: coreServices.logger,
+        database: coreServices.database,
+        catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, userInfo, config, logger }) {
+      async init({ httpRouter, httpAuth, userInfo, config, logger, database, catalog }) {
         const router = Router();
+
+        // access administration (accessRoutes.ts): without its database nothing is changed, since no change could
+        // be recorded; the pages still read
+        let store: AccessStore | undefined;
+        try {
+          const knex = await database.getClient();
+          await ensureTable(knex);
+          store = new AccessStore(knex);
+        } catch (e) {
+          logger.warn(`keycloak-manager: access changes cannot be recorded, so none will be made: ${(e as Error).message}`);
+        }
+        router.use(
+          '/access',
+          accessRouter({
+            config,
+            logger,
+            catalog,
+            store,
+            caller: async req => {
+              const credentials = await httpAuth.credentials(req);
+              const info = await userInfo.getUserInfo(credentials);
+              return { credentials, entityRef: info.userEntityRef, ownershipEntityRefs: info.ownershipEntityRefs };
+            },
+          }),
+        );
 
         async function callerContext(req: Request) {
           const credentials = await httpAuth.credentials(req);
