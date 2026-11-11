@@ -29,7 +29,7 @@ export function kindOf(name: string, kind?: string): SegregationKind {
   if (kind && (SEGREGATION_KINDS as readonly string[]).includes(kind)) return kind as SegregationKind;
   return RESERVED_NAMES.includes(name) ? (name as SegregationKind) : 'programme';
 }
-/** The role of this OpenNebula installation: a core site (landing zones) unless the host says edge. */
+/** The role of this OpenNebula installation: a core site unless the host says edge. It does not limit the kinds of a zone. */
 export const siteRole = (view: Pick<ZoneView, 'site'>): SiteRole => (view.site?.role === 'edge' ? 'edge' : 'core');
 
 export type TomlProgram = { zone: string; n: number; name: string; kind?: string };
@@ -127,13 +127,15 @@ export function addSegregation(text: string, view: ZoneView, zone: string, progr
     if (!PROGRAM_NAME.test(name)) return 'The programme name: lowercase letters, digits and "-", up to 31, starting with a letter or digit.';
     if (RESERVED_NAMES.includes(name)) return `${name} is a reserved name: ${name === 'common' ? 'the common segregation comes by itself with the first segregation of a zone' : `ask it as the ${name} zone`}.`;
   }
-  const role = siteRole(view);
-  if (k === 'landing' && role !== 'core') return 'A landing zone belongs to a core site, and this is an edge site: ask its integration zone.';
-  if (k === 'integration' && role !== 'edge') return 'An integration zone belongs to an edge site, and this is a core site: ask its landing zone.';
   const z = (view.catalog ?? []).find(c => c.name === zone);
   if (!z) return `There is no zone ${zone} in the catalog.`;
   const declared = tomlPrograms(text).filter(p => p.zone === zone);
   if (declared.some(p => p.name === name) || z.programs.some(p => p.name === name)) return `${zone}/${name} already exists.`;
+  // a zone is one side of the interconnection: a landing zone or an integration zone, never both
+  if (k !== 'programme') {
+    const other = k === 'landing' ? 'integration' : 'landing';
+    if ([...declared, ...z.programs].some(p => kindOf(p.name, p.kind) === other)) return `Zone ${zone} already has its ${other} zone: a zone holds a landing zone or an integration zone, never both.`;
+  }
   const used = [...declared.map(p => p.n), ...z.programs.map(p => p.n).filter((n): n is number => typeof n === 'number')];
   const first = declared.length === 0 && z.programs.length === 0;
   const next = Math.max(0, ...used) + 1;

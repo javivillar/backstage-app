@@ -5,7 +5,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
 import { useI18n } from '../i18n';
-import { componentName, componentTitle, interconnectionKind, kindOf, overLimits, policyComponents, RESERVED_NAMES, segregations, type SegKind, siteRole } from '../interconnection';
+import { componentName, componentTitle, kindOf, overLimits, policyComponents, RESERVED_NAMES, segregations, siteRole } from '../interconnection';
 import { useClusterPost } from '../post';
 import { type ConsolePull, type InfraView, type NodeImage, pullKind, SCALE_LIMITS, useInfra, useVmRequests, useZone } from '../zone';
 import { InfraFrame, ProfileCard, ReconcileCard, roomFinding } from './InfraPages';
@@ -25,18 +25,21 @@ const ASKED: Asked[] = ['programme', 'landing', 'integration'];
 /** What the requests list of the marketplace covers: segregations, clusters and interconnection components. */
 export const isMarketRequest = (p: ConsolePull) => /^console\/(seg|segdel|cluster|clusterdel)-/.test(p.branch) || / component$/.test(pullKind(p));
 
-/** Tab 1: a programme, the landing zone (core site) or the integration zone (edge site) of a zone, by pull request. */
+/** Tab 1: a programme, or the landing zone or the integration zone of a zone (one or the other), by pull request. */
 const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: boolean; onDone: () => void }) => {
   const { t } = useI18n();
   const post = useClusterPost();
   const { note, busy, run } = useChange(onDone);
   const role = siteRole(view);
-  const fits = (k: Asked) => k === 'programme' || k === interconnectionKind(role);
   const [kind, setKind] = useState<Asked>('programme');
   const [form, setForm] = useState({ zone: '', program: '' });
   const catalog = view.catalog ?? [];
   const z = catalog.find(c => c.name === (form.zone || catalog.find(x => x.enabled)?.name)) ?? catalog[0];
   const name = kind === 'programme' ? form.program : kind;
+  // a zone is one side of the interconnection: once it has a landing zone or an integration zone, neither is offered
+  const held = z?.programs.map(p => kindOf(p.name, p.kind)).find(k => k === 'landing' || k === 'integration');
+  const fits = (k: Asked) => k === 'programme' || !held;
+  const whyNot = (k: Asked) => (held === k ? t('ic.seg.taken', { id: `${z?.name}/${k}` }) : t('ic.seg.other', { zone: z?.name ?? '', kind: t(`ic.seg.${held ?? 'landing'}`).toLowerCase() }));
   const taken = !!z?.programs.some(p => p.name === name);
   const reserved = kind === 'programme' && RESERVED_NAMES.includes(name);
   const nameOk = kind !== 'programme' || (PROGRAM_NAME.test(name) && !reserved);
@@ -71,7 +74,7 @@ const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: 
             desc={t(`ic.seg.${k}.desc`)}
             foot={t(`ic.seg.${k}.creates`)}
             chosen={kind === k && fits(k)}
-            disabled={fits(k) ? undefined : t(`ic.seg.${k}.notHere`)}
+            disabled={fits(k) ? undefined : whyNot(k)}
             action={t('ic.seg.pick')}
             onPick={() => pick(k)}
           />
@@ -210,10 +213,8 @@ const ComponentsTab = ({ view, onSegregations }: { view: InfraView; onSegregatio
   const post = useClusterPost();
   const req = useVmRequests();
   const { note, busy, run } = useChange(req.reload);
-  const role = siteRole(view);
-  const wanted: SegKind = interconnectionKind(role);
-  // the zones of this site that can hold components and that OpenNebula already has (applied)
-  const zones = segregations(view).filter(s => s.kind === wanted);
+  // the zones that can hold components (landing or integration) and that OpenNebula already has (applied)
+  const zones = segregations(view).filter(s => s.kind === 'landing' || s.kind === 'integration');
   const ready = zones.filter(s => s.live);
   const [form, setForm] = useState({ zone: '', component: '', traffic: '', cpu: '', memory: '', disk: '' });
   const policy = req.data?.policy;
@@ -230,11 +231,11 @@ const ComponentsTab = ({ view, onSegregations }: { view: InfraView; onSegregatio
     return (
       <Card title={t('ic.comp.title')}>
         <EmptyState
-          title={t(zones.length ? 'ic.comp.zoneNotApplied' : `ic.comp.noZone.${wanted}`, { id: zones[0]?.id ?? '' })}
+          title={t(zones.length ? 'ic.comp.zoneNotApplied' : 'ic.comp.noZone', { id: zones[0]?.id ?? '' })}
           action={
             zones.length ? undefined : (
               <Button variant="outlined" onClick={onSegregations}>
-                {t(`ic.comp.createZone.${wanted}`)}
+                {t('ic.comp.createZone')}
               </Button>
             )
           }
@@ -280,7 +281,7 @@ const ComponentsTab = ({ view, onSegregations }: { view: InfraView; onSegregatio
           ))}
         </TextField>
         <Typography variant="body2" color="text.secondary" sx={{ flex: '1 1 320px' }}>
-          {t(`ic.comp.zoneHint.${role}`)}
+          {t('ic.comp.zoneHint')}
         </Typography>
       </Box>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))' }}>

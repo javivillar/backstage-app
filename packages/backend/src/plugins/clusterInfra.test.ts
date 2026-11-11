@@ -256,11 +256,18 @@ describe('segregation kinds, common and the exceptions of the interconnection', 
     expect(segregationExceptions('nato', 'a400m', 'programme', [{ zone: 'nato', n: 1, name: 'sirtap' }])).toEqual([]);
   });
 
-  it('refuses a kind that does not fit the site, a second one, and the reserved names', () => {
+  it('a zone holds a landing zone or an integration zone, never both; refuses a second one and the reserved names', () => {
     const core = site('core', { nato: [{ name: 'sirtap', n: 1 }, { name: 'landing', n: 2, kind: 'landing' }], diflim: [] });
     const edge = site('edge', { nato: [{ name: 'sirtap', n: 1 }] });
-    expect(addSegregation(BASE, core, 'diflim', '', 'integration')).toMatch(/edge site.*core site/);
-    expect(addSegregation(BASE, edge, 'nato', '', 'landing')).toMatch(/core site.*edge site/);
+    // either kind on any site: the zone decides, not the site role
+    expect(ok(addSegregation(BASE, core, 'diflim', '', 'integration'))).toMatchObject({ program: 'integration', kind: 'integration' });
+    expect(ok(addSegregation(BASE, edge, 'nato', '', 'landing'))).toMatchObject({ program: 'landing', kind: 'landing' });
+    // once a zone has one, the other is refused: seen in OpenNebula, or only declared in network.toml
+    expect(addSegregation(BASE, core, 'nato', '', 'integration')).toMatch(/nato already has its landing zone/);
+    const withIntegration = site('core', { nato: [{ name: 'sirtap', n: 1 }, { name: 'integration', n: 2, kind: 'integration' }] });
+    expect(addSegregation(BASE, withIntegration, 'nato', '', 'landing')).toMatch(/nato already has its integration zone/);
+    const declared = `${BASE}\n[[program]]\nzone = "nato"\nn = 3\nname = "integration"\nkind = "integration"\n`;
+    expect(addSegregation(declared, edge, 'nato', '', 'landing')).toMatch(/nato already has its integration zone/);
     expect(ok(addSegregation(BASE, edge, 'nato', '', 'integration'))).toMatchObject({ program: 'integration', kind: 'integration' });
     expect(ok(addSegregation(BASE, edge, 'nato', '', 'integration')).text).toContain('name = "integration"\nkind = "integration"\n');
     expect(addSegregation(BASE, core, 'nato', '', 'landing')).toMatch(/nato\/landing already exists/);
