@@ -100,7 +100,8 @@ export const BusinessMatrixPage = () => {
     const dot = choose<Dot>([[c.support === 'supported', 'ok'], [c.support === 'ending', 'warn']], 'bad');
     return mark(dot, `${col.label}: ${t(`bmd.fw.${c.support}`)}`);
   };
-  const sticky = { position: 'sticky', top: 0, zIndex: 2 } as const;
+  // opacity 1: the classic theme fades every table header, and a see-through sticky header shows the rows behind it
+  const sticky = { position: 'sticky', top: 0, zIndex: 2, opacity: 1 } as const;
   const head = (col: Column) => {
     const isDown = down.has(col.id);
     const about = col.family === 'platform' ? `${col.tier ?? '—'} · RPO ${fmt(col.rpo)} / RTO ${fmt(col.rto)}` : `${t('bmd.mx.line')} · ${col.until ?? t(`bmd.fw.${col.support ?? 'supported'}`)} · ${t('bmd.mx.buildTime')}`;
