@@ -81,8 +81,8 @@ export function removalBlock(
 }
 
 /** The components in the order they are offered. */
-export const COMPONENT_ORDER = ['apisix', 'sftpgo', 'kafka'];
-const COMPONENT_NAMES: Record<string, string> = { apisix: 'APISIX', sftpgo: 'SFTPGo', kafka: 'Kafka', clamav: 'ClamAV' };
+export const COMPONENT_ORDER = ['apisix', 'sftpgo', 'kafka', 'forge'];
+const COMPONENT_NAMES: Record<string, string> = { apisix: 'APISIX', sftpgo: 'SFTPGo', kafka: 'Kafka', forge: 'GitLab + Harbor', clamav: 'ClamAV' };
 /** APISIX U2M, SFTPGo, Kafka... */
 export function componentTitle(component: string, traffic?: string): string {
   return `${COMPONENT_NAMES[component] ?? component}${traffic ? ` ${traffic.toUpperCase()}` : ''}`;
@@ -181,11 +181,17 @@ export type Slot = { key: string; component: string; traffic?: string; rows: Com
 
 const BEST: SlotState[] = ['running', 'creating', 'git', 'waiting', 'stopped', 'failed', 'missing'];
 
-/** The pieces of a landing zone (two gateways, files, events) or an integration zone (its two gateways). */
+/**
+ * The pieces of a landing zone (two gateways, files, events) or an integration zone (its two gateways), then the
+ * optional ones it holds (the GitLab + Harbor of an integration zone): never missing, shown only when created.
+ */
 export function zoneSlots(kind: SegKind, rows: ComponentRow[]): Slot[] {
   const wanted: Array<[string, string?]> = [['apisix', 'u2m'], ['apisix', 'm2m'], ...(kind === 'landing' ? ([['sftpgo'], ['kafka']] as Array<[string, string?]>) : [])];
-  return wanted.map(([component, traffic]) => {
-    const mine = rows.filter(r => r.component === component && (r.traffic ?? undefined) === traffic);
+  const fills = (r: ComponentRow, component: string, traffic?: string) => r.component === component && (r.traffic ?? undefined) === traffic;
+  const extra = rows.filter(r => !wanted.some(([c, t]) => fills(r, c, t))).map(r => [r.component, r.traffic ?? undefined] as [string, string?]);
+  const optional = extra.filter(([c, t], i) => extra.findIndex(([c2, t2]) => c2 === c && t2 === t) === i).sort((a, b) => `${a[0]}-${a[1] ?? ''}`.localeCompare(`${b[0]}-${b[1] ?? ''}`));
+  return [...wanted, ...optional].map(([component, traffic]) => {
+    const mine = rows.filter(r => fills(r, component, traffic));
     const state = mine.length ? BEST.find(s => mine.some(r => r.state === s))! : 'missing';
     return { key: `${component}${traffic ? `-${traffic}` : ''}`, component, traffic, rows: mine, state };
   });

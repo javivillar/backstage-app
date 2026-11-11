@@ -191,7 +191,7 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
   );
 };
 
-/** Tab 3: APISIX + Coraza, SFTPGo or Kafka in a landing or integration zone: fixed image, sized from the policy. */
+/** Tab 3: APISIX + Coraza, SFTPGo, Kafka or GitLab + Harbor in a landing or integration zone: fixed image, sized from the policy. */
 const ComponentsTab = ({ view, onSegregations }: { view: InfraView; onSegregations: () => void }) => {
   const { t, has } = useI18n();
   const post = useClusterPost();
@@ -282,7 +282,7 @@ const ComponentsTab = ({ view, onSegregations }: { view: InfraView; onSegregatio
               </>
             }
             chosen={c === component}
-            disabled={offered(c) ? undefined : t('ic.comp.landingOnly')}
+            disabled={offered(c) ? undefined : t(policy!.components![c].kinds.includes('landing') ? 'ic.comp.landingOnly' : 'ic.comp.integrationOnly')}
             action={t('ic.comp.pick')}
             onPick={() => pick(c)}
           />

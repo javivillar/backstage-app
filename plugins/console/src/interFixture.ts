@@ -50,6 +50,7 @@ export const interPolicy: VmPolicy = {
     apisix: { image: 'refresquito-apisix-coraza-ubuntu2404-0.1.4', kinds: ['landing', 'integration'], traffic: ['u2m', 'm2m'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [20, 40, 80], cpu_model: 'host-passthrough' },
     sftpgo: { image: 'refresquito-sftpgo-ubuntu2404-0.1.2', kinds: ['landing'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [20, 50, 100] },
     kafka: { image: 'refresquito-kafka-ubuntu2404-0.1.0', kinds: ['landing'], cpu: [1, 2, 4], memory_mb: [2048, 4096, 8192], disk_gb: [10, 20, 40] },
+    forge: { image: 'refresquito-forge-ubuntu2404-0.1.0', kinds: ['integration'], cpu: [4, 8], memory_mb: [12288, 16384, 24576], disk_gb: [100, 200, 500] },
   },
   component_limits: { vms: 6, cpu: 16, memory_mb: 32768 },
 };
