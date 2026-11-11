@@ -34,6 +34,8 @@ import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
 import { AccessAdminPage } from './AccessAdminPage';
+import { AreaGuard, RolesPermissionsPage } from './RolesPermissionsPage';
+import { PortalPermissionsProvider } from '../portalPermissions';
 import { BusinessMapPage } from './businessMap/BusinessMapPage';
 import { BusinessExplorerPage } from './businessMap/ExplorerPage';
 import { BusinessHeatmapPage } from './businessMap/HeatmapPage';
@@ -95,7 +97,10 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
     <ConsolePagesContext.Provider value={pages}>
       <I18nProvider>
       <ConsoleTheme>
+      <PortalPermissionsProvider>
       <ConsoleShell embedded={embedded}>
+        {/* a page of the portal is only for who may use its area (the one table of permissions) */}
+        <AreaGuard>
         <Routes>
         <Route path="/" element={<PortalHome />} />
         <Route path="/entity/:namespace/:kind/:name/*" element={<ConsoleEntityPage content={entityContent} apiDefinition={apiDefinition} />} />
@@ -139,6 +144,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/cis-cluster" element={<CisClusterPage />} />
         <Route path="/manage" element={<ManageHubPage />} />
         <Route path="/access-administration" element={<AccessAdminPage />} />
+        <Route path="/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/manage/:id" element={<ManageServicePage />} />
         <Route path="/network" element={<NetworkPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
@@ -158,7 +164,9 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/infrastructure/vm/:name" element={<VmDetailPage />} />
         <Route path="*" element={<Message title="Page not found">This page of the console does not exist.</Message>} />
         </Routes>
+        </AreaGuard>
       </ConsoleShell>
+      </PortalPermissionsProvider>
       </ConsoleTheme>
       </I18nProvider>
     </ConsolePagesContext.Provider>

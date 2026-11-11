@@ -32,6 +32,7 @@ import { QuickFind } from './QuickFind';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSwitch } from './LanguageSwitch';
 import { useI18n } from '../i18n';
+import { usePortalPermissions } from '../portalPermissions';
 
 const EMBED_KEY = 'rq-console-embedded';
 
@@ -158,6 +159,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
   useEffect(() => setNavOpen(false), [current]);
   const pages = useConsolePages();
   const portalLinks = usePortalLinks();
+  const { canOpen } = usePortalPermissions();
   const layer = layerOf(current, pages);
   const navOf = (l: ConsoleClassicPage['layer']) => pages.filter(p => p.layer === l).map(p => ({ label: has(`page.${p.id}`) ? tr(`page.${p.id}`) : p.title, to: `/console/${p.id}`, hint: p.product }));
   const zoneName = own.zone ? `${tr('shell.zone')} ${own.zone}` : tr('nav.infrastructure');
@@ -250,9 +252,13 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
           ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') })),
           // who is in the Keycloak groups of each product (AccessAdminPage): its administrators and the portal's
           { label: tr('nav.accessAdmin'), to: '/console/access-administration', hint: tr('nav.accessAdmin.hint') },
+          { label: tr('nav.rolesPermissions'), to: '/console/roles-permissions', hint: tr('nav.rolesPermissions.hint') },
         ],
       });
   }
+
+  // the menu only lists what this person may use (the one table of permissions); a group left empty is not shown
+  const shownGroups = groups.map(g => ({ ...g, items: g.items.filter(i => i.external || canOpen(i.to)) })).filter(g => g.items.length);
 
   const CONSOLES: Array<{ layer: Layer; Icon: typeof ComputerIcon; what: string }> = [
     { layer: 'infra', Icon: ComputerIcon, what: tr('shell.platform.what') },
@@ -343,7 +349,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         aria-label={tr('shell.sections')}
         sx={{ display: { xs: navOpen ? 'block' : 'none', md: 'block' }, px: 1.5, pt: 1, pb: 3, gridColumn: '1', gridRow: { md: '2' } }}
       >
-        {groups.map(g => (
+        {shownGroups.map(g => (
           <NavGroup key={g.title} title={g.title} items={g.items} current={current} />
         ))}
       </Box>

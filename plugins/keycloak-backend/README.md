@@ -104,3 +104,24 @@ Every change is recorded in the table `access_changes` of this plugin's database
 without the database no change is made. A change applies the next time the person signs in. The service account
 needs `manage-users`, `view-users` and `query-groups` of `realm-management` (the realm of iam-oneke gives them).
 
+## Permissions of the portal
+
+`src/portalPermissions.ts` is the one table of permissions of the portal: for each area (catalogue, create
+applications, business map, continuity, security, support, costs, assistants, manage, access administration...) who
+sees it and who changes it. A role is one or more Keycloak groups (`backstage-viewer`, `backstage-editor`,
+`business-architect`, `continuity-officer`, `security-team`, `supportlead` / `supportteam`, the administrators of a
+product, `backstage-admin`), so people get it in Access administration.
+
+- `GET /api/keycloak-manager/permissions` answers what the signed-in person may do. The console
+  (`plugins/console/src/portalPermissions.tsx`) lists only the menu entries of the areas they can use, shows a
+  "you cannot use this" page for a link opened directly, and draws the page Roles and permissions.
+- The permission policy of the backend (`packages/backend/src/plugins/permissionPolicy.ts`) replaces allow-all:
+  everything is allowed except reading scaffolder Templates from the catalog. Templates tagged `business-map` are for
+  `business-architect`; every other template for `backstage-editor` and the administrators of a product;
+  `backstage-admin` reads all. Someone without the role neither lists a template nor runs it.
+- The checks each module already makes (`business-architect`, `continuity-officer`, the owner team in Manage,
+  `console.actions.groups`...) agree with the table and stay where they are until they are moved to it.
+
+After deploying: people who create applications must be in `backstage-editor` (Access administration › cnoe), or
+they lose the templates and the Create pages.
+

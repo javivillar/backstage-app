@@ -1,4 +1,5 @@
 import type { SvgIconComponent } from '@mui/icons-material';
+import RuleIcon from '@mui/icons-material/Rule';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
@@ -95,6 +96,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/developer-assistant': CodeIcon,
   '/console/manage': AppsIcon,
   '/console/access-administration': AdminPanelSettingsIcon,
+  '/console/roles-permissions': RuleIcon,
   '/console/app/support': SupportAgentIcon,
   '/console/app/personnelsecurity': BadgeIcon,
   '/console/keycloak': KeyIcon,

@@ -10,6 +10,8 @@ import { securityOf, unowned } from './security';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { accessRouter } from './accessRoutes';
 import { AccessStore, ensureTable } from './accessStore';
+import { groupNames } from './accessModel';
+import { permissionsOf, rolesOf } from './portalPermissions';
 
 interface KcUser {
   id: string;
@@ -111,6 +113,17 @@ export const keycloakManagerPlugin = createBackendPlugin({
             isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
           };
         }
+
+        // what the signed-in person may do in the portal (portalPermissions.ts): the console hides the rest
+        router.get('/permissions', async (req, res) => {
+          try {
+            const info = await userInfo.getUserInfo(await httpAuth.credentials(req));
+            res.json(permissionsOf(rolesOf(groupNames(info.ownershipEntityRefs))));
+          } catch (e) {
+            logger.error('keycloak-manager /permissions failed', e as Error);
+            res.status(500).json({ error: (e as Error).message });
+          }
+        });
 
         router.get('/users', async (req, res) => {
           try {
