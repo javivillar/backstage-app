@@ -26,6 +26,7 @@ import {
   deliversOf,
   formatMinutes,
   frameworkOf,
+  glassDrawn,
   healthOfNode,
   litOf,
   needsOf,
@@ -122,12 +123,9 @@ export const BusinessGlassPage = () => {
     };
   }, [graph]);
   const filled = useMemo(() => glassToFill(BUSINESS_GLASS_LAYERS, size.w, size.h), [size]);
-  // only the business bands are drawn; the platform below still counts for the lenses, the detail and the matrix
-  const drawn = useMemo(() => {
-    const nodes = (graph?.nodes ?? []).filter(n => BUSINESS_GLASS_LAYERS.includes(n.layer));
-    const ids = new Set(nodes.map(n => n.id));
-    return { nodes, links: (graph?.links ?? []).filter(l => ids.has(l.source) && ids.has(l.target)) };
-  }, [graph]);
+  // only the business bands are drawn, down to the business services; what is below still counts for the lenses,
+  // the detail and the matrix
+  const drawn = useMemo(() => (graph ? glassDrawn(graph) : { nodes: [], links: [] }), [graph]);
   const pos = useMemo(() => stackLayout(drawn.nodes, drawn.links, BUSINESS_GLASS_LAYERS, filled.shape), [drawn, filled]);
 
   const crumbs: Array<[string, string?]> = [[t('nav.portal'), '/console'], [t('bmd.crumb'), '/console/business-map'], [t('bmd.glass.title')]];

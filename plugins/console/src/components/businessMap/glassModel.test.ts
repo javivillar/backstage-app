@@ -10,6 +10,7 @@ import {
   criticalityOf,
   formatMinutes,
   frameworkOf,
+  glassDrawn,
   healthOfNode,
   litOf,
   minutesOf,
@@ -107,5 +108,18 @@ describe('glassModel', () => {
     expect(pos.get('domain:occar/it')!.y).toBeLessThan(pos.get(proc('access'))!.y);
     expect(pos.get(proc('access'))!.y).toBeLessThan(pos.get('system:default/personnel')!.y);
     expect(pos.size).toBe(g.nodes.length);
+  });
+
+  it('draws the business bands down to the business services the processes name', () => {
+    const d = glassDrawn(g);
+    const biz = d.nodes.filter(n => n.layer === 'biz');
+    expect(biz.length).toBeGreaterThan(0);
+    // every business node drawn is named by a process; nothing is drawn under it
+    for (const n of biz) expect(g.links.some(l => g.processes.has(l.source) && l.target === n.id)).toBe(true);
+    expect(d.links.some(l => g.byId.get(l.source)?.layer === 'biz')).toBe(false);
+    expect(d.nodes.some(n => n.id === comp('maintenance-oneke'))).toBe(false);
+    expect(d.nodes.every(n => ['dom', 'sub', 'proc', 'subp', 'biz'].includes(n.layer))).toBe(true);
+    // what is not drawn still counts
+    expect(g.byId.has(comp('maintenance-oneke'))).toBe(true);
   });
 });
