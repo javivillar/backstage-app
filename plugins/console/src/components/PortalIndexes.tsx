@@ -271,7 +271,9 @@ const QualityMatrix = ({ rows, checks, all, passed, components, check, setCheck 
   return (
     <>
       <Section title={tr('q.matrix')} meta={tr('q.score', { pct, passed, all, n: components })} action={check ? <Button size="small" onClick={() => setCheck(undefined)}>{tr('q.showAll')}</Button> : undefined} flush>
-        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, '& th, & td': { borderBottom: `1px solid ${t.rule}` } }}>
+        {/* the table scrolls inside its box, so the names of the checks stay in sight */}
+        <Box sx={{ maxHeight: 'calc(100vh - 32px)', overflow: 'auto' }}>
+        <Box component="table" sx={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 14, '& th, & td': { borderBottom: `1px solid ${t.rule}` }, '& thead th': { position: 'sticky', top: 0, zIndex: 1, bgcolor: t.sheet } }}>
           <thead>
             <tr>
               <Box component="th" sx={{ textAlign: 'left', fontSize: 12, fontWeight: 500, color: t.muted, px: 2.25, py: 1, verticalAlign: 'bottom' }}>
@@ -345,6 +347,7 @@ const QualityMatrix = ({ rows, checks, all, passed, components, check, setCheck 
               );
             })}
           </tbody>
+        </Box>
         </Box>
       </Section>
       <Section title={tr('q.byCheck')} meta={tr('q.byCheckMeta')}>

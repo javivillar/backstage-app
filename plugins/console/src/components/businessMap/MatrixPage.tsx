@@ -5,11 +5,12 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { Fragment, useMemo, useState } from 'react';
+import PowerSettingsNew from '@mui/icons-material/PowerSettingsNew';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
 import { choose, EmptyState, Kpis, Pill, TitleRow, type Tone } from '../ui';
 import { BusinessMapTabs } from './BusinessMapTabs';
-import { NamespacePicker } from './DashboardParts';
+import { type Dot, NamespacePicker, useDots } from './DashboardParts';
 import { useBusinessData, useNamespaceParam } from './dashboardData';
 import { formatMinutes, needsOf } from './glassModel';
 import { buildMatrix, type Cell, type Column, exerciseBody, type Verdict, whatIf } from './matrixModel';
@@ -28,6 +29,7 @@ type Saved = { state: 'idle' | 'saving' | 'done' | 'error'; url?: string; number
 export const BusinessMatrixPage = () => {
   const { t } = useI18n();
   const rq = useRq();
+  const dots = useDots();
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [namespace, setNamespace] = useNamespaceParam();
@@ -80,36 +82,52 @@ export const BusinessMatrixPage = () => {
     }
   };
 
-  const cellView = (c: Cell | undefined, col: Column) => {
-    if (!c) return null;
-    if (down.has(col.id)) return <Pill tone="neg">{t('bmd.mx.failed')}</Pill>;
-    if (c.family === 'platform') {
-      const tone = choose<Tone>([[c.check === 'meets', 'pos'], [c.check === 'rto', 'warn'], [c.check === 'rpo', 'neg']], 'neu');
-      const label = choose<string>([[c.check === 'rpo', `RPO ${fmt(col.rpo)}`], [c.check === 'rto', `RTO ${fmt(col.rto)}`]], t(`bmd.check.${c.check}`));
-      return <Pill tone={tone}>{label}</Pill>;
-    }
-    const tone = choose<Tone>([[c.support === 'supported', 'pos'], [c.support === 'ending', 'warn']], 'neg');
-    return <Pill tone={tone}>{t(`bmd.fw.${c.support}`)}</Pill>;
-  };
-  const head = (col: Column) => (
-    <Box component="th" scope="col" key={col.id} sx={{ verticalAlign: 'bottom', textAlign: 'left', minWidth: 120, bgcolor: col.family === 'development' ? 'action.hover' : undefined }}>
-      <Box sx={{ display: 'grid', gap: 0.5 }}>
-        <b>{col.label}</b>
-        <Box component="small" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-          {col.family === 'platform' ? `${col.tier ?? '—'} · ${fmt(col.rpo)} / ${fmt(col.rto)}` : `${t('bmd.mx.line')} · ${col.until ?? t(`bmd.fw.${col.support ?? 'supported'}`)}`}
-        </Box>
-        {col.family === 'platform' ? (
-          <Button size="small" variant={down.has(col.id) ? 'contained' : 'outlined'} color={down.has(col.id) ? 'error' : 'inherit'} disableElevation aria-pressed={down.has(col.id)} onClick={() => toggle(col.id)} sx={{ justifySelf: 'start', minWidth: 0, py: 0, px: 1 }}>
-            {down.has(col.id) ? t('bmd.mx.failedX') : t('bmd.mx.failIt')}
-          </Button>
-        ) : (
-          <Box component="small" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-            {t('bmd.mx.buildTime')}
-          </Box>
-        )}
-      </Box>
+  // the matrix is compact so it is seen whole: a cell is a coloured mark (its words in the tooltip), a column is as
+  // wide as its mark and its name is written upwards
+  const mark = (dot: Dot, label: string, text?: string) => (
+    <Box component="span" role="img" aria-label={label} title={label} sx={{ display: 'inline-grid', placeItems: 'center', width: 18, height: 18, borderRadius: '5px', bgcolor: dots[dot], color: rq.sheet, fontSize: 11, fontWeight: 700, lineHeight: 1 }}>
+      {text}
     </Box>
   );
+  const cellView = (c: Cell | undefined, col: Column) => {
+    if (!c) return null;
+    if (down.has(col.id)) return mark('bad', `${col.label}: ${t('bmd.mx.failed')}`, '✕');
+    if (c.family === 'platform') {
+      const dot = choose<Dot>([[c.check === 'meets', 'ok'], [c.check === 'rto', 'warn'], [c.check === 'rpo', 'bad']], 'none');
+      const label = choose<string>([[c.check === 'rpo', `RPO ${fmt(col.rpo)}`], [c.check === 'rto', `RTO ${fmt(col.rto)}`]], t(`bmd.check.${c.check}`));
+      return mark(dot, `${col.label}: ${label}`);
+    }
+    const dot = choose<Dot>([[c.support === 'supported', 'ok'], [c.support === 'ending', 'warn']], 'bad');
+    return mark(dot, `${col.label}: ${t(`bmd.fw.${c.support}`)}`);
+  };
+  const sticky = { position: 'sticky', top: 0, zIndex: 2 } as const;
+  const head = (col: Column) => {
+    const isDown = down.has(col.id);
+    const about = col.family === 'platform' ? `${col.tier ?? '—'} · RPO ${fmt(col.rpo)} / RTO ${fmt(col.rto)}` : `${t('bmd.mx.line')} · ${col.until ?? t(`bmd.fw.${col.support ?? 'supported'}`)} · ${t('bmd.mx.buildTime')}`;
+    return (
+      <Box component="th" scope="col" key={col.id} title={`${col.label} · ${about}`} sx={{ ...sticky, verticalAlign: 'bottom', textAlign: 'center', width: 40, minWidth: 34, px: '2px !important', bgcolor: col.family === 'development' ? rq.raised : rq.sheet }}>
+        <Box sx={{ display: 'grid', justifyItems: 'center', gap: 0.75 }}>
+          <Box component="span" sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap', maxHeight: 180, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 12, fontWeight: 600, color: isDown ? rq.negative : undefined }}>
+            {col.label}
+          </Box>
+          {col.family === 'platform' ? (
+            <Box
+              component="button"
+              type="button"
+              aria-pressed={isDown}
+              aria-label={`${isDown ? t('bmd.mx.failedX') : t('bmd.mx.failIt')}: ${col.label}`}
+              onClick={() => toggle(col.id)}
+              sx={{ all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: '6px', border: `1px solid ${isDown ? rq.negative : rq.control}`, bgcolor: isDown ? rq.negative : 'transparent', color: isDown ? rq.sheet : rq.muted, '&:hover': { bgcolor: isDown ? rq.negative : rq.raised }, '&:focus-visible': { outline: `2px solid ${rq.data}`, outlineOffset: 1 } }}
+            >
+              <PowerSettingsNew sx={{ fontSize: 14 }} />
+            </Box>
+          ) : (
+            <Box sx={{ height: 22 }} />
+          )}
+        </Box>
+      </Box>
+    );
+  };
   const cols = [...platform, ...development];
   const lane = (label: string, items: string[], bad?: boolean) => (
     <Box sx={{ display: 'grid', gap: 0.5, alignContent: 'start', minWidth: 0 }}>
@@ -134,9 +152,18 @@ export const BusinessMatrixPage = () => {
       <TitleRow crumbs={crumbs} title={title} sub={t('bmd.matrix.sub')} actions={<NamespacePicker namespaces={map.namespaces} value={namespace} onChange={setNamespace} />} />
       <BusinessMapTabs />
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', py: 1.5, fontSize: 12 }}>
-        <Pill tone="pos">{t('bmd.lg.meets')}</Pill>
-        <Pill tone="warn">{t('bmd.lg.rtoGap')}</Pill>
-        <Pill tone="neg">{t('bmd.lg.rpoGap')}</Pill>
+        {(
+          [
+            ['ok', t('bmd.lg.meets')],
+            ['warn', t('bmd.lg.rtoGap')],
+            ['bad', t('bmd.lg.rpoGap')],
+          ] as Array<[Dot, string]>
+        ).map(([dot, text]) => (
+          <Box component="span" key={dot} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}>
+            {mark(dot, text)}
+            {text}
+          </Box>
+        ))}
         <Box component="span" sx={{ color: 'text.secondary' }}>
           {t('bmd.mx.legend')}
         </Box>
@@ -145,8 +172,8 @@ export const BusinessMatrixPage = () => {
         <EmptyState title={t('bmd.noProcesses')}>{t('bmd.mx.empty')}</EmptyState>
       ) : (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 2 }}>
-          <Box sx={{ flex: '999 1 640px', minWidth: 0, overflowX: 'auto', border: 1, borderColor: 'divider', borderRadius: '8px' }}>
-            <Box component="table" sx={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, '& th, & td': { p: 1, borderBottom: 1, borderColor: 'divider' } }}>
+          <Box sx={{ flex: '999 1 640px', minWidth: 0, overflow: 'auto', maxHeight: 'calc(100vh - 24px)', border: 1, borderColor: 'divider', borderRadius: '8px' }}>
+            <Box component="table" sx={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: 13, '& th, & td': { p: 1, borderBottom: 1, borderColor: 'divider' }, '& td': { textAlign: 'center' } }}>
               <thead>
                 <tr>
                   <th />
@@ -156,14 +183,21 @@ export const BusinessMatrixPage = () => {
                     </Box>
                   )}
                   {development.length > 0 && (
-                    <Box component="th" scope="colgroup" colSpan={development.length} sx={{ textAlign: 'left', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'action.hover' }}>
+                    <Box component="th" scope="colgroup" colSpan={development.length} title={t('bmd.mx.development')} sx={{ textAlign: 'left', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'action.hover', maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t('bmd.mx.development')}
                     </Box>
                   )}
                 </tr>
                 <tr>
-                  <Box component="th" scope="col" sx={{ textAlign: 'left', verticalAlign: 'bottom' }}>
-                    {t('bmd.mx.process')}
+                  <Box component="th" scope="col" sx={{ ...sticky, left: 0, zIndex: 3, bgcolor: rq.sheet, textAlign: 'left', verticalAlign: 'bottom', minWidth: 200 }}>
+                    <Box sx={{ display: 'grid', gap: 0.75 }}>
+                      <span>{t('bmd.mx.process')}</span>
+                      {platform.length > 0 && (
+                        <Box component="small" sx={{ height: 22, display: 'grid', alignItems: 'center', justifyContent: 'end', color: 'text.secondary', fontWeight: 400 }}>
+                          {t('bmd.mx.failIt')} →
+                        </Box>
+                      )}
+                    </Box>
                   </Box>
                   {cols.map(head)}
                 </tr>
@@ -172,15 +206,15 @@ export const BusinessMatrixPage = () => {
                 {matrix.groups.map(gr => (
                   <Fragment key={gr.ref || 'none'}>
                     <tr>
-                      <Box component="td" colSpan={cols.length + 1} sx={{ fontWeight: 600, bgcolor: 'action.hover' }}>
-                        {gr.title || t('bmd.noDomain')}
+                      <Box component="td" colSpan={cols.length + 1} sx={{ fontWeight: 600, bgcolor: 'action.hover', textAlign: 'left !important' }}>
+                        <Box component="span" sx={{ position: 'sticky', left: 8 }}>{gr.title || t('bmd.noDomain')}</Box>
                       </Box>
                     </tr>
                     {gr.rows.map(r => {
                       const needs = needsOf(r.process);
                       return (
                         <Box component="tr" key={r.ref} sx={{ bgcolor: stopped.has(r.ref) ? rq.warn.bg : undefined }}>
-                          <Box component="th" scope="row" sx={{ textAlign: 'left', fontWeight: 400 }}>
+                          <Box component="th" scope="row" sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: stopped.has(r.ref) ? rq.warn.bg : rq.sheet, textAlign: 'left', fontWeight: 400 }}>
                             <Box sx={{ display: 'grid', gap: 0.5 }}>
                               <span>{r.process.title}</span>
                               <Box component="small" sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap', color: 'text.secondary' }}>
@@ -190,7 +224,9 @@ export const BusinessMatrixPage = () => {
                             </Box>
                           </Box>
                           {cols.map(col => (
-                            <td key={col.id}>{cellView(r.cells.get(col.id), col)}</td>
+                            <Box component="td" key={col.id} sx={{ px: '2px !important' }}>
+                              {cellView(r.cells.get(col.id), col)}
+                            </Box>
                           ))}
                         </Box>
                       );
@@ -198,12 +234,16 @@ export const BusinessMatrixPage = () => {
                   </Fragment>
                 ))}
                 <Box component="tr" sx={{ fontWeight: 600 }}>
-                  <Box component="td" sx={{ textAlign: 'left' }}>
+                  <Box component="td" sx={{ position: 'sticky', left: 0, zIndex: 1, bgcolor: rq.sheet, textAlign: 'left !important' }}>
                     {t('bmd.mx.gaps')}
                   </Box>
                   {cols.map(col => {
                     const f = matrix.footer.get(col.id) ?? { deps: 0, gaps: 0 };
-                    return <td key={col.id}>{t('bmd.mx.ofDeps', { gaps: f.gaps, deps: f.deps })}</td>;
+                    return (
+                      <Box component="td" key={col.id} title={`${col.label}: ${t('bmd.mx.ofDeps', { gaps: f.gaps, deps: f.deps })}`} sx={{ px: '2px !important', fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: f.gaps ? rq.negative : 'text.secondary' }}>
+                        {f.gaps}/{f.deps}
+                      </Box>
+                    );
                   })}
                 </Box>
               </tbody>

@@ -1,6 +1,6 @@
 import { type Entity, parseEntityRef, stringifyEntityRef } from '@backstage/catalog-model';
 import type { MapData, MapProcess } from '../../businessMap';
-import { buildGraph, chainOf, type DepLink, type DepNodeModel, type Health, isDomainLayer, isProcessLayer } from '../depsModel';
+import { buildGraph, BUSINESS_GLASS_LAYERS, chainOf, type DepLink, type DepNodeModel, type Health, isDomainLayer, isProcessLayer } from '../depsModel';
 
 /**
  * The model of Business map › Glass, shared by the heat map and the matrix: the glass of Portal › Dependencies
@@ -138,6 +138,18 @@ export function businessGraph(map: MapData, catalog: Entity[], health: (e: Entit
   const above = new Map<string, string[]>();
   for (const [p, chain] of below) chain.forEach(id => above.set(id, [...(above.get(id) ?? []), p]));
   return { nodes, links, byId: new Map(nodes.map(n => [n.id, n])), processes, above, below };
+}
+
+/**
+ * What the glass draws: the business bands, and of the last one only the business services (or applications) a process
+ * names. The applications, instances and parts under a business service are not drawn: they still count for the
+ * lenses, the detail and the matrix.
+ */
+export function glassDrawn(g: BusinessGraph): { nodes: DepNodeModel[]; links: DepLink[] } {
+  const named = new Set(g.links.filter(l => g.processes.has(l.source)).map(l => l.target));
+  const nodes = g.nodes.filter(n => BUSINESS_GLASS_LAYERS.includes(n.layer) && (n.layer !== 'biz' || named.has(n.id)));
+  const ids = new Set(nodes.map(n => n.id));
+  return { nodes, links: g.links.filter(l => ids.has(l.source) && ids.has(l.target) && g.byId.get(l.source)?.layer !== 'biz') };
 }
 
 /** The node's criticality: its own (a process), the strictest of the processes above it, or of those of a domain. */
