@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { useI18n } from '../i18n';
 import { componentName, componentTitle, interconnectionKind, kindOf, overLimits, policyComponents, RESERVED_NAMES, segregations, type SegKind, siteRole } from '../interconnection';
 import { useClusterPost } from '../post';
-import { type ConsolePull, type InfraView, pullKind, SCALE_LIMITS, useInfra, useVmRequests, useZone } from '../zone';
+import { type ConsolePull, type InfraView, type NodeImage, pullKind, SCALE_LIMITS, useInfra, useVmRequests, useZone } from '../zone';
 import { InfraFrame, ProfileCard, ReconcileCard, roomFinding } from './InfraPages';
 import { ChoiceCard, SitePill } from './InterParts';
 import { Card } from './NamespaceSections';
@@ -119,7 +119,7 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
   const { t } = useI18n();
   const post = useClusterPost();
   const { note, busy, run } = useChange(onDone);
-  const [form, setForm] = useState({ target: '', profile: '', workers: '' });
+  const [form, setForm] = useState({ target: '', profile: '', workers: '', image: '' });
   const pick = (name: string) => {
     setForm(f => ({ ...f, profile: name }));
     // the form is under the cards: bring it into view
@@ -132,6 +132,10 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
   const target = form.target || targets[0] || '';
   const [tz, tp] = target.split('/');
   const workers = form.workers === '' ? undefined : Number(form.workers);
+  // the node images the host offers (OS + Kubernetes version): a choice only when there is more than one
+  const images = view.kubernetes?.nodeImages ?? [];
+  const image = images.length > 1 ? images.find(i => i.name === form.image) ?? images.find(i => i.name === profile?.nodeImage) ?? images.find(i => i.default) ?? images[0] : undefined;
+  const imageLabel = (i: NodeImage) => [i.os, i.kubernetes && `Kubernetes ${i.kubernetes}`].filter(Boolean).join(' · ') || i.name;
   const need = profile ? profile.memoryMb + ((workers ?? profile.counts.worker) - profile.counts.worker) * profile.roles.worker.memory_mb : 0;
   const free = view.capacity?.freeMemoryMb;
   return (
@@ -151,7 +155,7 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
             component="form"
             onSubmit={e => {
               e.preventDefault();
-              run(() => post('/infra/clusters', { zone: tz, program: tp, profile: profile?.name ?? '', ...(workers !== undefined ? { workers } : {}) }), a => t('infra.clusterOpened', { n: a.pull?.number ?? '', target }));
+              run(() => post('/infra/clusters', { zone: tz, program: tp, profile: profile?.name ?? '', ...(image ? { node_image: image.name } : {}), ...(workers !== undefined ? { workers } : {}) }), a => t('infra.clusterOpened', { n: a.pull?.number ?? '', target }));
             }}
             sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', alignItems: 'start' }}
           >
@@ -169,6 +173,15 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
                 </MenuItem>
               ))}
             </TextField>
+            {image && (
+              <TextField select size="small" label={t('infra.nodeImage')} value={image.name} onChange={e => setForm(f => ({ ...f, image: e.target.value }))} helperText={t('infra.nodeImageHelp')}>
+                {images.map(i => (
+                  <MenuItem key={i.name} value={i.name}>
+                    {imageLabel(i)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField
               size="small"
               type="number"

@@ -66,6 +66,11 @@ describe('infrastructure as code from the console', () => {
   it('refuses clusters that cannot be created', () => {
     const ask = { zone: 'nato', program: 'a400m', profile: 'standard' };
     expect(refuseCluster(view(), [], ask)).toBeUndefined();
+    // the node image: only one the host offers
+    const images = { ...view(), kubernetes: { ...view().kubernetes!, nodeImages: [{ name: 'oneke-cis-1.33-ubuntu2204-0.1.3', kubernetes: '1.33', default: true }, { name: 'oneke-cis-1.36-ubuntu2204-0.2.0', kubernetes: '1.36', default: false }] } };
+    expect(refuseCluster(images, [], { ...ask, nodeImage: 'oneke-cis-1.36-ubuntu2204-0.2.0' })).toBeUndefined();
+    expect(refuseCluster(images, [], { ...ask, nodeImage: 'other' })).toMatch(/node image is one of oneke-cis-1.33-ubuntu2204-0.1.3, oneke-cis-1.36-ubuntu2204-0.2.0/);
+    expect(refuseCluster(view(), [], { ...ask, nodeImage: 'other' })).toMatch(/no choice of node image/);
     expect(refuseCluster(view(), [], { ...ask, program: 'sirtap' })).toMatch(/already has a cluster/);
     expect(refuseCluster(view(), [], { ...ask, program: 'nope' })).toMatch(/segregation/);
     expect(refuseCluster(view(), [{ zone: 'nato', program: 'a400m' }], ask)).toMatch(/already asked/);

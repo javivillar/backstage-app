@@ -153,13 +153,15 @@ export type ClusterProfile = {
   k8sPsa?: string;
   longhorn: boolean;
 };
+/** A node image a new cluster may choose: its OS and the Kubernetes it carries. */
+export type NodeImage = { name: string; os?: string; kubernetes?: string; default: boolean };
 export type ReconcileStep = { file?: string; zone?: string; program?: string; action: string; state: string; detail?: string; at?: string; last?: { action?: string; state: string; detail?: string; at?: string } | null };
 export type ActionResult = { file: string; kind: string; zone?: string; program?: string; vm?: string; requested_by?: string; state: string; detail?: string; at?: string };
 export type ReconcileStatus = { started?: string; finished?: string; error?: string | null; main?: { commit?: string; at?: string }; segregation?: { state: string; detail?: string; at?: string } | null; clusters: ReconcileStep[]; actions?: ActionResult[] };
 /** The parts of GET /zone the Infrastructure pages use (the host publishes them with topology.json). */
 export type InfraView = ZoneView & {
   catalog?: CatalogZone[];
-  kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string };
+  kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string; nodeImages?: NodeImage[] };
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
 };
