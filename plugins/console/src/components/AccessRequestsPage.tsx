@@ -125,7 +125,7 @@ const Table = ({ head, children }: { head: string[]; children: ReactNode }) => {
 };
 
 /**
- * Portal › Manage › Access requests: a person asks to be put in a group of a product, with a reason; an administrator
+ * Portal › Administration › Access requests: a person asks to be put in a group of a product, with a reason; an administrator
  * of that product approves it (the person is added, as in Access administration) or rejects it with a reason. Who
  * administers a product also sees here the requests that wait for them. State in the URL: ?product=.
  */
@@ -140,7 +140,7 @@ export const AccessRequestsPage = () => {
   const [rejecting, setRejecting] = useState<number>();
   const crumbs: Array<[string, string?]> = [
     ['Portal', '/console'],
-    [t('nav.manage'), '/console/manage'],
+    [t('nav.administration')],
     [t('req.title')],
   ];
   const when = (at?: string) => (at ? new Date(at).toLocaleString(lang) : '');

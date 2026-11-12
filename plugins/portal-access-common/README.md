@@ -15,5 +15,5 @@ const isAdmin = administersProduct('superset-oneke', info.ownershipEntityRefs); 
 const mayEdit = managesArea('business', info.ownershipEntityRefs);              // business-architect or backstage-admin
 ```
 
-A role is one or more Keycloak groups: people get it in Portal › Manage › Access administration. The page Portal ›
-Manage › Roles and permissions shows the table.
+A role is one or more Keycloak groups: people get it in Portal › Administration › Access administration. The page Portal ›
+Administration › Roles and permissions shows the table.

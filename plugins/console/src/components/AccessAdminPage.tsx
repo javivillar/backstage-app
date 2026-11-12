@@ -227,7 +227,7 @@ const Picker = ({ products, selected, onPick }: { products: ProductSummary[]; se
 };
 
 /**
- * Portal › Manage › Access administration: the administrators of a product (the members of its administrator group)
+ * Portal › Administration › Access administration: the administrators of a product (the members of its administrator group)
  * put existing people in the Keycloak groups of that product and name other administrators; the administrators of
  * the portal do it for every product. People are never created here. The backend (keycloak-backend accessRoutes.ts)
  * decides who may do what and records every change. The state is in the URL (?product&person).
@@ -268,7 +268,7 @@ export const AccessAdminPage = () => {
       });
   };
 
-  const crumbs: Array<[string, string?]> = [['Portal', '/console'], [t('nav.manage'), '/console/manage'], [t('acc.title')]];
+  const crumbs: Array<[string, string?]> = [['Portal', '/console'], [t('nav.administration')], [t('acc.title')]];
   if (products.loading) return <Progress />;
   if (products.error) {
     return (

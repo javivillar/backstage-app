@@ -74,7 +74,7 @@ already tagged for that component).
 
 ## Access administration
 
-`/api/keycloak-manager/access/*` backs console › Portal › Manage › Access administration: the only place of the
+`/api/keycloak-manager/access/*` backs console › Portal › Administration › Access administration: the only place of the
 portal that changes who is in a Keycloak group. People are never created there; existing users are added to and
 removed from the groups of a product.
 
@@ -127,7 +127,7 @@ Who administers a product is decided in one place for the whole portal: `adminis
 ## Control and evidence
 
 `/api/keycloak-manager/evidence` (`src/evidenceRoutes.ts`, rules in `src/evidenceModel.ts`; console › Portal ›
-Manage › Control and evidence). Read by who has the area `evidence` of the table of permissions: the administrators
+Administration › Control and evidence). Read by who has the area `evidence` of the table of permissions: the administrators
 of the portal, the security team (`security-team`) and the auditors (`portal-auditor`). Nothing here changes
 Keycloak.
 

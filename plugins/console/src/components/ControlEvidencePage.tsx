@@ -387,7 +387,7 @@ const ApprovalsTab = () => {
 };
 
 /**
- * Portal › Manage › Control and evidence: who did what in the portal, who has access to what, and what needs a
+ * Portal › Administration › Control and evidence: who did what in the portal, who has access to what, and what needs a
  * decision. Four tabs (?tab=): what needs attention, the activity recorded, the report of access now and at each
  * signed snapshot, and the double approvals. Read by the administrators of the portal, the security team and the
  * auditors; only the administrators act, and what they act on opens in Access administration.
@@ -398,7 +398,7 @@ export const ControlEvidencePage = () => {
   const [tab, setTab] = useTab<TabId>(TABS);
   return (
     <>
-      <TitleRow crumbs={[['Portal', '/console'], [t('nav.manage'), '/console/manage'], [t('ev.title')]]} title={t('ev.title')} sub={t('ev.sub')} />
+      <TitleRow crumbs={[['Portal', '/console'], [t('nav.administration')], [t('ev.title')]]} title={t('ev.title')} sub={t('ev.sub')} />
       <PageTabs label={t('ev.title')} tabs={TABS.map(k => [k, t(`ev.tab.${k}`)])} tab={tab} onChange={setTab} />
       <Box sx={{ mt: 2.5 }}>
         {tab === 'overview' && <OverviewTab />}

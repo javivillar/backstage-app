@@ -4,7 +4,7 @@ import { tagsOf } from './security';
 export { groupNames };
 
 /**
- * Access administration (console › Portal › Manage › Access administration): who may put people in the Keycloak
+ * Access administration (console › Portal › Administration › Access administration): who may put people in the Keycloak
  * groups of each product. The rules, kept pure for the tests; accessRoutes.ts reads Keycloak and applies them.
  *
  * - A product is a Component of the security tags (refresquito.component): a Refresquito service (superset-oneke) or

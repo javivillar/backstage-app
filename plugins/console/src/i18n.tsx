@@ -91,6 +91,7 @@ const SHELL: Messages = {
   'nav.resolutionGroups.hint': { en: 'The teams that own and answer for each element', es: 'Los equipos que poseen y responden de cada elemento' },
   'nav.assistants': { en: 'Assistants', es: 'Asistentes' },
   'nav.manage': { en: 'Manage', es: 'Gestionar' },
+  'nav.administration': { en: 'Administration', es: 'Administración' },
   'nav.allServices': { en: 'All services', es: 'Todos los servicios' },
   // titles of the classic pages shown in the menus (App.tsx pages[].id)
   'page.create': { en: 'Create', es: 'Crear' },

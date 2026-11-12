@@ -20,7 +20,7 @@ const Groups = ({ groups }: { groups: string[] }) => (
 );
 
 /**
- * Portal › Manage › Roles and permissions: the one table of permissions of the portal (plugins/portal-access-common permissions.ts)
+ * Portal › Administration › Roles and permissions: the one table of permissions of the portal (plugins/portal-access-common permissions.ts)
  * as the signed-in person stands in it: who manages and who sees each area, and their own access. Read only: who has
  * a role is changed in Access administration (a role is a Keycloak group).
  */
@@ -28,7 +28,7 @@ export const RolesPermissionsPage = () => {
   const { t } = useI18n();
   const rq = useRq();
   const { loading, permissions, error, access } = usePortalPermissions();
-  const crumbs: Array<[string, string?]> = [['Portal', '/console'], [t('nav.manage'), '/console/manage'], [t('perm.title')]];
+  const crumbs: Array<[string, string?]> = [['Portal', '/console'], [t('nav.administration')], [t('perm.title')]];
   if (loading) return <Progress />;
   if (!permissions) {
     return (

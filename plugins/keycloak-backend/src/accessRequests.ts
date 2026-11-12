@@ -1,7 +1,7 @@
 import type { DatabaseService } from '@backstage/backend-plugin-api';
 
 /**
- * The requests of access to a product (console › Portal › Manage › Access requests): a person asks to be put in a
+ * The requests of access to a product (console › Portal › Administration › Access requests): a person asks to be put in a
  * group of a product, with a reason, and an administrator of that product approves it (the person is added to the
  * group, as in Access administration) or rejects it with a reason. Kept in the database of this plugin; a request is
  * never deleted, only decided or withdrawn.

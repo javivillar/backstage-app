@@ -250,15 +250,22 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         items: [
           { label: tr('nav.allServices'), to: '/console/manage' },
           ...navOf('managers').map(i => ({ ...i, to: i.to.replace('/console/', '/console/manage/') })),
-          // who is in the Keycloak groups of each product (AccessAdminPage): its administrators and the portal's
-          { label: tr('nav.accessAdmin'), to: '/console/access-administration', hint: tr('nav.accessAdmin.hint') },
-          // asking for a group of a product, and deciding the requests of the products one administers (AccessRequestsPage)
-          { label: tr('nav.accessRequests'), to: '/console/access-requests', hint: tr('nav.accessRequests.hint') },
-          // who did what, who has access to what and what needs a decision (ControlEvidencePage): administrators, security, auditors
-          { label: tr('nav.controlEvidence'), to: '/console/control-evidence', hint: tr('nav.controlEvidence.hint') },
-          { label: tr('nav.rolesPermissions'), to: '/console/roles-permissions', hint: tr('nav.rolesPermissions.hint') },
         ],
       });
+    // who may do what in the portal: giving access, asking for it, and reviewing it; apart from the objects of the
+    // services (Manage). Each entry is shown to who may use its area
+    groups.push({
+      title: tr('nav.administration'),
+      items: [
+        // who is in the Keycloak groups of each product (AccessAdminPage): its administrators and the portal's
+        { label: tr('nav.accessAdmin'), to: '/console/access-administration', hint: tr('nav.accessAdmin.hint') },
+        // asking for a group of a product, and deciding the requests of the products one administers (AccessRequestsPage)
+        { label: tr('nav.accessRequests'), to: '/console/access-requests', hint: tr('nav.accessRequests.hint') },
+        // who did what, who has access to what and what needs a decision (ControlEvidencePage): administrators, security, auditors
+        { label: tr('nav.controlEvidence'), to: '/console/control-evidence', hint: tr('nav.controlEvidence.hint') },
+        { label: tr('nav.rolesPermissions'), to: '/console/roles-permissions', hint: tr('nav.rolesPermissions.hint') },
+      ],
+    });
   }
 
   // the menu only lists what this person may use (the one table of permissions); a group left empty is not shown
