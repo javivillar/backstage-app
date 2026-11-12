@@ -8,7 +8,9 @@ import {
 } from './actions';
 import { securityOf, unowned } from './security';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
-import { accessRouter } from './accessRoutes';
+import { accessRouter, rulesOf } from './accessRoutes';
+import { evidenceRouter } from './evidenceRoutes';
+import { ensureSnapshotsTable, EvidenceStore } from './evidenceStore';
 import { AccessRequestStore, ensureRequestsTable } from './accessRequests';
 import { AccessStore, ensureTable } from './accessStore';
 import { groupNames } from './accessModel';
@@ -76,21 +78,28 @@ export const keycloakManagerPlugin = createBackendPlugin({
         config: coreServices.rootConfig,
         logger: coreServices.logger,
         database: coreServices.database,
+        scheduler: coreServices.scheduler,
         catalog: catalogServiceRef,
       },
-      async init({ httpRouter, httpAuth, userInfo, config, logger, database, catalog }) {
+      async init({ httpRouter, httpAuth, userInfo, config, logger, database, scheduler, catalog }) {
         const router = Router();
 
         // access administration (accessRoutes.ts): without its database nothing is changed, since no change could
         // be recorded; the pages still read
         let store: AccessStore | undefined;
         let requests: AccessRequestStore | undefined;
+        let evidence: EvidenceStore | undefined;
+        // the key the snapshots of the report of access are signed with (a Secret of the platform); without it they
+        // are only digested
+        const evidenceKey = config.getOptionalString('keycloakAdmin.access.evidenceKey') || undefined;
         try {
           const knex = await database.getClient();
           await ensureTable(knex);
           store = new AccessStore(knex);
           await ensureRequestsTable(knex);
           requests = new AccessRequestStore(knex);
+          await ensureSnapshotsTable(knex);
+          evidence = new EvidenceStore(knex, evidenceKey);
         } catch (e) {
           logger.warn(`keycloak-manager: access changes cannot be recorded, so none will be made: ${(e as Error).message}`);
         }
@@ -110,6 +119,41 @@ export const keycloakManagerPlugin = createBackendPlugin({
             },
           }),
         );
+
+        // control and evidence (evidenceRoutes.ts): what needs a decision, the activity, the report of access and
+        // its snapshots, one every night
+        const control = evidenceRouter({
+          config,
+          logger,
+          rules: rulesOf(config),
+          store,
+          requests,
+          evidence,
+          signs: Boolean(evidenceKey),
+          key: evidenceKey,
+          caller: async req => {
+            const info = await userInfo.getUserInfo(await httpAuth.credentials(req));
+            return { entityRef: info.userEntityRef, ownershipEntityRefs: info.ownershipEntityRefs };
+          },
+        });
+        router.use('/evidence', control.router);
+        if (evidence) {
+          const kept = evidence;
+          await scheduler.scheduleTask({
+            id: 'access-report-snapshot',
+            frequency: { cron: '10 2 * * *' },
+            timeout: { minutes: 10 },
+            initialDelay: { minutes: 5 },
+            scope: 'global',
+            fn: async () => {
+              // one a night, also after a restart that runs the task again
+              if (await kept.takenSince(new Date(Date.now() - 20 * 60 * 60 * 1000), 'system')) return;
+              await control.snapshot('system');
+              const pruned = await kept.prune();
+              if (pruned) logger.info(`control and evidence: ${pruned} snapshot(s) older than two years deleted`);
+            },
+          });
+        }
 
         async function callerContext(req: Request) {
           const credentials = await httpAuth.credentials(req);

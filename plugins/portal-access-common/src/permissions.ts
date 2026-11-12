@@ -13,7 +13,7 @@ import { groupNames, PORTAL_ADMIN_GROUPS, PRODUCT_ADMIN_GROUPS } from './product
  * map, administersProduct('superset-oneke', refs) (products.ts) in the Manage pages of a service.
  */
 
-export type RoleId = 'viewer' | 'editor' | 'architect' | 'continuity' | 'security' | 'support' | 'product' | 'admin';
+export type RoleId = 'viewer' | 'editor' | 'architect' | 'continuity' | 'security' | 'support' | 'auditor' | 'product' | 'admin';
 export type Access = 'manage' | 'read' | 'hidden';
 
 /** The Keycloak groups of each role. `product` is the administrators of any product: see isProductAdmin. */
@@ -24,6 +24,8 @@ export const ROLE_GROUPS: Record<Exclude<RoleId, 'product'>, string[]> = {
   continuity: ['continuity-officer'],
   security: ['security-team'],
   support: ['supportlead', 'supportteam'],
+  // reads Control and evidence and changes nothing
+  auditor: ['portal-auditor'],
   admin: PORTAL_ADMIN_GROUPS,
 };
 
@@ -58,6 +60,8 @@ export const AREAS: Area[] = [
   { id: 'access', view: ['product', 'editor'], manage: ['product', 'editor'], scope: 'product' },
   // asking for a group of a product: everyone; its administrators decide
   { id: 'requests', view: 'all', manage: ['product', 'editor'], scope: 'product' },
+  // who did what and who has access to what: read by security and auditors; only the portal administrators act
+  { id: 'evidence', view: ['security', 'auditor'], manage: [] },
   { id: 'roles', view: 'all', manage: [] },
 ];
 
