@@ -1,4 +1,4 @@
-import { ADMIN_GROUPS } from './accessModel';
+import { groupNames, PORTAL_ADMIN_GROUPS, PRODUCT_ADMIN_GROUPS } from './products';
 
 /**
  * The one table of permissions of the portal: what each role sees and changes in each area. A role is one or more
@@ -9,8 +9,8 @@ import { ADMIN_GROUPS } from './accessModel';
  * - the permission policy of the backend (packages/backend/src/plugins/permissionPolicy.ts), which keeps the
  *   templates of an area from who has no role in it, whatever the pages show.
  *
- * The checks each module already makes (business-architect in the business map, continuity-officer in continuity,
- * the owner team in Manage...) agree with this table and stay where they are until they are moved to it.
+ * The modules ask this table instead of keeping their own groups: managesArea('business', refs) in the business
+ * map, administersProduct('superset-oneke', refs) (products.ts) in the Manage pages of a service.
  */
 
 export type RoleId = 'viewer' | 'editor' | 'architect' | 'continuity' | 'security' | 'support' | 'product' | 'admin';
@@ -24,7 +24,7 @@ export const ROLE_GROUPS: Record<Exclude<RoleId, 'product'>, string[]> = {
   continuity: ['continuity-officer'],
   security: ['security-team'],
   support: ['supportlead', 'supportteam'],
-  admin: ['backstage-admin'],
+  admin: PORTAL_ADMIN_GROUPS,
 };
 
 export type Area = {
@@ -56,13 +56,15 @@ export const AREAS: Area[] = [
   // the objects of a service: its administrators, and the owners of an application for theirs
   { id: 'manage', view: ['product', 'editor'], manage: ['product', 'editor'], scope: 'product' },
   { id: 'access', view: ['product', 'editor'], manage: ['product', 'editor'], scope: 'product' },
+  // asking for a group of a product: everyone; its administrators decide
+  { id: 'requests', view: 'all', manage: ['product', 'editor'], scope: 'product' },
   { id: 'roles', view: 'all', manage: [] },
 ];
 
 /** Groups ending in -admin that administer no product of their own. */
 const NOT_PRODUCT_ADMIN = new Set(['backstage-admin', 'cnoe-admin']);
 const NAMED_PRODUCT_ADMINS = new Set(
-  Object.values(ADMIN_GROUPS)
+  Object.values(PRODUCT_ADMIN_GROUPS)
     .flat()
     .filter(g => !NOT_PRODUCT_ADMIN.has(g)),
 );
@@ -83,6 +85,22 @@ export function accessOf(area: Area, roles: RoleId[]): Access {
 }
 
 const groupsOfRole = (role: RoleId): string[] => (role === 'product' ? ['<product>-admin'] : ROLE_GROUPS[role]);
+
+/** The area of the table with this id; an unknown id is a mistake of the caller. */
+export function areaOf(id: string): Area {
+  const area = AREAS.find(a => a.id === id);
+  if (!area) throw new Error(`portal permissions: there is no area ${id}`);
+  return area;
+}
+
+/** The groups whose members change an area: the ones of the roles that manage it and the portal administrators. */
+export const managersOf = (id: string): string[] => [...new Set([...areaOf(id).manage.flatMap(groupsOfRole), ...ROLE_GROUPS.admin])];
+
+/** What the person with these ownership refs may do in an area. */
+export const accessToArea = (id: string, ownershipEntityRefs: string[]): Access => accessOf(areaOf(id), rolesOf(groupNames(ownershipEntityRefs)));
+
+/** Whether the person changes an area (a role that manages it, or an administrator of the portal). */
+export const managesArea = (id: string, ownershipEntityRefs: string[]): boolean => accessToArea(id, ownershipEntityRefs) === 'manage';
 
 /** What the page Roles and permissions and the console need of the table, for someone with these roles. */
 export function permissionsOf(roles: RoleId[]) {

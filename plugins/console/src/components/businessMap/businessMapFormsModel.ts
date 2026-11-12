@@ -1,3 +1,4 @@
+import { managesArea } from '@internal/backstage-plugin-portal-access-common';
 import type { Criticality } from '../../businessMap';
 
 /**
@@ -9,10 +10,9 @@ import type { Criticality } from '../../businessMap';
  * guard: they check the groups and the files again.
  */
 
-/** The groups that may change the business map (the templates refuse anybody else). */
-export const BUSINESS_MAP_WRITERS = ['group:default/business-architect', 'group:default/backstage-admin'];
 /** Whether someone with these ownership refs may run the templates of the business map. */
-export const mayChangeMap = (ownershipEntityRefs: string[]) => ownershipEntityRefs.some(r => BUSINESS_MAP_WRITERS.includes(r.toLowerCase()));
+/** Who manages the area `business` of the table of permissions of the portal (the templates refuse anybody else). */
+export const mayChangeMap = (ownershipEntityRefs: string[]) => managesArea('business', ownershipEntityRefs);
 
 export const NAMESPACE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 export const OVERRIDE = /^([0-9]+(m|h|d|y))?$/;

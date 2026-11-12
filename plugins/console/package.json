@@ -29,6 +29,7 @@
     "@backstage/core-components": "^0.18.8",
     "@backstage/core-plugin-api": "^1.12.4",
     "@backstage/plugin-catalog-react": "^2.1.1",
+    "@internal/backstage-plugin-portal-access-common": "^0.1.0",
     "@mui/icons-material": "^5.0.0",
     "@mui/material": "^9.0.0"
   },

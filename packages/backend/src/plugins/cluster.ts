@@ -1,3 +1,4 @@
+import { PORTAL_ADMIN_GROUPS } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { AppsV1Api, AutoscalingV2Api, BatchV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, NetworkingV1Api } from '@kubernetes/client-node';
 import { type K8sObjects, summariseObjects } from './clusterObjects';
@@ -171,7 +172,7 @@ export default createBackendPlugin({
         let zoneCache: { at: number; body: ZoneView } | undefined;
 
         // actions: Argo CD with the credentials of the Argo CD plugin; who may act
-        const groups = config.getOptionalStringArray('console.actions.groups') ?? ['backstage-admin'];
+        const groups = config.getOptionalStringArray('console.actions.groups') ?? PORTAL_ADMIN_GROUPS;
         // later: the owner of each resource acts on it (off until it is decided)
         const owners = config.getOptionalBoolean('console.actions.owners') ?? false;
         const argoCfg = config.getOptionalConfigArray('argocd.appLocatorMethods')?.[0]?.getOptionalConfigArray('instances')?.[0];

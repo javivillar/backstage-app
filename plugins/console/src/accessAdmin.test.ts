@@ -1,4 +1,4 @@
-import { candidates, peopleIn, productTitle, type GroupWithMembers } from './accessAdmin';
+import { askState, MAX_REASON, validReason, candidates, peopleIn, productTitle, type GroupWithMembers } from './accessAdmin';
 
 const group = (name: string, members: string[]): GroupWithMembers => ({
   name,
@@ -23,5 +23,28 @@ describe('access administration client', () => {
   it('offers only the people not yet in the group', () => {
     const found = [{ username: 'ana', name: 'Ana' }, { username: 'luis', name: 'Luis' }];
     expect(candidates(found, [{ username: 'ana', name: 'Ana' }])).toEqual([{ username: 'luis', name: 'Luis' }]);
+  });
+});
+
+describe('requests of access', () => {
+  const askable = (fields: object) => ({
+    name: 'superset-users',
+    admin: false,
+    member: false,
+    pending: false,
+    ...fields,
+  });
+
+  it('tells what a group is to who looks at it', () => {
+    expect(askState(askable({}))).toBe('free');
+    expect(askState(askable({ pending: true }))).toBe('pending');
+    // already in the group: nothing to ask, even with an old request
+    expect(askState(askable({ member: true, pending: true }))).toBe('member');
+  });
+
+  it('wants a reason of at most 500 characters', () => {
+    expect(validReason('  ')).toBe(false);
+    expect(validReason('I build the dashboards')).toBe(true);
+    expect(validReason('x'.repeat(MAX_REASON + 1))).toBe(false);
   });
 });

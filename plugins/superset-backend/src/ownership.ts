@@ -1,8 +1,12 @@
+import { administersProduct, PORTAL_ADMIN_GROUPS, productAdminGroups } from '@internal/backstage-plugin-portal-access-common';
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
 import { findSupersetUserId, ownersFilterQuery, supersetAdminFetch } from './supersetClient';
 
-export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
+/** The product these pages manage: its administrators (portal-access-common) see and change every object. */
+export const COMPONENT = 'superset-oneke';
+/** Who administers it, for the messages. */
+export const ADMINS = [...PORTAL_ADMIN_GROUPS, ...productAdminGroups(COMPONENT)].join(' or ');
 
 interface MinimalActionContext {
   getInitiatorCredentials(): Promise<BackstageCredentials>;
@@ -31,7 +35,7 @@ export async function callerInfo(
   return {
     entityRef: info.userEntityRef,
     username: usernameFromEntityRef(info.userEntityRef),
-    isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+    isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
   };
 }
 
@@ -152,7 +156,7 @@ export function requireOwnerOrAdmin(
   const ownerNames = owners?.map(o => [o.first_name, o.last_name].filter(Boolean).join(' ')).join(', ');
   throw new Error(
     `Forbidden: ${caller.entityRef} may not modify this Superset object ` +
-      `(owners: ${ownerNames || 'none'}). Only an owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+      `(owners: ${ownerNames || 'none'}). Only an owner or a member of ${ADMINS} can edit or delete it.`,
   );
 }
 
@@ -161,6 +165,6 @@ export function requireConnectionOwnerOrAdmin(caller: CallerInfo, ownerUsername:
   if (ownerUsername && ownerUsername === caller.username) return;
   throw new Error(
     `Forbidden: ${caller.entityRef} may not modify this Superset connection ` +
-      `(owner: ${ownerUsername ?? 'none'}). Only the owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+      `(owner: ${ownerUsername ?? 'none'}). Only the owner or a member of ${ADMINS} can edit or delete it.`,
   );
 }

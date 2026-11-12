@@ -1,9 +1,13 @@
+import { administersProduct, PORTAL_ADMIN_GROUPS, productAdminGroups } from '@internal/backstage-plugin-portal-access-common';
 import { BackstageCredentials, UserInfoService } from '@backstage/backend-plugin-api';
 import { Config } from '@backstage/config';
 import { apJson, apListAll } from './activepiecesClient';
 import { getKeycloakPerson } from './keycloakLookup';
 
-export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
+/** The product these pages manage: its administrators (portal-access-common) see and change every object. */
+export const COMPONENT = 'activepieces-oneke';
+/** Who administers it, for the messages. */
+export const ADMINS = [...PORTAL_ADMIN_GROUPS, ...productAdminGroups(COMPONENT)].join(' or ');
 
 /**
  * Only projects created through Backstage carry this externalId prefix
@@ -95,7 +99,7 @@ export async function callerInfo(
   return {
     entityRef: info.userEntityRef,
     username: usernameFromEntityRef(info.userEntityRef),
-    isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+    isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
   };
 }
 
@@ -151,7 +155,7 @@ export async function requireProjectPermission(
   const denied = new Error(
     `Forbidden: ${caller.entityRef} may not modify Activepieces project "${projectId}" ` +
       `(not a Backstage-managed project you hold ${permission} on). Only members whose role allows it, ` +
-      `or a member of ${ADMIN_GROUP_REF}, can do this.`,
+      `or a member of ${ADMINS}, can do this.`,
   );
 
   let project: ApProject;

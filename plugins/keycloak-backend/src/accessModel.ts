@@ -1,4 +1,7 @@
+import { groupNames, namedAdminGroup, PORTAL_ONLY, PRODUCT_ADMIN_GROUPS } from '@internal/backstage-plugin-portal-access-common';
 import { tagsOf } from './security';
+
+export { groupNames };
 
 /**
  * Access administration (console › Portal › Manage › Access administration): who may put people in the Keycloak
@@ -57,20 +60,8 @@ export type AccessRules = {
   portalOnly: string[];
 };
 
-/** Products whose administrator group the name does not tell. An empty list: only the portal administrators. */
-export const ADMIN_GROUPS: Record<string, string[]> = {
-  'cnoe-oneke': ['backstage-admin'],
-  'continuity-oneke': ['continuity-officer'],
-  'secassistant-oneke': ['security-team'],
-  'observability-oneke': [],
-  'iam-oneke': [],
-  support: ['supportlead'],
-};
-
-/** Groups that give far more than a product: Kubernetes cluster-admin, Argo CD admin, every bucket, the portal. */
-export const PORTAL_ONLY = ['admin', 'backstage-admin', 'cnoe-admin', 'argocd-admin', 'headlamp-admin', 's3-admins'];
-
-export const DEFAULT_RULES: AccessRules = { admins: ADMIN_GROUPS, portalOnly: PORTAL_ONLY };
+/** The rules of the portal (portal-access-common), unless the configuration sets others. */
+export const DEFAULT_RULES: AccessRules = { admins: PRODUCT_ADMIN_GROUPS, portalOnly: PORTAL_ONLY };
 
 const OBSERVABILITY = 'observability-oneke';
 const GRAFANA_OF = /^grafana-(.+)-(?:editors|viewers)$/;
@@ -90,7 +81,7 @@ export function productOf(group: KcGroup, components: Set<string>): string | und
 export function adminGroupsOf(component: string, own: string[], rules: AccessRules = DEFAULT_RULES): string[] {
   const set = rules.admins[component];
   if (set) return set.filter(g => own.includes(g));
-  const exact = `${component.replace(/-oneke$/, '')}-admin`;
+  const exact = namedAdminGroup(component);
   if (own.includes(exact)) return [exact];
   const named = own.filter(g => g.endsWith('-admin'));
   return named.length === 1 ? named : [];
@@ -132,16 +123,6 @@ export function productsOf(groups: KcGroup[], rules: AccessRules = DEFAULT_RULES
       };
     })
     .sort((a, b) => a.component.localeCompare(b.component));
-}
-
-/** The names of the groups in ownership refs (group:default/superset-admin), lower case. */
-export function groupNames(ownershipEntityRefs: string[]): Set<string> {
-  const names = new Set<string>();
-  for (const ref of ownershipEntityRefs) {
-    const m = /^group:[^/]+\/(.+)$/i.exec(ref);
-    if (m) names.add(m[1].toLowerCase());
-  }
-  return names;
 }
 
 /**

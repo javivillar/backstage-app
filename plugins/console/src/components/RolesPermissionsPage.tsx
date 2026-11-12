@@ -20,7 +20,7 @@ const Groups = ({ groups }: { groups: string[] }) => (
 );
 
 /**
- * Portal › Manage › Roles and permissions: the one table of permissions of the portal (backend portalPermissions.ts)
+ * Portal › Manage › Roles and permissions: the one table of permissions of the portal (plugins/portal-access-common permissions.ts)
  * as the signed-in person stands in it: who manages and who sees each area, and their own access. Read only: who has
  * a role is changed in Access administration (a role is a Keycloak group).
  */

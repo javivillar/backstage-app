@@ -1,9 +1,10 @@
+import { administersProduct } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { NotAllowedError } from '@backstage/errors';
 import express, { Request, Router } from 'express';
 import { seaweedfsAdminFetch } from './seaweedfsClient';
 import {
-  ADMIN_GROUP_REF,
+  COMPONENT,
   CallerInfo,
   OwnedResourceKind,
   ensureOwnershipTable,
@@ -42,7 +43,7 @@ export const seaweedfsManagerPlugin = createBackendPlugin({
           return {
             entityRef: info.userEntityRef,
             username: info.userEntityRef.split('/').pop() ?? info.userEntityRef,
-            isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+            isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
           };
         }
 

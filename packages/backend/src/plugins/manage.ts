@@ -1,3 +1,4 @@
+import { PORTAL_ADMIN_GROUPS } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import express, { Router } from 'express';
@@ -102,7 +103,7 @@ export default createBackendPlugin({
         catalog: catalogServiceRef,
       },
       async init({ httpRouter, httpAuth, userInfo, config, logger, catalog }) {
-        const groups = config.getOptionalStringArray('console.actions.groups') ?? ['backstage-admin'];
+        const groups = config.getOptionalStringArray('console.actions.groups') ?? PORTAL_ADMIN_GROUPS;
         const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
         const services = new GitHubFiles(config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.manage.branch') ?? 'main', token);
 

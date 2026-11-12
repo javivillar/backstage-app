@@ -1,3 +1,4 @@
+import { managersOf } from '@internal/backstage-plugin-portal-access-common';
 import { stringify } from 'yaml';
 
 /**
@@ -20,9 +21,9 @@ const RESULT = /^[a-z][a-z-]{0,31}$/;
 const MAX_FAILED = 50;
 const MAX_PROCESSES = 1000;
 
-/** The groups that may change the business map: business-architect, backstage-admin and console.actions.groups. */
+/** The groups that may change the business map: who manages the area `business` of the table of permissions of the portal, and console.actions.groups. */
 export function writers(actionGroups?: string[]): string[] {
-  return [...new Set(['business-architect', 'backstage-admin', ...(actionGroups ?? [])])];
+  return [...new Set([...managersOf('business'), ...(actionGroups ?? [])])];
 }
 
 /** The body of POST /exercises checked: anything else is an ExerciseError. Refs are lowercased. */
