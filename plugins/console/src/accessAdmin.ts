@@ -100,3 +100,80 @@ export function usePeopleSearch() {
   const call = useAccessFetch();
   return useCallback(async (search: string) => (await call<{ people: Person[] }>(`/people?search=${encodeURIComponent(search)}`)).people, [call]);
 }
+
+// --- requests of access (accessRoutes.ts /requests) --------------------------------------------------------------
+
+export type RequestState = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+export type AccessRequest = {
+  id: number;
+  at: string;
+  requester: string;
+  group: string;
+  component: string;
+  reason: string;
+  state: RequestState;
+  decidedBy?: string;
+  decidedAt?: string;
+  answer?: string;
+};
+export type AskableGroup = {
+  name: string;
+  kind?: string;
+  grants?: string;
+  classification?: string;
+  admin: boolean;
+  member: boolean;
+  pending: boolean;
+};
+export type AskableProduct = {
+  component: string;
+  kind: 'service' | 'application';
+  groups: AskableGroup[];
+};
+export type AccessRequests = {
+  /** what the person may ask for */
+  products: AskableProduct[];
+  /** their own requests, the most recent first */
+  mine: AccessRequest[];
+  /** whether they administer a product, and so decide its requests */
+  decides: boolean;
+  pending: AccessRequest[];
+  decided: AccessRequest[];
+};
+
+/** What a group is to the person who looks at it: theirs already, asked for, or free to ask for. */
+export const askState = (g: AskableGroup): 'member' | 'pending' | 'free' => {
+  if (g.member) return 'member';
+  return g.pending ? 'pending' : 'free';
+};
+
+/** A reason that can be sent: something, and at most 500 characters. */
+export const MAX_REASON = 500;
+export const validReason = (text: string) =>
+  text.trim().length > 0 && text.trim().length <= MAX_REASON;
+
+/** What the person may ask for, their requests, and the ones they decide. */
+export const useAccessRequests = () => useLoad<AccessRequests>('/requests');
+
+/** Asks, approves, rejects or withdraws; each rejects with the reason of the backend. */
+export function useRequestActions() {
+  const call = useAccessFetch();
+  const json = (body: object): RequestInit => ({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return {
+    ask: (group: string, reason: string) =>
+      call<AccessRequest>('/requests', json({ group, reason: reason.trim() })),
+    approve: (id: number) =>
+      call<{ ok: boolean }>(`/requests/${id}/approval`, { method: 'POST' }),
+    reject: (id: number, reason: string) =>
+      call<{ ok: boolean }>(
+        `/requests/${id}/rejection`,
+        json({ reason: reason.trim() }),
+      ),
+    withdraw: (id: number) =>
+      call<{ ok: boolean }>(`/requests/${id}`, { method: 'DELETE' }),
+  };
+}

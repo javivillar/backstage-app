@@ -151,7 +151,7 @@ if (process.env.KEYCLOAK_CATALOG_SYNC === 'true') {
 // Permission
 backend.add(import('@backstage/plugin-permission-backend'));
 // the policy of the portal (plugins/permissionPolicy.ts): everything is allowed except the scaffolder templates,
-// which are only for who has a role in their area (the one table of plugins/keycloak-backend portalPermissions.ts)
+// which are only for who has a role in their area (the one table of plugins/portal-access-common permissions.ts)
 backend.add(refresquitoPermissionPolicy);
 
 // Search

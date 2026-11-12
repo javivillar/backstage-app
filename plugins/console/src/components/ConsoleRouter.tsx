@@ -34,6 +34,7 @@ import { I18nProvider } from '../i18n';
 import { DependencyExplorer } from './DependencyExplorer';
 import { MonitoringPage } from './MonitoringPage';
 import { AccessAdminPage } from './AccessAdminPage';
+import { AccessRequestsPage } from './AccessRequestsPage';
 import { AreaGuard, RolesPermissionsPage } from './RolesPermissionsPage';
 import { PortalPermissionsProvider } from '../portalPermissions';
 import { BusinessMapPage } from './businessMap/BusinessMapPage';
@@ -144,6 +145,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/cis-cluster" element={<CisClusterPage />} />
         <Route path="/manage" element={<ManageHubPage />} />
         <Route path="/access-administration" element={<AccessAdminPage />} />
+        <Route path="/access-requests" element={<AccessRequestsPage />} />
         <Route path="/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/manage/:id" element={<ManageServicePage />} />
         <Route path="/network" element={<NetworkPage />} />

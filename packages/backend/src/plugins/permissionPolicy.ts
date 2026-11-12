@@ -8,7 +8,7 @@ import { BUSINESS_TEMPLATE_TAG, groupNames, rolesOf, templatesOf, type RoleId } 
 /**
  * The permission policy of the portal. Everything is allowed, as before, except reading the scaffolder templates
  * from the catalog: a template is only there for who has a role in its area (the one table of permissions,
- * plugins/keycloak-backend portalPermissions.ts). The scaffolder reads a template with the credentials of who asks,
+ * plugins/portal-access-common permissions.ts). The scaffolder reads a template with the credentials of who asks,
  * so someone without the role neither lists it nor runs it, whatever link they open.
  *
  * - templates of the business map (tag business-map): business-architect;

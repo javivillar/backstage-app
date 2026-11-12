@@ -104,9 +104,29 @@ Every change is recorded in the table `access_changes` of this plugin's database
 without the database no change is made. A change applies the next time the person signs in. The service account
 needs `manage-users`, `view-users` and `query-groups` of `realm-management` (the realm of iam-oneke gives them).
 
+## Access requests
+
+`/api/keycloak-manager/access/requests` (`src/accessRoutes.ts`, `src/accessRequests.ts`; console › Portal › Manage ›
+Access requests). Anyone signed in asks to be put in a group of a product, with a reason; never a group only the
+portal administrators change. An administrator of that product approves it, which adds the person with every check
+of Access administration (a person who signs in through the hub is refused and the request keeps waiting), or rejects
+it with a reason the person reads. The person withdraws it while it waits. Requests are kept in the table
+`access_requests` of the database of this plugin and are never deleted.
+
+| Call | Who | What |
+|---|---|---|
+| `GET /requests` | anyone | the groups they may ask for, their requests, and the ones they decide |
+| `POST /requests` `{group, reason}` | anyone | asks; 409 when they are in the group or have asked already |
+| `POST /requests/:id/approval` | an administrator of the product | adds the person to the group |
+| `POST /requests/:id/rejection` `{reason}` | an administrator of the product | rejects it |
+| `DELETE /requests/:id` | who asked | withdraws it |
+
+Who administers a product is decided in one place for the whole portal: `administersProduct()` of
+`plugins/portal-access-common`, which the Manage backends of each service use too.
+
 ## Permissions of the portal
 
-`src/portalPermissions.ts` is the one table of permissions of the portal: for each area (catalogue, create
+`plugins/portal-access-common/src/permissions.ts` is the one table of permissions of the portal: for each area (catalogue, create
 applications, business map, continuity, security, support, costs, assistants, manage, access administration...) who
 sees it and who changes it. A role is one or more Keycloak groups (`backstage-viewer`, `backstage-editor`,
 `business-architect`, `continuity-officer`, `security-team`, `supportlead` / `supportteam`, the administrators of a

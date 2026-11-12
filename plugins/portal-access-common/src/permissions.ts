@@ -56,6 +56,8 @@ export const AREAS: Area[] = [
   // the objects of a service: its administrators, and the owners of an application for theirs
   { id: 'manage', view: ['product', 'editor'], manage: ['product', 'editor'], scope: 'product' },
   { id: 'access', view: ['product', 'editor'], manage: ['product', 'editor'], scope: 'product' },
+  // asking for a group of a product: everyone; its administrators decide
+  { id: 'requests', view: 'all', manage: ['product', 'editor'], scope: 'product' },
   { id: 'roles', view: 'all', manage: [] },
 ];
 
@@ -82,6 +84,8 @@ export function accessOf(area: Area, roles: RoleId[]): Access {
   return 'hidden';
 }
 
+const groupsOfRole = (role: RoleId): string[] => (role === 'product' ? ['<product>-admin'] : ROLE_GROUPS[role]);
+
 /** The area of the table with this id; an unknown id is a mistake of the caller. */
 export function areaOf(id: string): Area {
   const area = AREAS.find(a => a.id === id);
@@ -97,8 +101,6 @@ export const accessToArea = (id: string, ownershipEntityRefs: string[]): Access 
 
 /** Whether the person changes an area (a role that manages it, or an administrator of the portal). */
 export const managesArea = (id: string, ownershipEntityRefs: string[]): boolean => accessToArea(id, ownershipEntityRefs) === 'manage';
-
-const groupsOfRole = (role: RoleId): string[] => (role === 'product' ? ['<product>-admin'] : ROLE_GROUPS[role]);
 
 /** What the page Roles and permissions and the console need of the table, for someone with these roles. */
 export function permissionsOf(roles: RoleId[]) {

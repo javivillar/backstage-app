@@ -1,5 +1,5 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
-import { Request, Router } from 'express';
+import { json, Request, Router } from 'express';
 import {
   kcAdminFetch,
   COMPONENT,
@@ -9,6 +9,7 @@ import {
 import { securityOf, unowned } from './security';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { accessRouter } from './accessRoutes';
+import { AccessRequestStore, ensureRequestsTable } from './accessRequests';
 import { AccessStore, ensureTable } from './accessStore';
 import { groupNames } from './accessModel';
 import { administersProduct, permissionsOf, rolesOf } from '@internal/backstage-plugin-portal-access-common';
@@ -83,20 +84,25 @@ export const keycloakManagerPlugin = createBackendPlugin({
         // access administration (accessRoutes.ts): without its database nothing is changed, since no change could
         // be recorded; the pages still read
         let store: AccessStore | undefined;
+        let requests: AccessRequestStore | undefined;
         try {
           const knex = await database.getClient();
           await ensureTable(knex);
           store = new AccessStore(knex);
+          await ensureRequestsTable(knex);
+          requests = new AccessRequestStore(knex);
         } catch (e) {
           logger.warn(`keycloak-manager: access changes cannot be recorded, so none will be made: ${(e as Error).message}`);
         }
         router.use(
           '/access',
+          json({ limit: '10kb' }),
           accessRouter({
             config,
             logger,
             catalog,
             store,
+            requests,
             caller: async req => {
               const credentials = await httpAuth.credentials(req);
               const info = await userInfo.getUserInfo(credentials);
@@ -114,7 +120,7 @@ export const keycloakManagerPlugin = createBackendPlugin({
           };
         }
 
-        // what the signed-in person may do in the portal (portalPermissions.ts): the console hides the rest
+        // what the signed-in person may do in the portal (portal-access-common permissions.ts): the console hides the rest
         router.get('/permissions', async (req, res) => {
           try {
             const info = await userInfo.getUserInfo(await httpAuth.credentials(req));
