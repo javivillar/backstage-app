@@ -1,6 +1,6 @@
 import type { Messages } from '../i18n';
 
-/** Texts of Portal › Manage › Access administration (AccessAdminPage): key → English and Spanish. */
+/** Texts of Portal › Administration › Access administration (AccessAdminPage): key → English and Spanish. */
 export const ACCESS_ADMIN: Messages = {
   'nav.accessAdmin': { en: 'Access administration', es: 'Administración de accesos' },
   'nav.accessAdmin.hint': { en: 'Who is in the groups of each product', es: 'Quién está en los grupos de cada producto' },
@@ -89,7 +89,7 @@ export const ACCESS_ADMIN: Messages = {
   },
   'acc.col.product': { en: 'Product', es: 'Producto' },
 
-  // Portal › Manage › Access requests (AccessRequestsPage)
+  // Portal › Administration › Access requests (AccessRequestsPage)
   'nav.accessRequests': { en: 'Access requests', es: 'Solicitudes de acceso' },
   'nav.accessRequests.hint': { en: 'Ask for a group of a product, and decide the requests of yours', es: 'Pedir un grupo de un producto y decidir las solicitudes de los tuyos' },
   'req.title': { en: 'Access requests', es: 'Solicitudes de acceso' },
@@ -140,7 +140,7 @@ export const ACCESS_ADMIN: Messages = {
   'req.done.rejected': { en: 'Request of {user} for {group} rejected', es: 'Solicitud de {user} para {group} rechazada' },
   'req.done.withdrawn': { en: 'Request for {group} withdrawn', es: 'Solicitud de {group} retirada' },
 
-  // Portal › Manage › Control and evidence (ControlEvidencePage)
+  // Portal › Administration › Control and evidence (ControlEvidencePage)
   'nav.controlEvidence': { en: 'Control and evidence', es: 'Control y evidencia' },
   'nav.controlEvidence.hint': { en: 'Who did what, who has access to what, what needs a decision', es: 'Quién hizo qué, quién tiene acceso a qué y qué necesita una decisión' },
   'ev.title': { en: 'Control and evidence', es: 'Control y evidencia' },
@@ -254,7 +254,7 @@ export const ACCESS_ADMIN: Messages = {
   'ev.approval.waiting': { en: 'waits for an administrator', es: 'espera a un administrador' },
   'ev.approval.another': { en: 'waits for another administrator', es: 'espera a otro administrador' },
 
-  // Portal › Manage › Roles and permissions (RolesPermissionsPage) and the page shown instead of one a person cannot use
+  // Portal › Administration › Roles and permissions (RolesPermissionsPage) and the page shown instead of one a person cannot use
   'nav.rolesPermissions': { en: 'Roles and permissions', es: 'Roles y permisos' },
   'nav.rolesPermissions.hint': { en: 'What each role sees and changes in the portal', es: 'Qué ve y qué cambia cada rol en el portal' },
   'perm.title': { en: 'Roles and permissions', es: 'Roles y permisos' },

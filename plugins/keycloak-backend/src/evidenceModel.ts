@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'crypto';
 import type { Product } from './accessModel';
 
 /**
- * Control and evidence (console › Portal › Manage › Control and evidence): what needs a decision in who has access
+ * Control and evidence (console › Portal › Administration › Control and evidence): what needs a decision in who has access
  * to what, and the report of access that can be shown to an auditor. The rules, kept pure for the tests;
  * evidenceRoutes.ts reads Keycloak and the database and applies them.
  */
