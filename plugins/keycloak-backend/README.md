@@ -71,3 +71,57 @@ by the name of its Component (`superset-oneke`), a stage of an application by `r
 `keycloak:create-group` asks for `belongsTo` (the Component the group governs), `grants` and `kind`, and writes the
 tags (`refresquito.component`, `.stage`, `.kind`, `.grants`, and zone/program/classification copied from an object
 already tagged for that component).
+
+## Access administration
+
+`/api/keycloak-manager/access/*` backs console › Portal › Manage › Access administration: the only place of the
+portal that changes who is in a Keycloak group. People are never created there; existing users are added to and
+removed from the groups of a product.
+
+| Route | What |
+| --- | --- |
+| `GET /access/products` | the products the caller administers (every one for `backstage-admin`) |
+| `GET /access/products/:component` | its groups with their members, and its last changes |
+| `GET /access/people?search=` | existing people to add (2 characters or more) |
+| `GET /access/people/:username` | what a person has in the products the caller administers |
+| `PUT` / `DELETE /access/groups/:group/members/:username` | add / remove a person |
+
+Rules (`src/accessModel.ts`, tested in `accessModel.test.ts`):
+
+- A product is a component of the security tags (`refresquito.component`). The Grafana groups of a service
+  (`grafana-<service>-viewers` / `-editors`) are shown with that service.
+- Its administrators are the members of its administrator group: `<product>-admin`, the only group ending in
+  `-admin`, or the one set in `ADMIN_GROUPS` (config `keycloakAdmin.access.admins.<component>: [groups]` replaces the
+  whole table). They add other administrators too.
+- The owner group of a business application (`spec.owner` of its Component) administers its groups.
+- `backstage-admin` administers everything, and only it changes the groups of `PORTAL_ONLY` (config
+  `keycloakAdmin.access.portalOnly`): `headlamp-admin`, `argocd-admin`, `s3-admins`, `backstage-admin`...
+- A product is never left without an administrator.
+- A person who signs in through the hub (an identity provider link) is refused: the spoke maps their groups from the
+  hub at every sign-in (sync mode FORCE), so they are changed in the hub.
+
+Every change is recorded in the table `access_changes` of this plugin's database (who, what, when) and logged;
+without the database no change is made. A change applies the next time the person signs in. The service account
+needs `manage-users`, `view-users` and `query-groups` of `realm-management` (the realm of iam-oneke gives them).
+
+## Permissions of the portal
+
+`src/portalPermissions.ts` is the one table of permissions of the portal: for each area (catalogue, create
+applications, business map, continuity, security, support, costs, assistants, manage, access administration...) who
+sees it and who changes it. A role is one or more Keycloak groups (`backstage-viewer`, `backstage-editor`,
+`business-architect`, `continuity-officer`, `security-team`, `supportlead` / `supportteam`, the administrators of a
+product, `backstage-admin`), so people get it in Access administration.
+
+- `GET /api/keycloak-manager/permissions` answers what the signed-in person may do. The console
+  (`plugins/console/src/portalPermissions.tsx`) lists only the menu entries of the areas they can use, shows a
+  "you cannot use this" page for a link opened directly, and draws the page Roles and permissions.
+- The permission policy of the backend (`packages/backend/src/plugins/permissionPolicy.ts`) replaces allow-all:
+  everything is allowed except reading scaffolder Templates from the catalog. Templates tagged `business-map` are for
+  `business-architect`; every other template for `backstage-editor` and the administrators of a product;
+  `backstage-admin` reads all. Someone without the role neither lists a template nor runs it.
+- The checks each module already makes (`business-architect`, `continuity-officer`, the owner team in Manage,
+  `console.actions.groups`...) agree with the table and stay where they are until they are moved to it.
+
+After deploying: people who create applications must be in `backstage-editor` (Access administration › cnoe), or
+they lose the templates and the Create pages.
+

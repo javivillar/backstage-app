@@ -34,6 +34,7 @@ import { opsAssistantPlugin } from '@internal/backstage-plugin-ops-assistant-bac
 import { businessMapCatalogModule } from './plugins/businessMap/catalogModule';
 import { businessMapPlugin } from './plugins/businessMap/plugin';
 import { businessMapScaffolderModule } from './plugins/businessMap/scaffolderModule';
+import { refresquitoPermissionPolicy } from './plugins/permissionPolicy';
 
 const backend = createBackend();
 
@@ -149,9 +150,9 @@ if (process.env.KEYCLOAK_CATALOG_SYNC === 'true') {
 
 // Permission
 backend.add(import('@backstage/plugin-permission-backend'));
-backend.add(
-  import('@backstage/plugin-permission-backend-module-allow-all-policy'),
-);
+// the policy of the portal (plugins/permissionPolicy.ts): everything is allowed except the scaffolder templates,
+// which are only for who has a role in their area (the one table of plugins/keycloak-backend portalPermissions.ts)
+backend.add(refresquitoPermissionPolicy);
 
 // Search
 backend.add(import('@backstage/plugin-search-backend'));
