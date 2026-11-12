@@ -1,4 +1,4 @@
-import { isPortalAdmin } from '@internal/backstage-plugin-portal-access-common';
+import { isPortalAdmin, PORTAL_ADMIN_GROUPS } from '@internal/backstage-plugin-portal-access-common';
 import type {
   BackstageCredentials,
   LoggerService,
@@ -40,6 +40,12 @@ import type { AccessStore } from './accessStore';
  * /access/requests: anyone signed in asks to be put in a group of a product, with a reason (never a group only the
  * portal administrators change); an administrator of that product approves it, which adds the person exactly as
  * above, or rejects it with a reason; the person withdraws it while it waits (accessRequests.ts).
+ *
+ * Double approval: adding someone to a group only the portal administrators change (cluster-admin, every bucket, the
+ * portal itself) needs two of them. The first one proposes it (the PUT answers 202 and nothing changes); another
+ * one approves it in /requests, never who proposed it nor the person to be added. While the portal has a single
+ * administrator there is no second person, so the change is made at once. An attempt that is refused for lack of
+ * permission is recorded too (action `refused`), for Control and evidence.
  */
 
 type KcUser = {
@@ -332,25 +338,39 @@ export function accessRouter(options: {
   }
 
   /** Adds or removes a person in a group of a product the caller administers: every check, the change, its record. */
+  /** Records an attempt refused for lack of permission, and refuses it. */
+  async function refuse(caller: Caller, username: string, groupName: string, component: string, why: string): Promise<never> {
+    logger.warn(`access administration: refused ${caller.ref} ${username} ${groupName}: ${why}`);
+    await store?.record({ actor: caller.ref, action: 'refused', username, group: groupName, component }).catch(() => undefined);
+    throw new Refusal(403, why);
+  }
+
+  /** The usernames of the administrators of the portal. */
+  async function portalAdmins(products: Product[]): Promise<Set<string>> {
+    const names = new Set<string>();
+    for (const g of products.flatMap(p => p.groups).filter(x => PORTAL_ADMIN_GROUPS.includes(x.name))) {
+      for (const m of await membersOf(g.id)) names.add(m.username);
+    }
+    return names;
+  }
+
+  /**
+   * Adds or removes a person in a group of a product the caller administers: every check, the change, its record.
+   * Adding to a group only the portal administrators change is proposed instead (see the top of the file) unless
+   * `second` says another administrator has approved it: then the id of the proposal is returned and nothing changes.
+   */
   async function changeMembership(
     action: 'add' | 'remove',
     caller: Caller,
     mine: Product[],
     groupName: string,
     username: string,
-  ): Promise<void> {
+    how: { second?: boolean; reason?: string } = {},
+  ): Promise<{ proposed?: number }> {
     const product = mine.find(p => p.groups.some(g => g.name === groupName));
     const group = product?.groups.find(g => g.name === groupName);
-    if (!product || !group)
-      throw new Refusal(
-        403,
-        `You do not administer the product of ${groupName}.`,
-      );
-    if (!mayChange(group, caller))
-      throw new Refusal(
-        403,
-        `Only the administrators of the portal change ${groupName}.`,
-      );
+    if (!product || !group) return refuse(caller, username, groupName, '', `You do not administer the product of ${groupName}.`);
+    if (!mayChange(group, caller)) return refuse(caller, username, groupName, product.component, `Only the administrators of the portal change ${groupName}.`);
     if (!store)
       throw new Refusal(
         503,
@@ -373,6 +393,23 @@ export function accessRouter(options: {
       if (why) throw new Refusal(409, why);
     }
 
+    if (action === 'add' && group.portalOnly && !how.second) {
+      const others = [...(await portalAdmins(mine))].filter(a => a !== parseEntityRef(caller.ref).name && a !== username);
+      if (others.length > 0) {
+        if (!requests) throw new Refusal(503, 'Proposals cannot be kept (no database), so none is made.');
+        if (await requests.pendingOf(username, groupName)) throw new Refusal(409, `Adding ${username} to ${groupName} waits for another administrator of the portal already.`);
+        const filed = await requests.file({
+          requester: username,
+          group: groupName,
+          component: product.component,
+          reason: how.reason ?? `Proposed by ${parseEntityRef(caller.ref).name}`,
+          proposedBy: caller.ref,
+        });
+        logger.info(`access administration: ${caller.ref} proposes ${username} for ${groupName}: waits for a second administrator`);
+        return { proposed: filed.id };
+      }
+    }
+
     const done = await kcAdminFetch(
       config,
       `/users/${user.id}/groups/${group.id}`,
@@ -392,20 +429,16 @@ export function accessRouter(options: {
       group: groupName,
       component: product.component,
     });
+    return {};
   }
 
   /** Adds (PUT) or removes (DELETE) a person in a group of a product the caller administers. */
   const change = (action: 'add' | 'remove') =>
     handle(action, async (req, res) => {
       const { caller, mine } = await context(req);
-      await changeMembership(
-        action,
-        caller,
-        mine,
-        req.params.group,
-        req.params.username,
-      );
-      res.json({ ok: true });
+      const { proposed } = await changeMembership(action, caller, mine, req.params.group, req.params.username);
+      if (proposed === undefined) res.json({ ok: true });
+      else res.status(202).json({ ok: true, pending: true, id: proposed });
     });
 
   router.put('/groups/:group/members/:username', change('add'));
@@ -444,7 +477,8 @@ export function accessRouter(options: {
     handle('requests', async (req, res) => {
       const { caller, products, mine, username } = await context(req);
       const kept = requestsOrRefuse();
-      const own = await kept.of(username);
+      // what an administrator proposed for this person is not theirs to see or withdraw
+      const own = (await kept.of(username)).filter(r => !r.proposedBy);
       const waiting = new Set(
         own.filter(r => r.state === 'pending').map(r => r.group),
       );
@@ -471,9 +505,9 @@ export function accessRouter(options: {
           .filter(p => p.groups.length),
         mine: own,
         decides: mine.length > 0,
-        // a request for a group only the portal administrators change cannot exist; the caller decides the rest
-        pending,
-        decided,
+        // the proposals of double approval are for the administrators of the portal
+        pending: pending.filter(r => !r.proposedBy || caller.portalAdmin),
+        decided: decided.filter(r => !r.proposedBy || caller.portalAdmin),
       });
     }),
   );
@@ -519,13 +553,14 @@ export function accessRouter(options: {
     handle('approval', async (req, res) => {
       const { caller, mine } = await context(req);
       const request = await pendingRequestOrRefuse(req.params.id);
-      await changeMembership(
-        'add',
-        caller,
-        mine,
-        request.group,
-        request.requester,
-      );
+      if (request.proposedBy) {
+        // double approval: another administrator of the portal, never who proposed it nor the person to be added
+        const me = parseEntityRef(caller.ref).name;
+        if (!caller.portalAdmin) throw new Refusal(403, `Only the administrators of the portal approve ${request.group}.`);
+        if (caller.ref === request.proposedBy) throw new Refusal(403, 'Another administrator of the portal approves what you proposed.');
+        if (me === request.requester) throw new Refusal(403, 'Nobody approves their own access.');
+      }
+      await changeMembership('add', caller, mine, request.group, request.requester, { second: true });
       if (
         !(await requestsOrRefuse().decide(request.id, 'approved', caller.ref))
       )
@@ -539,7 +574,8 @@ export function accessRouter(options: {
     handle('rejection', async (req, res) => {
       const { caller, mine } = await context(req);
       const request = await pendingRequestOrRefuse(req.params.id);
-      const found = askable(mine, request.group);
+      // a proposal of double approval is rejected by an administrator of the portal
+      const found = request.proposedBy ? caller.portalAdmin : Boolean(askable(mine, request.group));
       if (!found)
         throw new Refusal(
           403,
@@ -573,8 +609,8 @@ export function accessRouter(options: {
     handle('withdrawal', async (req, res) => {
       const { caller, username } = await context(req);
       const request = await pendingRequestOrRefuse(req.params.id);
-      if (request.requester !== username)
-        throw new Refusal(403, 'Only who asked withdraws a request.');
+      const asked = request.proposedBy ? caller.ref === request.proposedBy : request.requester === username;
+      if (!asked) throw new Refusal(403, 'Only who asked withdraws a request.');
       if (
         !(await requestsOrRefuse().decide(request.id, 'withdrawn', caller.ref))
       )

@@ -124,6 +124,34 @@ it with a reason the person reads. The person withdraws it while it waits. Reque
 Who administers a product is decided in one place for the whole portal: `administersProduct()` of
 `plugins/portal-access-common`, which the Manage backends of each service use too.
 
+## Control and evidence
+
+`/api/keycloak-manager/evidence` (`src/evidenceRoutes.ts`, rules in `src/evidenceModel.ts`; console › Portal ›
+Manage › Control and evidence). Read by who has the area `evidence` of the table of permissions: the administrators
+of the portal, the security team (`security-team`) and the auditors (`portal-auditor`). Nothing here changes
+Keycloak.
+
+| Call | What |
+|---|---|
+| `GET /overview` | what needs a decision: products with no or a single administrator, people who keep access without signing in for 90 days, the members of the far-reaching groups, empty groups, groups of no product |
+| `GET /activity` | one record: changes of access, decisions on requests, attempts refused for lack of permission |
+| `GET /report[?snapshot=id]` | who is in each group of each product, now or as a snapshot kept it, with its verification |
+| `POST /snapshots` | takes a snapshot now (administrators of the portal) |
+| `GET /approvals` | the proposals of double approval |
+
+- **Snapshots** (`src/evidenceStore.ts`, table `access_snapshots`): one every night (02:10) and on demand, kept two
+  years. Each keeps the report as text with its SHA-256 digest, and its HMAC-SHA256 signature when
+  `keycloakAdmin.access.evidenceKey` is set (a Secret of the platform). A snapshot changed afterwards shows as
+  "changed after it was kept".
+- **Inactive people** need the login events of Keycloak: events enabled in the realm and kept at least 90 days, and
+  the role `view-events` of `realm-management` for the service account. Without them nobody is called inactive and
+  the page says so.
+- **Double approval** (`src/accessRoutes.ts`): adding someone to a group only the portal administrators change is
+  proposed by one of them (the `PUT` answers 202) and approved by another, never who proposed it nor the person
+  added. While no other administrator could approve it, the change is made at once.
+- **Not recorded yet**: applications created, Manage pull requests, promotions and cluster actions. The activity
+  shows what this plugin does: access changes, decisions and refused attempts.
+
 ## Permissions of the portal
 
 `plugins/portal-access-common/src/permissions.ts` is the one table of permissions of the portal: for each area (catalogue, create

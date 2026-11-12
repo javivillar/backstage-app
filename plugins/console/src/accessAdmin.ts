@@ -90,7 +90,8 @@ export function useAccessChange() {
   const call = useAccessFetch();
   return useCallback(
     (action: 'add' | 'remove', group: string, username: string) =>
-      call<{ ok: boolean }>(`/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(username)}`, { method: action === 'add' ? 'PUT' : 'DELETE' }),
+      // pending: adding to a group only the portal administrators change waits for a second one (double approval)
+      call<{ ok: boolean; pending?: boolean }>(`/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(username)}`, { method: action === 'add' ? 'PUT' : 'DELETE' }),
     [call],
   );
 }

@@ -254,6 +254,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
           { label: tr('nav.accessAdmin'), to: '/console/access-administration', hint: tr('nav.accessAdmin.hint') },
           // asking for a group of a product, and deciding the requests of the products one administers (AccessRequestsPage)
           { label: tr('nav.accessRequests'), to: '/console/access-requests', hint: tr('nav.accessRequests.hint') },
+          // who did what, who has access to what and what needs a decision (ControlEvidencePage): administrators, security, auditors
+          { label: tr('nav.controlEvidence'), to: '/console/control-evidence', hint: tr('nav.controlEvidence.hint') },
           { label: tr('nav.rolesPermissions'), to: '/console/roles-permissions', hint: tr('nav.rolesPermissions.hint') },
         ],
       });

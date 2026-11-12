@@ -31,6 +31,11 @@ export type AccessRequest = {
   decidedAt?: string;
   /** why it was rejected */
   answer?: string;
+  /**
+   * A request of double approval: the administrator of the portal who proposed to add `requester` to a group only
+   * the portal administrators change. Another administrator of the portal decides it, never this one.
+   */
+  proposedBy?: string;
 };
 
 /** The reason of a request or of a rejection, trimmed; undefined when it is missing or too long. */
@@ -53,6 +58,7 @@ export async function ensureRequestsTable(knex: Knex): Promise<void> {
     t.string('decided_by', 255);
     t.timestamp('decided_at', { useTz: true });
     t.string('answer', MAX_REASON);
+    t.string('proposed_by', 255);
     t.index(['component', 'state'], 'access_requests_component_idx');
     t.index(['requester', 'at'], 'access_requests_requester_idx');
   });
@@ -72,16 +78,14 @@ const row = (r: Record<string, unknown>): AccessRequest => ({
   decidedBy: r.decided_by ? String(r.decided_by) : undefined,
   decidedAt: r.decided_at ? iso(r.decided_at) : undefined,
   answer: r.answer ? String(r.answer) : undefined,
+  proposedBy: r.proposed_by ? String(r.proposed_by) : undefined,
 });
 
 export class AccessRequestStore {
   constructor(private readonly knex: Knex) {}
 
   async file(
-    request: Pick<
-      AccessRequest,
-      'requester' | 'group' | 'component' | 'reason'
-    >,
+    request: Pick<AccessRequest, 'requester' | 'group' | 'component' | 'reason' | 'proposedBy'>,
     now = new Date(),
   ): Promise<AccessRequest> {
     const [inserted] = await this.knex(REQUESTS_TABLE)
@@ -92,6 +96,7 @@ export class AccessRequestStore {
         component: request.component,
         reason: request.reason,
         state: 'pending',
+        proposed_by: request.proposedBy ?? null,
       })
       .returning('id');
     const id =
@@ -146,6 +151,18 @@ export class AccessRequestStore {
       .orderBy('id', 'desc')
       .limit(limit);
     return { pending: pending.map(row), decided: decided.map(row) };
+  }
+
+  /** the requests of double approval: every pending one (the oldest first), then the last decided */
+  async proposed(limit = MAX_LISTED): Promise<{ pending: AccessRequest[]; decided: AccessRequest[] }> {
+    const pending = await this.knex(REQUESTS_TABLE).whereNotNull('proposed_by').where({ state: 'pending' }).orderBy('at', 'asc').orderBy('id', 'asc');
+    const decided = await this.knex(REQUESTS_TABLE).whereNotNull('proposed_by').whereNot({ state: 'pending' }).orderBy('decided_at', 'desc').orderBy('id', 'desc').limit(limit);
+    return { pending: pending.map(row), decided: decided.map(row) };
+  }
+
+  /** every approved or rejected request, the most recent first: the approvals of the activity */
+  async decidedRecently(limit = 200): Promise<AccessRequest[]> {
+    return (await this.knex(REQUESTS_TABLE).whereIn('state', ['approved', 'rejected']).orderBy('decided_at', 'desc').orderBy('id', 'desc').limit(limit)).map(row);
   }
 
   /** Decides a pending request; false when it was not pending any more (somebody else decided it). */

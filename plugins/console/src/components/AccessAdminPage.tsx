@@ -258,7 +258,7 @@ export const AccessAdminPage = () => {
     setNotice(undefined);
     change(action, group, username)
       .then(
-        () => setNotice({ tone: 'pos', text: t(action === 'add' ? 'acc.done.add' : 'acc.done.remove', { user: username, group }) }),
+        done => setNotice({ tone: 'pos', text: t(choose([[done.pending, 'acc.done.proposed'], [action === 'add', 'acc.done.add']], 'acc.done.remove'), { user: username, group }) }),
         e => setNotice({ tone: 'neg', text: t('acc.failed', { why: (e as Error).message }) }),
       )
       .finally(() => {
