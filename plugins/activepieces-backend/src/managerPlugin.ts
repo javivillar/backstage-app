@@ -1,8 +1,9 @@
+import { administersProduct } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Router } from 'express';
 import { apFetch, apJson, apListAll, activepiecesPublicUrl, flowUrl, projectUrl } from './activepiecesClient';
 import {
-  ADMIN_GROUP_REF,
+  COMPONENT,
   ApMember,
   CallerInfo,
   PERM_WRITE_PROJECT,
@@ -58,7 +59,7 @@ export const activepiecesManagerPlugin = createBackendPlugin({
           return {
             entityRef: info.userEntityRef,
             username: usernameFromEntityRef(info.userEntityRef),
-            isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+            isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
           };
         }
 

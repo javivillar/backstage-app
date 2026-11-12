@@ -1,3 +1,4 @@
+import { administersProduct } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { Request, Router } from 'express';
 import {
@@ -6,7 +7,7 @@ import {
   cockpitProcessDefinitionUrl,
   deleteAllProcessDefinitionVersions,
 } from './camundaClient';
-import { ADMIN_GROUP_REF, CallerInfo, ownerMap, requireOwnerOrAdmin } from './ownership';
+import { COMPONENT, CallerInfo, ownerMap, requireOwnerOrAdmin } from './ownership';
 
 interface ProcessDefinition {
   id: string;
@@ -43,7 +44,7 @@ export const camundaManagerPlugin = createBackendPlugin({
           return {
             entityRef: info.userEntityRef,
             username: info.userEntityRef.split('/').pop() ?? info.userEntityRef,
-            isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+            isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
           };
         }
 

@@ -1,4 +1,4 @@
-import { accessOf, AREAS, isProductAdmin, permissionsOf, rolesOf, templatesOf, type RoleId } from './portalPermissions';
+import { accessOf, AREAS, isProductAdmin, permissionsOf, rolesOf, templatesOf, type RoleId } from './permissions';
 
 const area = (id: string) => {
   const found = AREAS.find(a => a.id === id);

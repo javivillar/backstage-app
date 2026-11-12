@@ -1,7 +1,11 @@
+import { administersProduct, PORTAL_ADMIN_GROUPS, productAdminGroups } from '@internal/backstage-plugin-portal-access-common';
 import { BackstageCredentials, DatabaseService, UserInfoService } from '@backstage/backend-plugin-api';
 import type { Knex } from 'knex';
 
-export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
+/** The product these pages manage: its administrators (portal-access-common) see and change every object. */
+export const COMPONENT = 'seaweedfs-oneke';
+/** Who administers it, for the messages. */
+export const ADMINS = [...PORTAL_ADMIN_GROUPS, ...productAdminGroups(COMPONENT)].join(' or ');
 
 interface MinimalActionContext {
   getInitiatorCredentials(): Promise<BackstageCredentials>;
@@ -26,7 +30,7 @@ export async function callerInfo(
   return {
     entityRef: info.userEntityRef,
     username: usernameFromEntityRef(info.userEntityRef),
-    isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+    isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
   };
 }
 
@@ -47,7 +51,7 @@ export function requireOwnerOrAdmin(
   if (ownerUsername && ownerUsername === caller.username) return;
   throw new Error(
     `Forbidden: ${caller.entityRef} may not modify this SeaweedFS ${resourceKind} ` +
-      `(owner: ${ownerUsername || 'none'}). Only the owner or a member of ${ADMIN_GROUP_REF} can edit or delete it.`,
+      `(owner: ${ownerUsername || 'none'}). Only the owner or a member of ${ADMINS} can edit or delete it.`,
   );
 }
 

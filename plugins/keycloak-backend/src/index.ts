@@ -3,4 +3,4 @@ export { keycloakManagerPlugin } from './managerPlugin';
 export { catalogKeycloakModule } from './catalogModule';
 export { authModuleKeycloakOIDCProvider } from './authModule';
 export { groupNames } from './accessModel';
-export { BUSINESS_TEMPLATE_TAG, rolesOf, templatesOf, type RoleId } from './portalPermissions';
+export { BUSINESS_TEMPLATE_TAG, rolesOf, templatesOf, type RoleId } from '@internal/backstage-plugin-portal-access-common';

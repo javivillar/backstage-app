@@ -1,3 +1,4 @@
+import { administersProduct, PORTAL_ADMIN_GROUPS, productAdminGroups } from '@internal/backstage-plugin-portal-access-common';
 import { Config } from '@backstage/config';
 import { graviteeSettings } from './graviteeClient';
 import { GvApi, findGraviteeUser } from './graviteeApis';
@@ -19,7 +20,10 @@ import { KeycloakPerson, getKeycloakGroups, getKeycloakPerson } from './keycloak
 // nor returned. The service-account token underneath can see everything, so
 // this file is the only thing keeping users apart inside Backstage.
 
-export const ADMIN_GROUP_REF = 'group:default/backstage-admin';
+/** The product these pages manage: its administrators (portal-access-common) see and change every object. */
+export const COMPONENT = 'gravitee-oneke';
+/** Who administers it, for the messages. */
+export const ADMINS = [...PORTAL_ADMIN_GROUPS, ...productAdminGroups(COMPONENT)].join(' or ');
 export const GRAVITEE_ADMIN_GROUP = 'gravitee-admin';
 export const TEAM_GROUP_PREFIX = 'gravitee-team-';
 
@@ -52,7 +56,7 @@ export async function resolveCaller(
     username,
     person,
     teams: groups.filter(g => g.startsWith(TEAM_GROUP_PREFIX)).sort(),
-    isAdmin: ownershipEntityRefs.includes(ADMIN_GROUP_REF) || groups.includes(GRAVITEE_ADMIN_GROUP),
+    isAdmin: administersProduct(COMPONENT, ownershipEntityRefs) || groups.includes(GRAVITEE_ADMIN_GROUP),
     graviteeUserId: gvUser?.id,
   };
 }

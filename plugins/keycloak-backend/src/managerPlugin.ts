@@ -2,7 +2,7 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import { Request, Router } from 'express';
 import {
   kcAdminFetch,
-  ADMIN_GROUP_REF,
+  COMPONENT,
   ownerFromAttributes,
   ownerFromClientAttributes,
 } from './actions';
@@ -11,7 +11,7 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { accessRouter } from './accessRoutes';
 import { AccessStore, ensureTable } from './accessStore';
 import { groupNames } from './accessModel';
-import { permissionsOf, rolesOf } from './portalPermissions';
+import { administersProduct, permissionsOf, rolesOf } from '@internal/backstage-plugin-portal-access-common';
 
 interface KcUser {
   id: string;
@@ -110,7 +110,7 @@ export const keycloakManagerPlugin = createBackendPlugin({
           const info = await userInfo.getUserInfo(credentials);
           return {
             entityRef: info.userEntityRef,
-            isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+            isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
           };
         }
 

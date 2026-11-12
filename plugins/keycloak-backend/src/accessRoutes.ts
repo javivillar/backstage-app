@@ -1,9 +1,10 @@
+import { isPortalAdmin } from '@internal/backstage-plugin-portal-access-common';
 import type { BackstageCredentials, LoggerService } from '@backstage/backend-plugin-api';
 import type { Config } from '@backstage/config';
 import type { CatalogService } from '@backstage/plugin-catalog-node';
 import { parseEntityRef } from '@backstage/catalog-model';
 import { Request, Response, Router } from 'express';
-import { ADMIN_GROUP_REF, kcAdminFetch, securityOwner } from './actions';
+import { kcAdminFetch, securityOwner } from './actions';
 import { administers, DEFAULT_RULES, groupNames, lastAdministrator, mayChange, productsOf, type AccessGroup, type AccessRules, type Caller, type KcGroup, type Product } from './accessModel';
 import type { AccessStore } from './accessStore';
 
@@ -84,7 +85,7 @@ export function accessRouter(options: {
   /** Who asks, every product and the ones they administer. */
   async function context(req: Request) {
     const who = await options.caller(req);
-    const caller: Caller = { ref: who.entityRef, groups: groupNames(who.ownershipEntityRefs), portalAdmin: who.ownershipEntityRefs.includes(ADMIN_GROUP_REF) };
+    const caller: Caller = { ref: who.entityRef, groups: groupNames(who.ownershipEntityRefs), portalAdmin: isPortalAdmin(who.ownershipEntityRefs) };
     const groups = await kc<KcGroup[]>('/groups?briefRepresentation=false&max=10000');
     const products = productsOf(groups, rules);
     const owners = caller.portalAdmin ? new Map<string, string[]>() : await applicationOwners(who.credentials);

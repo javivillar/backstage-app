@@ -1,3 +1,4 @@
+import { PORTAL_ADMIN_GROUPS } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express from 'express';
 import { mayUse } from './access';
@@ -116,7 +117,7 @@ export const opsAssistantPlugin = createBackendPlugin({
         } else if (wf) {
           logger.warn('ops-assistant: assistantUsage.developerWorkflow needs the database and a github.com token in integrations.github');
         }
-        const viewAll = config.getOptionalStringArray('assistantUsage.viewAllGroups') ?? ['backstage-admin'];
+        const viewAll = config.getOptionalStringArray('assistantUsage.viewAllGroups') ?? PORTAL_ADMIN_GROUPS;
         const deps = { httpAuth, userInfo, logger, conversations, keepDays: days, usage };
         const router = express.Router();
         router.get('/usage', async (req, res) => {

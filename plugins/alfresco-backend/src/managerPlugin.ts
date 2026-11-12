@@ -1,7 +1,8 @@
+import { administersProduct } from '@internal/backstage-plugin-portal-access-common';
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import express, { Request, Router } from 'express';
 import { alfrescoFetch } from './alfrescoClient';
-import { ADMIN_GROUP_REF, CallerInfo, isSiteRole, requireSiteManagerOrAdmin } from './alfrescoAuthz';
+import { COMPONENT, CallerInfo, isSiteRole, requireSiteManagerOrAdmin } from './alfrescoAuthz';
 
 /**
  * Backend for the /alfresco-manager frontend page: lists the Alfresco
@@ -32,7 +33,7 @@ export const alfrescoManagerPlugin = createBackendPlugin({
           return {
             entityRef: info.userEntityRef,
             username: info.userEntityRef.split('/').pop() ?? info.userEntityRef,
-            isAdmin: info.ownershipEntityRefs.includes(ADMIN_GROUP_REF),
+            isAdmin: administersProduct(COMPONENT, info.ownershipEntityRefs),
           };
         }
 
