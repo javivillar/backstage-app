@@ -88,7 +88,7 @@ const OverviewTab = () => {
       </Section>
       {!data.signIns && (
         <Typography variant="caption" color="text.secondary">
-          {t('ev.signIns.off', { days: data.inactiveDays })}
+          {t('ev.signIns.off', { days: data.minInactiveDays })}
         </Typography>
       )}
     </>

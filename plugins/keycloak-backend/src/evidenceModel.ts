@@ -7,7 +7,19 @@ import type { Product } from './accessModel';
  * evidenceRoutes.ts reads Keycloak and the database and applies them.
  */
 
+/** nobody is called inactive before this many days without signing in... */
 export const INACTIVE_DAYS = 90;
+/** ...or fewer, when Keycloak keeps its login events for less: the days it keeps them, never under this */
+export const MIN_INACTIVE_DAYS = 7;
+
+/**
+ * After how many days without signing in a person is inactive, given how long Keycloak keeps its login events
+ * (seconds): what is not kept cannot be told apart from no sign-in. Undefined when it keeps them too little.
+ */
+export function inactiveWindow(eventsExpirationSeconds: number | undefined): number | undefined {
+  const kept = Math.floor((eventsExpirationSeconds ?? 0) / (24 * 60 * 60));
+  return kept >= MIN_INACTIVE_DAYS ? Math.min(INACTIVE_DAYS, kept) : undefined;
+}
 export const RECENT_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -49,6 +61,8 @@ export function findingsOf(input: {
   added: Record<string, string[]>;
   accounts: Account[];
   lastSignIn?: Record<string, number>;
+  /** days without signing in that make a person inactive (inactiveWindow); INACTIVE_DAYS when not said */
+  inactiveDays?: number;
   now: number;
 }): Finding[] {
   const { products, members, untagged, added, accounts, lastSignIn, now } = input;
@@ -67,7 +81,7 @@ export function findingsOf(input: {
     const inactive = accounts.filter(a => {
       if (!a.enabled || !holds.has(a.username)) return false;
       const last = lastSignIn[a.username] ?? a.createdAt ?? 0;
-      return now - last > INACTIVE_DAYS * DAY;
+      return now - last > (input.inactiveDays ?? INACTIVE_DAYS) * DAY;
     });
     if (inactive.length) {
       const names = inactive.map(a => a.username);
