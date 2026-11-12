@@ -7,7 +7,7 @@ import { kcAdminFetch } from './actions';
 import { productsOf, type AccessRules, type KcGroup, type Product } from './accessModel';
 import type { AccessRequestStore } from './accessRequests';
 import type { AccessStore } from './accessStore';
-import { byPerson, findingsOf, INACTIVE_DAYS, parse, RECENT_DAYS, reportOf, verify, type Account, type Members, type ReportRow } from './evidenceModel';
+import { byPerson, findingsOf, INACTIVE_DAYS, inactiveWindow, MIN_INACTIVE_DAYS, parse, RECENT_DAYS, reportOf, verify, type Account, type Members, type ReportRow } from './evidenceModel';
 import type { EvidenceStore } from './evidenceStore';
 import { tagsOf } from './security';
 
@@ -23,7 +23,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const CACHE_MS = 60 * 1000;
 
 type KcUser = { id: string; username: string; enabled?: boolean; createdTimestamp?: number };
-type Realm = { at: number; products: Product[]; members: Members; untagged: string[]; accounts: Account[]; lastSignIn?: Record<string, number> };
+type Realm = { at: number; products: Product[]; members: Members; untagged: string[]; accounts: Account[]; lastSignIn?: Record<string, number>; inactiveDays?: number };
 
 export type Activity = { at: string; who: string; kind: 'access' | 'approval' | 'refused'; action: string; username: string; group: string; component: string; note?: string };
 
@@ -59,12 +59,13 @@ export function evidenceRouter(options: {
   }
 
   /** When each person last signed in, from the login events of Keycloak; undefined when it does not record them. */
-  async function signIns(now: number): Promise<Record<string, number> | undefined> {
+  async function signIns(now: number): Promise<{ last: Record<string, number>; days: number } | undefined> {
     try {
       const settings = await kc<{ eventsEnabled?: boolean; eventsExpiration?: number }>('');
-      // events kept for less than the period would call everybody inactive
-      if (!settings.eventsEnabled || (settings.eventsExpiration ?? 0) < INACTIVE_DAYS * 24 * 60 * 60) return undefined;
-      const from = new Date(now - INACTIVE_DAYS * DAY).toISOString().slice(0, 10);
+      // a sign-in older than what Keycloak keeps is not known: the period is never longer than that
+      const days = settings.eventsEnabled ? inactiveWindow(settings.eventsExpiration) : undefined;
+      if (!days) return undefined;
+      const from = new Date(now - days * DAY).toISOString().slice(0, 10);
       const last: Record<string, number> = {};
       const ids: Record<string, number> = {};
       for (let first = 0; first < 50000; first += 1000) {
@@ -75,7 +76,7 @@ export function evidenceRouter(options: {
         }
         if (page.length < 1000) break;
       }
-      return Object.keys(ids).length ? { ...last, ...Object.fromEntries(Object.entries(ids).map(([id, t]) => [`id:${id}`, t])) } : last;
+      return { days, last: { ...last, ...Object.fromEntries(Object.entries(ids).map(([id, t]) => [`id:${id}`, t])) } };
     } catch (e) {
       logger.info(`control and evidence: the sign-ins cannot be read (${(e as Error).message}): nobody is called inactive`);
       return undefined;
@@ -91,7 +92,7 @@ export function evidenceRouter(options: {
     for (const g of groups) members[g.name] = (await kc<KcUser[]>(`/groups/${g.id}/members?briefRepresentation=true&max=10000`)).map(u => u.username);
     const users = await kc<KcUser[]>('/users?briefRepresentation=true&max=10000');
     const seen = await signIns(now);
-    const lastSignIn = seen && Object.fromEntries(users.map(u => [u.username, seen[u.username] ?? seen[`id:${u.id}`]]).filter(([, t]) => t !== undefined));
+    const lastSignIn = seen && Object.fromEntries(users.map(u => [u.username, seen.last[u.username] ?? seen.last[`id:${u.id}`]]).filter(([, t]) => t !== undefined));
     cached = {
       at: now,
       products: productsOf(groups, rules),
@@ -99,6 +100,7 @@ export function evidenceRouter(options: {
       untagged: groups.filter(g => !tagsOf(g.attributes).component).map(g => g.name),
       accounts: users.filter(u => !u.username.startsWith('service-account-')).map(u => ({ username: u.username, enabled: u.enabled !== false, createdAt: u.createdTimestamp })),
       lastSignIn,
+      inactiveDays: seen?.days,
     };
     return cached;
   }
@@ -135,7 +137,8 @@ export function evidenceRouter(options: {
           changesWeek: week,
         },
         signIns: Boolean(r.lastSignIn),
-        inactiveDays: INACTIVE_DAYS,
+        inactiveDays: r.inactiveDays ?? INACTIVE_DAYS,
+        minInactiveDays: MIN_INACTIVE_DAYS,
         recentDays: RECENT_DAYS,
       });
     }),

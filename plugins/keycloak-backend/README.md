@@ -143,9 +143,10 @@ Keycloak.
   years. Each keeps the report as text with its SHA-256 digest, and its HMAC-SHA256 signature when
   `keycloakAdmin.access.evidenceKey` is set (a Secret of the platform). A snapshot changed afterwards shows as
   "changed after it was kept".
-- **Inactive people** need the login events of Keycloak: events enabled in the realm and kept at least 90 days, and
-  the role `view-events` of `realm-management` for the service account. Without them nobody is called inactive and
-  the page says so.
+- **Inactive people** need the login events of Keycloak: events enabled in the realm, and the role `view-events` of
+  `realm-management` for the service account. A person is inactive after as many days without signing in as the
+  realm keeps its events (`eventsExpiration`), at most 90 and never under 7: with events kept 10 days, after 10
+  days. Without them nobody is called inactive and the page says so.
 - **Double approval** (`src/accessRoutes.ts`): adding someone to a group only the portal administrators change is
   proposed by one of them (the `PUT` answers 202) and approved by another, never who proposed it nor the person
   added. While no other administrator could approve it, the change is made at once.

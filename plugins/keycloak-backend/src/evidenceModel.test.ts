@@ -1,5 +1,5 @@
 import { productsOf, type KcGroup } from './accessModel';
-import { byPerson, canonical, digestOf, findingsOf, parse, reportOf, signatureOf, verify } from './evidenceModel';
+import { byPerson, canonical, digestOf, findingsOf, inactiveWindow, parse, reportOf, signatureOf, verify } from './evidenceModel';
 
 const tag = (component: string) => ({ 'refresquito.component': [component] });
 const GROUPS: KcGroup[] = [
@@ -45,6 +45,22 @@ describe('what needs a decision', () => {
     // a new account that has not signed in yet is not inactive
     const fresh = accounts.map(a => (a.username === 'old' ? { ...a, createdAt: now - DAY } : a));
     expect(findingsOf({ ...base, accounts: fresh, lastSignIn }).find(f => f.kind === 'inactive')?.names).toEqual(['rosa']);
+  });
+});
+
+describe('the period of inactivity', () => {
+  it('is never longer than what Keycloak keeps of its sign-ins', () => {
+    expect(inactiveWindow(10 * 24 * 60 * 60)).toBe(10);
+    expect(inactiveWindow(400 * 24 * 60 * 60)).toBe(90);
+    // 30 hours, or nothing: too little to call anybody inactive
+    expect(inactiveWindow(108000)).toBeUndefined();
+    expect(inactiveWindow(undefined)).toBeUndefined();
+  });
+
+  it('finds who has not signed in within it', () => {
+    const lastSignIn = { ana: now - DAY, luis: now - 11 * DAY, eva: now - 9 * DAY, rosa: now - 12 * DAY, old: now - 2 * DAY };
+    const [inactive] = findingsOf({ products, members, untagged: [], added: {}, accounts, lastSignIn, inactiveDays: 10, now }).filter(f => f.kind === 'inactive');
+    expect(inactive.names).toEqual(['luis', 'rosa']);
   });
 });
 

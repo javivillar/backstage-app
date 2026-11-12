@@ -10,7 +10,7 @@ import type { AccessRequest } from './accessAdmin';
 
 export type FindingKind = 'no-admin' | 'single-admin' | 'inactive' | 'sensitive' | 'empty' | 'no-owner';
 export type Finding = { kind: FindingKind; tone: 'bad' | 'warn' | 'info'; subject?: string; count: number; names: string[]; recent?: number; product?: string };
-export type Overview = { findings: Finding[]; kpis: { atRisk: number; inactive: number; approvals: number; changesWeek: number }; signIns: boolean; inactiveDays: number; recentDays: number };
+export type Overview = { findings: Finding[]; kpis: { atRisk: number; inactive: number; approvals: number; changesWeek: number }; signIns: boolean; inactiveDays: number; minInactiveDays: number; recentDays: number };
 export type ActivityKind = 'access' | 'approval' | 'refused';
 export type Activity = { at: string; who: string; kind: ActivityKind; action: string; username: string; group: string; component: string; note?: string };
 export type ReportRow = { component: string; group: string; members: string[] };
