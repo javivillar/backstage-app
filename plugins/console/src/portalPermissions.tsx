@@ -27,6 +27,7 @@ const AREA_PATHS: Array<[string, string[]]> = [
   ['support', ['/console/app', '/console/monitoring', '/console/resolution-groups']],
   ['access', ['/console/access-administration']],
   ['requests', ['/console/access-requests']],
+  ['evidence', ['/console/control-evidence']],
   ['roles', ['/console/roles-permissions']],
   ['manage', ['/console/manage']],
   ['catalogue', ['/console/entity', '/console/apis', '/console/docs', '/console/quality', '/console/dependencies']],

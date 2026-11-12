@@ -40,6 +40,14 @@ describe('who changes an area', () => {
     expect(accessToArea('business', refs('backstage-editor'))).toBe('read');
   });
 
+  it('shows Control and evidence to the security team and the auditors, who change nothing', () => {
+    expect(accessToArea('evidence', refs('portal-auditor'))).toBe('read');
+    expect(accessToArea('evidence', refs('security-team'))).toBe('read');
+    expect(accessToArea('evidence', refs('backstage-admin'))).toBe('manage');
+    expect(accessToArea('evidence', refs('superset-admin', 'backstage-editor'))).toBe('hidden');
+    expect(managersOf('evidence')).toEqual(['backstage-admin']);
+  });
+
   it('refuses an area the table does not have', () => {
     expect(() => managersOf('nowhere')).toThrow('no area nowhere');
   });
