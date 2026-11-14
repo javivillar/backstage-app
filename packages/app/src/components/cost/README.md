@@ -162,6 +162,36 @@ Every question answered by an assistant (ops, sec, functional, architect, develo
   line per model Claude Code used (the time of the run on the main one). A run started by hand on GitHub is charged
   to `github:<actor>`.
 
+## Prices (console, FinOps › Prices)
+
+`/console/prices` (plugin console: `prices.ts`, `components/PricesPage.tsx`, `messages/prices.ts`) lists every price
+the platform can charge, by group: what OpenCost charges for the cluster (compute, storage, network, load balancers,
+discounts) and what the console adds (deployments, incidents, assistants). Each price shows its unit, its value,
+whether it is charged today (**In use**), has a price that needs something more to be charged (**Price set**) or has
+none (**Not used**), and what a change does to the past: OpenCost records each hour at the price of the moment, the
+console multiplies its counts by the price in force. The page also works out what a month of an example application
+costs, and lists what OpenCost offers that is no price of ours (price list by node, how idle cost is shared, cloud
+bills, external services, carbon).
+
+A price is named by its path under `opencost.pricing`: `cpuPerCoreHour`, `network.internetEgressPerGiB`,
+`perIncident.P1`, `assistants.<model>[@<runner>].<field>`.
+
+- **Shown**: the prices this portal is deployed with (app-config `opencost.pricing`). When the repository has another
+  value the row says "In the repository: … · not deployed yet".
+- **Changed** with a pull request (backend plugin `costs`, `costPrices.ts`):
+  - `GET /api/costs/prices` → `{may, groups, repo, path, url, version, currency, description, prices}`, the prices of
+    `charts/<chart>/values.yaml` in the repository.
+  - `POST /api/costs/prices` `{changes: {path: value}}` → `{pull, version, changed}`. One commit with five files: the
+    values (changed line by line: comments and layout stay, and the result is read again to check that only those
+    prices moved), `Chart.yaml` one patch version up, the entry in `CHANGELOG.md`, and the two files
+    `bootstrap/gen-techdocs.py` writes (`docs/index.md`, `chart-versions.yaml`), so the checks of the repository pass.
+  - Only prices the values file already has can be changed (chart cnoe-oneke 0.2.120 or later for GPU, spot, network,
+    load balancers and discounts). Models of `assistants` are added or removed in the repository.
+- **Who may change**: `backstage-admin`, `console.actions.groups` and `costs.prices.groups` (default `finops`).
+
+Config (all optional): `costs.prices.repo` (default `console.manage.repo`), `.branch` (`main`), `.chart`
+(`cnoe-oneke`), `.groups` (`['finops']`). The token is the one of the GitHub integration.
+
 ## Configuration
 
 Rendered by cnoe-oneke (`templates/backstage-config.yaml`, values `opencost`), 0.2.62 or later:

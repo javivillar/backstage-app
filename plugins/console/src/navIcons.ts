@@ -19,6 +19,7 @@ import BackupIcon from '@mui/icons-material/Backup';
 import GridOnIcon from '@mui/icons-material/GridOn';
 import ViewTimelineIcon from '@mui/icons-material/ViewTimeline';
 import BadgeIcon from '@mui/icons-material/Badge';
+import SellIcon from '@mui/icons-material/Sell';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import GradeIcon from '@mui/icons-material/Grade';
 import GridViewIcon from '@mui/icons-material/GridView';
@@ -83,6 +84,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/docs': DescriptionIcon,
   '/console/quality': GradeIcon,
   '/console/costs': PaymentsIcon,
+  '/console/prices': SellIcon,
   '/console/assistants': GroupsIcon,
   '/console/resolution-groups': Diversity3Icon,
   '/console/monitoring': MonitorHeartIcon,

@@ -24,6 +24,7 @@ import { MarketplacePage } from './MarketplacePage';
 import { ImportOrganisationPage } from './businessMap/ImportOrganisationPage';
 import { OrganisationPage } from './businessMap/OrganisationPage';
 import { OwnershipPage } from './businessMap/OwnershipPage';
+import { PricesPage } from './PricesPage';
 import { ProgrammesPage } from './ProgrammesPage';
 import { PlatformOverviewPage } from './PlatformOverviewPage';
 import { InterconnectionPage } from './InterconnectionPage';
@@ -118,6 +119,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/dependencies" element={<DependencyExplorer />} />
         <Route path="/resolution-groups" element={<ResolutionGroupsPage />} />
         <Route path="/monitoring" element={<MonitoringPage />} />
+        <Route path="/prices" element={<PricesPage />} />
         <Route path="/business-map" element={<BusinessMapPage />} />
         <Route path="/business-map/explorer" element={<BusinessExplorerPage />} />
         <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
