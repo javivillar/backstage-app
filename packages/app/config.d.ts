@@ -53,6 +53,17 @@ export interface Config {
       cpuPerCoreHour?: number;
       ramPerGiBHour?: number;
       storagePerGiBHour?: number;
+      /**
+       * The rest of what OpenCost can charge with our own prices (FinOps › Prices of the console): a GPU per hour and
+       * the node label that names its model, the prices of low-priority (spot) nodes and the "label=value" that marks
+       * them, traffic per GiB, a load balancer per hour, and the discounts (percent) on the nodes.
+       */
+      gpuPerHour?: number;
+      gpuNodeLabel?: string;
+      spot?: { cpuPerCoreHour?: number; ramPerGiBHour?: number; nodeLabel?: string };
+      network?: { zoneEgressPerGiB?: number; regionEgressPerGiB?: number; internetEgressPerGiB?: number; gatewayEgressPerGiB?: number; gatewayIngressPerGiB?: number };
+      loadBalancer?: { perHour?: number };
+      discount?: { sustainedUse?: number; negotiated?: number };
       /** charged once per deployment: a new version of an image running in a namespace (backend plugin costs) */
       perDeployment?: number;
       /** charged once per incident opened on an element of a namespace (application support), by its priority */
@@ -79,6 +90,12 @@ export interface Config {
    */
   costs?: {
     prometheusUrl?: string;
+    /**
+     * The prices (FinOps › Prices of the console): where they are read and changed with a pull request, and who may
+     * change them besides backstage-admin and console.actions.groups. Defaults: console.manage.repo, main,
+     * cnoe-oneke, ['finops'].
+     */
+    prices?: { repo?: string; branch?: string; chart?: string; groups?: string[] };
   };
   /**
    * Tech Radar shown at /tech-radar: technologies and where the organization stands on each.

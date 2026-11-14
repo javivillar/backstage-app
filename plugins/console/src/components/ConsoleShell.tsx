@@ -222,8 +222,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.digitalContinuity'), to: '/console/continuity', hint: tr('nav.digitalContinuity.hint') },
       ],
     });
-    const finops = navOf('portal').filter(i => FINOPS_PAGES.has(i.to));
-    if (finops.length) groups.push({ title: tr('nav.finops'), items: finops });
+    // what the services cost and how good they are (classic pages), and what each thing is charged at
+    groups.push({ title: tr('nav.finops'), items: [...navOf('portal').filter(i => FINOPS_PAGES.has(i.to)), { label: tr('nav.prices'), to: '/console/prices', hint: tr('nav.prices.hint') }] });
     // the templates of a new application, opened in the console's own scaffolder (Portal › Create), not the classic one
     groups.push({
       title: tr('nav.development'),
