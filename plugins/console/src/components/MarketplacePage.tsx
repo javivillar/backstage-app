@@ -1,16 +1,20 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import ListSubheader from '@mui/material/ListSubheader';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { componentName, componentTitle, kindOf, overLimits, policyComponents, RESERVED_NAMES, segregations, siteRole } from '../interconnection';
 import { useClusterPost } from '../post';
+import { hasCatalogue, programmeOf, programmeRows, programmesOf, testProgramme } from '../programmes';
 import { type ConsolePull, type InfraView, type NodeImage, pullKind, SCALE_LIMITS, useInfra, useVmRequests, useZone } from '../zone';
 import { InfraFrame, ProfileCard, ReconcileCard, roomFinding } from './InfraPages';
 import { ChoiceCard, SitePill } from './InterParts';
 import { Card } from './NamespaceSections';
+import { ProgrammeCard } from './ProgrammeParts';
 import { RequestsTable, ResultNote, useChange } from './Requests';
 import { EmptyState, Id } from './ui';
 import { PageTabs, useTab } from './ZoneInventoryPages';
@@ -19,6 +23,11 @@ const gb = (mb?: number) => (typeof mb === 'number' ? `${Math.round(mb / 1024)} 
 const gib = (mb: number) => `${Math.round((mb / 1024) * 10) / 10} GiB`;
 const PROGRAM_NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 const TABS = ['segregations', 'clusters', 'components'] as const;
+/** The programme picker of tab 1 beyond the catalogue: a laboratory programme, or a typed name. */
+const PICK_TEST = '*test';
+const PICK_FREE = '*';
+/** What another screen asked the Marketplace to start with (Programmes › Create, the hint of tab 2). */
+type Wanted = { zone?: string; programme?: string };
 type Asked = 'programme' | 'landing' | 'integration';
 const ASKED: Asked[] = ['programme', 'landing', 'integration'];
 
@@ -26,35 +35,47 @@ const ASKED: Asked[] = ['programme', 'landing', 'integration'];
 export const isMarketRequest = (p: ConsolePull) => /^console\/(seg|segdel|cluster|clusterdel)-/.test(p.branch) || / component$/.test(pullKind(p));
 
 /** Tab 1: a programme, or the landing zone or the integration zone of a zone (one or the other), by pull request. */
-const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: boolean; onDone: () => void }) => {
+const SegregationsTab = ({ view, allowed, wanted, onDone }: { view: InfraView; allowed: boolean; wanted: Wanted; onDone: () => void }) => {
   const { t } = useI18n();
   const post = useClusterPost();
   const { note, busy, run } = useChange(onDone);
   const role = siteRole(view);
   const [kind, setKind] = useState<Asked>('programme');
-  const [form, setForm] = useState({ zone: '', program: '' });
+  const [form, setForm] = useState({ zone: wanted.zone ?? '', program: '', pick: wanted.programme ?? '' });
   const catalog = view.catalog ?? [];
   const z = catalog.find(c => c.name === (form.zone || catalog.find(x => x.enabled)?.name)) ?? catalog[0];
-  const name = kind === 'programme' ? form.program : kind;
+  // with a programme catalogue the programme is chosen from the ones of the zone; a test programme or another name is typed
+  const offered = hasCatalogue(view) ? programmesOf(view, z?.name ?? '') : [];
+  const exists = (n: string) => !!z?.programs.some(p => p.name === n);
+  const free = offered.filter(p => !exists(p.name));
+  const pick = [form.pick, free[0]?.name, PICK_FREE].find(v => v === PICK_TEST || v === PICK_FREE || free.some(p => p.name === v)) ?? PICK_FREE;
+  const typed = !hasCatalogue(view) || pick === PICK_TEST || pick === PICK_FREE;
+  const test = hasCatalogue(view) && pick === PICK_TEST;
+  const programme = typed ? form.program : pick;
+  const name = kind === 'programme' ? programme : kind;
   // a zone is one side of the interconnection: once it has a landing zone or an integration zone, neither is offered
   const held = z?.programs.map(p => kindOf(p.name, p.kind)).find(k => k === 'landing' || k === 'integration');
   const fits = (k: Asked) => k === 'programme' || !held;
   const whyNot = (k: Asked) => (held === k ? t('ic.seg.taken', { id: `${z?.name}/${k}` }) : t('ic.seg.other', { zone: z?.name ?? '', kind: t(`ic.seg.${held ?? 'landing'}`).toLowerCase() }));
   const taken = !!z?.programs.some(p => p.name === name);
   const reserved = kind === 'programme' && RESERVED_NAMES.includes(name);
-  const nameOk = kind !== 'programme' || (PROGRAM_NAME.test(name) && !reserved);
+  // a typed name that the catalogue has in this zone is chosen from the list, with its description
+  const listed = kind === 'programme' && typed && offered.some(p => p.name === name);
+  const nameOk = kind !== 'programme' || (PROGRAM_NAME.test(name) && !reserved && !listed);
   const first = !!z && z.programs.length === 0;
   const hasCommon = !!z?.programs.some(p => kindOf(p.name, p.kind) === 'common');
   const next = z ? Math.max(0, ...z.programs.map(p => p.n ?? 0)) + 1 : undefined;
   const n = next !== undefined && first ? next + 1 : next;
-  const pick = (k: Asked) => {
+  const choose = (k: Asked) => {
     setKind(k);
     setTimeout(() => document.getElementById('create-segregation')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }), 0);
   };
   let help = `${z?.name ?? '…'}/${name || '…'} · n=${n ?? '?'}${z && !z.enabled ? ` · ${t('ic.seg.enables')}` : ''}`;
   if (taken) help = t('ic.seg.taken', { id: `${z?.name}/${name}` });
   else if (reserved) help = t('ic.seg.reserved', { name });
+  else if (listed) help = t('prog.pick.inCatalogue', { id: `${z?.name}/${name}` });
   else if (name && !nameOk) help = t('ic.seg.badName');
+  const card = kind === 'programme' && z && !typed ? programmeRows(view).find(r => r.zone === z.name && r.name === pick && !r.test) : undefined;
   let common = t('ic.seg.noCommon', { zone: z?.name ?? '…' });
   if (first) common = t('ic.seg.first', { zone: z?.name ?? '…' });
   else if (hasCommon) common = t('ic.seg.hasCommon', { zone: z?.name ?? '…' });
@@ -76,7 +97,7 @@ const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: 
             chosen={kind === k && fits(k)}
             disabled={fits(k) ? undefined : whyNot(k)}
             action={t('ic.seg.pick')}
-            onPick={() => pick(k)}
+            onPick={() => choose(k)}
           />
         ))}
       </Box>
@@ -87,26 +108,51 @@ const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: 
           component="form"
           onSubmit={e => {
             e.preventDefault();
-            run(() => post('/infra/segregations', { zone: z?.name ?? '', program: name, kind }), a => t('infra.segOpened', { n: a.pull?.number ?? '', target: `${z?.name}/${name}` })).then(ok => ok && setForm(f => ({ ...f, program: '' })));
+            run(() => post('/infra/segregations', { zone: z?.name ?? '', program: name, kind, ...(test && kind === 'programme' ? { test: true } : {}) }), a => t('infra.segOpened', { n: a.pull?.number ?? '', target: `${z?.name}/${name}` })).then(ok => ok && setForm(f => ({ ...f, program: '', pick: '' })));
           }}
           sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', alignItems: 'start' }}
         >
-          <TextField select size="small" label={t('shell.zone')} value={z?.name ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value }))}>
+          <TextField select size="small" label={t('shell.zone')} value={z?.name ?? ''} onChange={e => setForm(f => ({ ...f, zone: e.target.value, pick: '' }))}>
             {catalog.map(c => (
               <MenuItem key={c.name} value={c.name}>
-                {c.label ?? c.name} ({c.name}){c.enabled ? '' : ` · ${t('ic.reserved').toLowerCase()}`}
+                {c.label ?? c.name} ({c.name}){hasCatalogue(view) ? ` · ${t('prog.pick.zoneProgrammes', { n: programmesOf(view, c.name).length })}` : ''}{c.enabled ? '' : ` · ${t('ic.reserved').toLowerCase()}`}
               </MenuItem>
             ))}
           </TextField>
-          {kind === 'programme' ? (
-            <TextField size="small" label={t('zone.programme')} required value={form.program} onChange={e => setForm(f => ({ ...f, program: e.target.value.toLowerCase() }))} error={!!form.program && (!nameOk || taken)} helperText={help} />
-          ) : (
-            <TextField size="small" label={t('ic.seg.fixedName')} value={kind} disabled error={taken} helperText={help} />
+          {kind === 'programme' && hasCatalogue(view) && (
+            <TextField select size="small" label={t('zone.programme')} value={pick} onChange={e => setForm(f => ({ ...f, pick: e.target.value, program: '' }))} helperText={typed ? undefined : help} sx={{ gridColumn: { md: 'span 2' } }}>
+              {free.length > 0 && <ListSubheader>{t('prog.pick.ofZone', { zone: z?.label ?? z?.name ?? '' })}</ListSubheader>}
+              {free.map(p => (
+                <MenuItem key={p.name} value={p.name}>
+                  {p.name} — {p.title}
+                </MenuItem>
+              ))}
+              {offered.length > free.length && <ListSubheader>{t('prog.pick.created')}</ListSubheader>}
+              {offered.filter(p => exists(p.name)).map(p => (
+                <MenuItem key={p.name} value={p.name} disabled>
+                  {p.name} — {p.title} · {t('prog.pick.already')}
+                </MenuItem>
+              ))}
+              <ListSubheader>{t('prog.pick.other')}</ListSubheader>
+              <MenuItem value={PICK_TEST}>{t('prog.pick.test')}</MenuItem>
+              <MenuItem value={PICK_FREE}>{t('prog.pick.free')}</MenuItem>
+            </TextField>
           )}
+          {kind === 'programme' && typed && (
+            <TextField size="small" label={hasCatalogue(view) ? t('prog.pick.name') : t('zone.programme')} required value={form.program} onChange={e => setForm(f => ({ ...f, program: e.target.value.toLowerCase() }))} error={!!form.program && (!nameOk || taken)} helperText={help} />
+          )}
+          {kind !== 'programme' && <TextField size="small" label={t('ic.seg.fixedName')} value={kind} disabled error={taken} helperText={help} />}
           <Button type="submit" variant="contained" disabled={busy || !allowed || !z || !name || !nameOk || taken || !fits(kind)} sx={{ justifySelf: 'start' }}>
             {t('vmr.openPr')}
           </Button>
         </Box>
+        {kind === 'programme' && hasCatalogue(view) && typed && (
+          <Typography variant="body2" color="text.secondary">
+            {t(test ? 'prog.pick.testHint' : 'prog.pick.freeHint')}
+          </Typography>
+        )}
+        {card && <ProgrammeCard row={card} />}
+        {kind === 'programme' && test && z && <ProgrammeCard row={testProgramme(z.name, name || '…')} />}
         <Typography variant="body2" color="text.secondary">
           {common}
           {kind !== 'programme' && ` ${t('ic.seg.oneZone', { kind: t(`ic.seg.${kind}`).toLowerCase() })}`}
@@ -118,11 +164,11 @@ const SegregationsTab = ({ view, allowed, onDone }: { view: InfraView; allowed: 
 };
 
 /** Tab 2: the OneKE profiles; a new cluster in a programme segregation by pull request. */
-const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowed: boolean; asked: Set<string>; onDone: () => void }) => {
+const ClustersTab = ({ view, allowed, asked, wanted, onSegregation, onDone }: { view: InfraView; allowed: boolean; asked: Set<string>; wanted: Wanted; onSegregation: (w: Wanted) => void; onDone: () => void }) => {
   const { t } = useI18n();
   const post = useClusterPost();
   const { note, busy, run } = useChange(onDone);
-  const [form, setForm] = useState({ target: '', profile: '', workers: '', image: '' });
+  const [form, setForm] = useState({ target: wanted.zone && wanted.programme ? `${wanted.zone}/${wanted.programme}` : '', zone: wanted.zone ?? '', profile: '', workers: '', image: '' });
   const pick = (name: string) => {
     setForm(f => ({ ...f, profile: name }));
     // the form is under the cards: bring it into view
@@ -132,8 +178,39 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
   const profile = profiles.find(p => p.name === (form.profile || view.kubernetes?.defaultProfile)) ?? profiles[0];
   // only a programme has a Kubernetes cluster: not common, a landing zone or an integration zone
   const targets = (view.catalog ?? []).flatMap(z => z.programs.filter(p => p.declared && !p.cluster && kindOf(p.name, p.kind) === 'programme' && !asked.has(`${z.name}/${p.name}`)).map(p => `${z.name}/${p.name}`));
-  const target = form.target || targets[0] || '';
+  // with a programme catalogue: the zone first, then its programmes (ready, needing a segregation, with a cluster)
+  const cat = hasCatalogue(view);
+  const catalog = view.catalog ?? [];
+  const zone = catalog.find(c => c.name === (form.zone || form.target.split('/')[0] || targets[0]?.split('/')[0])) ?? catalog.find(c => c.enabled) ?? catalog[0];
+  const zn = zone?.name ?? '';
+  const inZone = (zone?.programs ?? []).filter(p => p.declared && kindOf(p.name, p.kind) === 'programme');
+  const busyOf = (name: string) => inZone.find(p => p.name === name)?.cluster ?? (asked.has(`${zn}/${name}`) ? t('prog.cluster.asked') : undefined);
+  const titled = (name: string) => [name, programmeOf(view, zn, name)?.title].filter(Boolean).join(' — ');
+  const groups: Array<{ label: string; items: Array<{ name: string; text: string; disabled?: boolean }> }> = cat
+    ? [
+        { label: t('prog.cluster.ready'), items: inZone.filter(p => !p.test && !busyOf(p.name) && programmeOf(view, zn, p.name)).map(p => ({ name: p.name, text: `${p.name} — ${programmeOf(view, zn, p.name)?.title}` })) },
+        { label: t('prog.cluster.need'), items: programmesOf(view, zn).filter(p => !inZone.some(x => x.name === p.name)).map(p => ({ name: p.name, text: `${p.name} — ${p.title}` })) },
+        { label: t('prog.cluster.have'), items: inZone.filter(p => busyOf(p.name)).map(p => ({ name: p.name, text: `${titled(p.name)} · ${p.cluster ? t('prog.cluster.has', { name: p.cluster }) : busyOf(p.name)}`, disabled: true })) },
+        { label: t('prog.cluster.tests'), items: inZone.filter(p => p.test && !busyOf(p.name)).map(p => ({ name: p.name, text: p.name })) },
+        { label: t('prog.cluster.others'), items: inZone.filter(p => !p.test && !busyOf(p.name) && !programmeOf(view, zn, p.name)).map(p => ({ name: p.name, text: p.name })) },
+      ].filter(g => g.items.length)
+    : [];
+  const choices = groups.flatMap(g => g.items.filter(i => !i.disabled));
+  const chosen = choices.find(i => `${zn}/${i.name}` === form.target) ?? choices[0];
+  const picked = chosen ? `${zn}/${chosen.name}` : '';
+  const target = cat ? picked : form.target || targets[0] || '';
   const [tz, tp] = target.split('/');
+  // a programme of the catalogue without a segregation is shown, never created from here: two steps, as before
+  const segregated = !cat || targets.includes(target);
+  const row = cat && target ? programmeRows(view).find(r => r.zone === tz && r.name === tp) : undefined;
+  const options: ReactNode[] = groups.flatMap(g => [
+    <ListSubheader key={`g-${g.label}`}>{g.label}</ListSubheader>,
+    ...g.items.map(i => (
+      <MenuItem key={i.name} value={`${zn}/${i.name}`} disabled={i.disabled}>
+        {i.text}
+      </MenuItem>
+    )),
+  ]);
   const workers = form.workers === '' ? undefined : Number(form.workers);
   // the node images the host offers (OS + Kubernetes version): a choice only when there is more than one
   const images = view.kubernetes?.nodeImages ?? [];
@@ -149,9 +226,9 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
         ))}
       </Box>
       <Box id="create-cluster" />
-      <Card title={t('infra.createCluster')} sub={`${t('infra.createClusterSub')} ${t('ic.cluster.onlyProgrammes')}`}>
+      <Card title={t('infra.createCluster')} sub={`${t('infra.createClusterSub')}${cat ? ` ${t('prog.cluster.chooseZone')}` : ''} ${t('ic.cluster.onlyProgrammes')}`}>
         {!allowed && <Typography variant="body2" color="text.secondary">{t('infra.onlyAdminCluster')}</Typography>}
-        {targets.length === 0 ? (
+        {!cat && targets.length === 0 ? (
           <Typography color="text.secondary">{t('ic.cluster.noTarget')}</Typography>
         ) : (
           <Box
@@ -162,13 +239,28 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
             }}
             sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', alignItems: 'start' }}
           >
-            <TextField select size="small" label={t('zone.programme')} value={target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))}>
-              {targets.map(x => (
-                <MenuItem key={x} value={x}>
-                  {x}
-                </MenuItem>
-              ))}
-            </TextField>
+            {cat ? (
+              <Box sx={{ gridColumn: '1 / -1', display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'minmax(200px, 1fr) minmax(200px, 2fr)' } }}>
+                <TextField select size="small" label={t('shell.zone')} value={zn} onChange={e => setForm(f => ({ ...f, zone: e.target.value, target: '' }))}>
+                  {catalog.map(c => (
+                    <MenuItem key={c.name} value={c.name}>
+                      {c.label ?? c.name} ({c.name}) · {t('prog.pick.zoneProgrammes', { n: programmesOf(view, c.name).length })}{c.enabled ? '' : ` · ${t('ic.reserved').toLowerCase()}`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField select size="small" label={t('zone.programme')} value={target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))} helperText={choices.length ? undefined : t('prog.cluster.nothing')}>
+                  {options}
+                </TextField>
+              </Box>
+            ) : (
+              <TextField select size="small" label={t('zone.programme')} value={target} onChange={e => setForm(f => ({ ...f, target: e.target.value }))}>
+                {targets.map(x => (
+                  <MenuItem key={x} value={x}>
+                    {x}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField select size="small" label={t('infra.profile')} value={profile?.name ?? ''} onChange={e => setForm(f => ({ ...f, profile: e.target.value }))}>
               {profiles.map(p => (
                 <MenuItem key={p.name} value={p.name}>
@@ -196,11 +288,26 @@ const ClustersTab = ({ view, allowed, asked, onDone }: { view: InfraView; allowe
               helperText={t('infra.needs', { need: gb(need), free: gb(free) })}
               error={typeof free === 'number' && need > free}
             />
-            <Button type="submit" variant="contained" disabled={busy || !allowed || !profile || (typeof free === 'number' && need > free)} sx={{ justifySelf: 'start' }}>
+            <Button type="submit" variant="contained" disabled={busy || !allowed || !profile || !target || !segregated || (typeof free === 'number' && need > free)} sx={{ justifySelf: 'start' }}>
               {t('vmr.openPr')}
             </Button>
           </Box>
         )}
+        {cat && target && !segregated && (
+          <Typography variant="body2" color="text.secondary">
+            {t(zone?.enabled ? 'prog.cluster.noSeg' : 'prog.cluster.noSegReserved', { id: target, zone: zn })}{' '}
+            <Button variant="text" size="small" onClick={() => onSegregation({ zone: tz, programme: tp })} sx={{ textTransform: 'none', p: 0, minWidth: 0, verticalAlign: 'baseline' }}>
+              {t('prog.cluster.goStep1')}
+            </Button>
+            {t('prog.cluster.thenBack')}
+          </Typography>
+        )}
+        {cat && target && segregated && (
+          <Typography variant="body2" color="text.secondary">
+            {t('prog.cluster.adds', { file: `${tz}-${tp}` })}
+          </Typography>
+        )}
+        {row && <ProgrammeCard row={row} />}
         <ResultNote note={note} />
       </Card>
     </>
@@ -373,6 +480,9 @@ export const MarketplacePage = () => {
   const vms = useVmRequests();
   const { t } = useI18n();
   const [tab, setTab] = useTab(TABS);
+  // Programmes › Create arrives with ?zone=&programme=; the hint of tab 2 sends to tab 1 with the same
+  const [params] = useSearchParams();
+  const [wanted, setWanted] = useState<Wanted>({ zone: params.get('zone') ?? undefined, programme: params.get('programme') ?? undefined });
   const reload = () => {
     infra.reload();
     zone.reload();
@@ -382,8 +492,20 @@ export const MarketplacePage = () => {
       {view => (
         <>
           <PageTabs label={t('nav.marketplace')} tab={tab} onChange={setTab} tabs={TABS.map((k, i) => [k, `${i + 1} · ${t(`ic.market.tab.${k}`)}`])} />
-          {tab === 'segregations' && <SegregationsTab view={view} allowed={!!infra.data?.allowed} onDone={reload} />}
-          {tab === 'clusters' && <ClustersTab view={view} allowed={!!infra.data?.allowed} asked={new Set((infra.data?.clusters ?? []).map(c => `${c.zone}/${c.program}`))} onDone={reload} />}
+          {tab === 'segregations' && <SegregationsTab key={`${wanted.zone}/${wanted.programme}`} view={view} allowed={!!infra.data?.allowed} wanted={wanted} onDone={reload} />}
+          {tab === 'clusters' && (
+            <ClustersTab
+              view={view}
+              allowed={!!infra.data?.allowed}
+              asked={new Set((infra.data?.clusters ?? []).map(c => `${c.zone}/${c.program}`))}
+              wanted={wanted}
+              onSegregation={w => {
+                setWanted(w);
+                setTab('segregations');
+              }}
+              onDone={reload}
+            />
+          )}
           {tab === 'components' && <ComponentsTab view={view} onSegregations={() => setTab('segregations')} />}
           <Card title={t('infra.requests')} sub={t('ic.market.requestsSub')}>
             <RequestsTable open={[...(infra.data?.pulls ?? []), ...(vms.data?.pulls ?? [])]} merged={[...(infra.data?.merged ?? []), ...(vms.data?.merged ?? [])]} reconcile={view.reconcile} only={isMarketRequest} />

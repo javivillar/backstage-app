@@ -96,3 +96,28 @@ describe('inventory', () => {
     expect(inventory(null)).toBeUndefined();
   });
 });
+
+describe('the programme catalogue in the zone view', () => {
+  it('reads the catalogue of the host and the test flag of a programme', () => {
+    const v = summariseZone({
+      zones: [{ name: 'nato', enabled: true, programs: [{ name: 'sirtap', n: 1 }, { name: 'cistest', n: 2, test: true }] }],
+      programme_catalogue: {
+        industries: ['Air', 'Land'],
+        programmes: [
+          { zone: 'nato', name: 'efa', title: 'Eurofighter Typhoon (EFA)', description: 'Combat aircraft.', industry: 'Air', customer: 'Air Force', customer_detail: 'Luftwaffe (DE)', nations: ['DE', 'ES'], managing_body: 'NETMA', prime_contractor: 'Eurofighter GmbH', spain: true, confidence: 'verify' },
+          { name: 'no-zone' },
+        ],
+      },
+    });
+    expect(v.programmeCatalogue?.industries).toEqual(['Air', 'Land']);
+    expect(v.programmeCatalogue?.programmes).toEqual([
+      { zone: 'nato', name: 'efa', title: 'Eurofighter Typhoon (EFA)', description: 'Combat aircraft.', industry: 'Air', customer: 'Air Force', customerDetail: 'Luftwaffe (DE)', nations: ['DE', 'ES'], managingBody: 'NETMA', primeContractor: 'Eurofighter GmbH', spain: true, confidence: 'verify' },
+    ]);
+    const nato = v.catalog?.find(z => z.name === 'nato');
+    expect(nato?.programs.map(p => [p.name, p.test])).toEqual([['sirtap', undefined], ['cistest', true]]);
+  });
+
+  it('an older topology.json has no catalogue', () => {
+    expect(summariseZone({ zones: [] }).programmeCatalogue).toBeUndefined();
+  });
+});

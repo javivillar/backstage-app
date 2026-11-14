@@ -120,7 +120,7 @@ async function readNetwork(kc: KubeConfig, query?: Query): Promise<ClusterNetwor
  *        One file per VM in console.vms.chart/vms of console.vms.repo: merged, Argo CD syncs console-vms-oneke and
  *        Crossplane (provider-terraform) creates the VM in OpenNebula; its Workspace says how it goes.
  *   GET  /api/cluster/infra            { allowed, pulls, clusters }: open PRs of segregations/clusters, cluster files
- *   POST /api/cluster/infra/segregations    { zone, program }                       PR adding the programme to network.toml
+ *   POST /api/cluster/infra/segregations    { zone, program, kind?, test? }         PR adding the programme to network.toml (test: a laboratory programme)
  *   POST /api/cluster/infra/clusters        { zone, program, profile, workers? }    PR adding clusters/<zone>-<program>.json
  *   POST /api/cluster/infra/clusters/scale  { zone, program, workers, storage, masters? }  committed directly to main
  *   POST /api/cluster/infra/segregations/delete  { zone, program }                  PR removing the programme (host: destroy)
@@ -630,13 +630,13 @@ export default createBackendPlugin({
           const view = await readZone();
           if (!view) return 'The host has not published the topology yet.';
           const [toml, pulls] = await Promise.all([infraRepo.get(`${infraDir}/network.toml`), pullsOf(infraRepo)]);
-          const out = addSegregation(toml.text, view, b.zone, b.program ?? '', b.kind || 'programme');
+          const out = addSegregation(toml.text, view, b.zone, b.program ?? '', b.kind || 'programme', (b as Record<string, unknown>).test === true);
           if (typeof out === 'string') return out;
           const id = `${b.zone}/${out.program}`;
           const slug = `seg-${b.zone}-${out.program}`;
           if (pulls.some(p => p.branch.startsWith(`console/${slug}-`))) return `There is already a pull request for ${id}.`;
-          const message = `console: new segregation ${id} (n=${out.n}${out.kind === 'programme' ? '' : `, ${out.kind} zone`}${out.enabled ? `, enables zone ${b.zone}` : ''})${out.also.length ? ` + ${out.also.join(', ')}` : ''}`;
-          const fields = { zone: b.zone, program: out.program, kind: out.kind, n: out.n, enablesZone: out.enabled, ...(out.common !== undefined ? { common: { name: 'common', n: out.common } } : {}), exceptions: out.exceptions.map(e => `${e.from} -> ${e.to} ${e.protocol} ${e.ports}`) };
+          const message = `console: new ${out.test ? 'test ' : ''}segregation ${id} (n=${out.n}${out.kind === 'programme' ? '' : `, ${out.kind} zone`}${out.enabled ? `, enables zone ${b.zone}` : ''})${out.also.length ? ` + ${out.also.join(', ')}` : ''}`;
+          const fields = { zone: b.zone, program: out.program, kind: out.kind, ...(out.test ? { test: true } : {}), n: out.n, enablesZone: out.enabled, ...(out.common !== undefined ? { common: { name: 'common', n: out.common } } : {}), exceptions: out.exceptions.map(e => `${e.from} -> ${e.to} ${e.protocol} ${e.ports}`) };
           const pull = await infraRepo.pullRequest(slug, message, `${body(fields, user)}\nOnce merged, the host applies network.toml within 5 minutes (configuration.py reconcile): networks, security groups, router, group, VDC and console user${out.common !== undefined ? `, also for ${b.zone}/common (the services shared by the zone, created with its first segregation)` : ''}.\n`,
             [{ path: `${infraDir}/network.toml`, text: out.text }]);
           return { message, pull };

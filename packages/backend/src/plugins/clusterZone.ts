@@ -63,7 +63,10 @@ export type DriftItem = { zone: string; program?: string; kind: 'network' | 'sec
 /** What vms-apply did with each VM requested from the console (configuration/vms.py of opennebula). */
 export type ConsoleVmStatus = { zone: string; program: string; name: string; size?: string; image?: string; component?: string; traffic?: string; wanted?: string; state: string; detail?: string; id?: string; requested_by?: string };
 /** Every zone of the catalog (reserved ones too) with its programmes: where a new segregation can go. */
-export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string }> };
+export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string; test?: boolean }> };
+/** A programme of the catalogue (programmes.toml of the host): what a classification zone can hold. Reference data: nothing is created from it. */
+export type Programme = { zone: string; name: string; title: string; description: string; industry: string; customer: string; customerDetail?: string; nations: string[]; managingBody?: string; primeContractor?: string; spain: boolean; confidence: 'high' | 'verify' };
+export type ProgrammeCatalogue = { industries: string[]; programmes: Programme[] };
 /** A OneKE profile of [kubernetes.profiles]: the marketplace. */
 export type ClusterProfile = {
   name: string;
@@ -102,6 +105,8 @@ export type ZoneView = {
   /** what this OpenNebula installation is ([site] role of network.toml): a core site unless it says edge */
   site?: { role: 'core' | 'edge' };
   catalog?: CatalogZone[];
+  /** missing when the host is older than the programme catalogue */
+  programmeCatalogue?: ProgrammeCatalogue;
   kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string; nodeImages?: NodeImage[] };
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;
@@ -233,8 +238,22 @@ export function summariseZone(raw: Raw): ZoneView {
     enabled: !!z.enabled,
     block: z.block || undefined,
     maxProgramN: typeof z.max_program_n === 'number' ? z.max_program_n : undefined,
-    programs: (z.programs ?? []).map((p: Raw) => ({ name: str(p.name), n: typeof p.n === 'number' ? p.n : undefined, kind: p.kind ? str(p.kind) : undefined, declared: p.declared !== false, ok: typeof p.ok === 'boolean' ? p.ok : null, cluster: p.cluster?.name || undefined })),
+    programs: (z.programs ?? []).map((p: Raw) => ({ name: str(p.name), n: typeof p.n === 'number' ? p.n : undefined, kind: p.kind ? str(p.kind) : undefined, declared: p.declared !== false, ok: typeof p.ok === 'boolean' ? p.ok : null, cluster: p.cluster?.name || undefined, ...(p.test === true ? { test: true } : {}) })),
   }));
+  const pc = raw.programme_catalogue;
+  const programmeCatalogue: ProgrammeCatalogue | undefined =
+    pc && Array.isArray(pc.programmes)
+      ? {
+          industries: strs(pc.industries),
+          programmes: pc.programmes
+            .filter((p: Raw) => p?.zone && p?.name)
+            .map((p: Raw) => ({
+              zone: str(p.zone), name: str(p.name), title: str(p.title) || str(p.name), description: str(p.description), industry: str(p.industry), customer: str(p.customer),
+              customerDetail: p.customer_detail ? str(p.customer_detail) : undefined, nations: strs(p.nations), managingBody: p.managing_body ? str(p.managing_body) : undefined,
+              primeContractor: p.prime_contractor ? str(p.prime_contractor) : undefined, spain: p.spain === true, confidence: p.confidence === 'verify' ? 'verify' : 'high',
+            })),
+        }
+      : undefined;
   const k = raw.kubernetes;
   const rc = raw.reconcile;
   return {
@@ -242,6 +261,7 @@ export function summariseZone(raw: Raw): ZoneView {
     domain: raw.domain ? str(raw.domain) : undefined,
     site: raw.site && typeof raw.site === 'object' ? { role: raw.site.role === 'edge' ? 'edge' : 'core' } : undefined,
     catalog,
+    programmeCatalogue,
     kubernetes: k && Array.isArray(k.profiles)
       ? {
           defaultProfile: k.default_profile || undefined,

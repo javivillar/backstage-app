@@ -21,6 +21,7 @@ import { ZoneStoragePage, ZoneTemplatesPage } from './ZoneInventoryPages';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { PlatformPage } from './InfraPages';
 import { MarketplacePage } from './MarketplacePage';
+import { ProgrammesPage } from './ProgrammesPage';
 import { PlatformOverviewPage } from './PlatformOverviewPage';
 import { InterconnectionPage } from './InterconnectionPage';
 import { ClusterScalePage } from './ClusterScalePage';
@@ -162,6 +163,7 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/infrastructure/storage" element={<ZoneStoragePage />} />
         <Route path="/infrastructure/platform" element={<PlatformPage />} />
         <Route path="/infrastructure/marketplace" element={<MarketplacePage />} />
+        <Route path="/infrastructure/programmes" element={<ProgrammesPage />} />
         <Route path="/infrastructure/interconnection" element={<InterconnectionPage />} />
         <Route path="/infrastructure/platform/:zone/:program" element={<ProgrammePage />} />
         <Route path="/infrastructure/clusters/:zone/:program" element={<ClusterScalePage />} />

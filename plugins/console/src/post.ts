@@ -7,7 +7,7 @@ export type PostAnswer = { ok: boolean; message?: string; pull?: { number: numbe
 export function useClusterPost() {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
-  return async (path: string, body: Record<string, string | number>): Promise<PostAnswer> => {
+  return async (path: string, body: Record<string, string | number | boolean>): Promise<PostAnswer> => {
     const res = await fetch(`${await discovery.getBaseUrl('cluster')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const answer = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(answer.error ?? `${res.status} ${res.statusText}`);
