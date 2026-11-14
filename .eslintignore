@@ -2,3 +2,4 @@ playwright.config.ts
 dist
 dist-types
 node_modules
+packages/app/public/vendor

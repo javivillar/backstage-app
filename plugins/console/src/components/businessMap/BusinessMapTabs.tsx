@@ -10,6 +10,8 @@ export const BUSINESS_MAP_VIEWS: Array<{ key: string; path: string }> = [
   { key: 'bm.view.heat', path: '/console/business-map/heat' },
   { key: 'bm.view.glass', path: '/console/business-map/glass' },
   { key: 'bm.view.matrix', path: '/console/business-map/matrix' },
+  { key: 'bm.view.organisation', path: '/console/business-map/organisation' },
+  { key: 'bm.view.ownership', path: '/console/business-map/ownership' },
 ];
 
 /** The customer of the business map pages: ?ns= in the URL, so a view can be shared and the tabs keep it. */
@@ -25,7 +27,7 @@ export function useCustomer(): [string | undefined, (ns: string) => void] {
   return [ns, set];
 }
 
-/** Map · Explorer · Heat map · Glass · Matrix: the view tabs on every business map page. */
+/** Map · Explorer · Heat map · Glass · Matrix · Organisation · Ownership: the view tabs on every business map page. */
 export const BusinessMapTabs = () => {
   const { t } = useI18n();
   const rq = useRq();
@@ -35,7 +37,8 @@ export const BusinessMapTabs = () => {
   return (
     <Box component="nav" aria-label={t('bm.views')} sx={{ display: 'flex', gap: '2px', flexWrap: 'wrap' }}>
       {BUSINESS_MAP_VIEWS.map(v => {
-        const on = here === v.path;
+        // the import of an organisation belongs to the Organisation view
+        const on = here === v.path || (v.path.endsWith('/organisation') && here === `${v.path}/import`);
         return (
           <Box
             key={v.path}
