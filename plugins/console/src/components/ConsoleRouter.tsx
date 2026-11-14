@@ -21,6 +21,9 @@ import { ZoneStoragePage, ZoneTemplatesPage } from './ZoneInventoryPages';
 import { ConsoleEntityPage } from './ConsoleEntityPage';
 import { PlatformPage } from './InfraPages';
 import { MarketplacePage } from './MarketplacePage';
+import { ImportOrganisationPage } from './businessMap/ImportOrganisationPage';
+import { OrganisationPage } from './businessMap/OrganisationPage';
+import { OwnershipPage } from './businessMap/OwnershipPage';
 import { ProgrammesPage } from './ProgrammesPage';
 import { PlatformOverviewPage } from './PlatformOverviewPage';
 import { InterconnectionPage } from './InterconnectionPage';
@@ -120,6 +123,9 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/business-map/heat" element={<BusinessHeatmapPage />} />
         <Route path="/business-map/glass" element={<BusinessGlassPage />} />
         <Route path="/business-map/matrix" element={<BusinessMatrixPage />} />
+        <Route path="/business-map/organisation" element={<OrganisationPage />} />
+        <Route path="/business-map/organisation/import" element={<ImportOrganisationPage />} />
+        <Route path="/business-map/ownership" element={<OwnershipPage />} />
         {/* the templates of the business map as console forms (no Scaffolder page) */}
         <Route path="/business-map/import" element={<ImportModelPage />} />
         <Route path="/business-map/adopt" element={<AdoptModelPage />} />

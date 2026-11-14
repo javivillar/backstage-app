@@ -117,7 +117,7 @@ export type ProcessCheck = { process: string; requirement: { criticality: Critic
 type Loaded<T> = { loading: boolean; data?: T; error?: string };
 
 /** GET of a path of the backend business-map; skipped (and not loading) when path is undefined. */
-function useBusinessMapGet<T>(path: string | undefined): Loaded<T> & { reload: () => void } {
+export function useBusinessMapGet<T>(path: string | undefined): Loaded<T> & { reload: () => void } {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [state, setState] = useState<Loaded<T>>({ loading: path !== undefined });

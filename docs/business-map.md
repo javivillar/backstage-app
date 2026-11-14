@@ -269,6 +269,66 @@ support categories of a loaded APQC model).
   margin of each process (to spare, no margin, breach). *Save as exercise* records the rehearsal by pull request; it
   changes nothing in the cluster.
 
+## Organisations and product owners
+
+Two organisations stand behind the business applications of a customer: its own, and the one of the service provider.
+Each is a hierarchy (head, units, teams, people) kept as one file of refresquito-services, so a new installation loads
+it from the repository and every change is a pull request:
+
+| File | What |
+|---|---|
+| `catalog/organisations/customer/<customer>.yaml` | the organisation of a customer |
+| `catalog/organisations/provider.yaml` | the organisation of the service provider, one for every customer |
+
+```yaml
+apiVersion: refresquito.io/v1alpha1
+kind: Organisation
+metadata: { name: aerospace-iberia, title: Aerospace Iberia }
+spec:
+  side: customer                 # customer | provider
+  head: { name: Elena Ruiz Cano, user: eruiz, role: Services Director }
+  units:
+    - name: Maintenance (MRO)
+      head: { name: Raúl Méndez Ibáñez, user: rmendez, role: Head of Maintenance }
+      teams:
+        - name: Line Maintenance
+          people:
+            - { name: Diego Navarro Peña, user: dnavarro, role: Station manager }
+  productOwners:                 # the product owner of each business application on this side
+    - { application: aib-etechlog, user: dnavarro }
+```
+
+- A person is named by its **Keycloak user name**. The portal marks who has no user (it compares with the User
+  entities the Keycloak provider gives the catalog; when the catalog has none, nobody is marked). A person without a
+  user is still loaded: it cannot sign in or be notified. Nothing is written to Keycloak.
+- A person has one place in the organisation. A product owner must be a person of the organisation; an application has
+  one product owner on each side: the **customer product owner** and the **provider product owner**.
+- **Organisation** (view): the organisation of the customer or the provider as a chart (head, units in a row, the teams
+  of each unit); the team picked shows its people and the business applications it answers for. *Download as Excel*
+  gives the organisation as the template.
+- **Ownership** (view): one row per business application under the processes of the customer, with both product
+  owners and the gaps (nobody on a side, or an owner without a Keycloak user). *Assign* / *Change* names a person of the
+  organisation of that side: one pull request per side changed.
+- **Import organisation**: the Excel template (sheet `Organisation`, one row per person: Unit, Team, Name, User name,
+  Role, Position, Product owner of; `Position` is `head`, `unit head` or empty) or the same columns as CSV. The preview
+  says what was read, the rows left out and who has no Keycloak user; then the pull request. An import replaces the
+  whole organisation of that side.
+
+## Process models (BPMN)
+
+A business process may have a model: a BPMN 2.0 file drawn with any modelling tool, kept next to the process as
+`catalog/business-map/<customer>/bpmn/<process>.bpmn` (the name of the BusinessProcess). The page of the process draws
+it (zoom, drag) and lists its steps with their kind (person, automatic, other process) and their lane; a lane is
+matched by name with a team of the organisation of the customer, and marked when no team has that name.
+
+- **Import from file** (page of the process): choose or drop the file; the preview draws it and says how many steps it
+  has, which lanes match a team and whether the file names another process (a warning, not a stop). Then the pull
+  request. The model is attached to the process it is imported for: the identifier inside the file is kept as it is.
+- It is only the model: nothing is read from or deployed to the process engine here. A process that also runs in
+  Operaton keeps its button to the engine (`refresquito.io/process-key`).
+- The viewer is [bpmn-js](https://github.com/bpmn-io/bpmn-js), served by Backstage itself
+  (`packages/app/public/vendor/bpmn-js`, no internet needed). Its licence keeps the bpmn.io watermark on the diagram.
+
 ## Who may do what
 
 - Everyone with access to Backstage sees the map, the pages and the dashboards (normal catalog permissions).
@@ -301,6 +361,13 @@ Plugin `business-map` (`packages/backend/src/plugins/businessMap/`):
 | `GET /api/business-map/bia?namespace=[&domain=][&level=3\|all]` | the .xlsx of the business impact analysis |
 | `POST /api/business-map/import/preview` | the preview of an import (no write) |
 | `POST /api/business-map/exercises` | opens the pull request of a what-if exercise |
+| `GET /api/business-map/organisation?namespace=` | both organisations (each person with whether it has a Keycloak user) and the product owners of each business application |
+| `GET /api/business-map/organisation/template?side=&namespace=` | the .xlsx template, with the organisation when there is one |
+| `POST /api/business-map/organisation/preview` | what an organisation file holds (no write) |
+| `POST /api/business-map/organisation` | opens the pull request of an organisation |
+| `POST /api/business-map/organisation/owner` | opens the pull request naming (or removing) a product owner |
+| `GET /api/business-map/bpmn?namespace=&process=` | the BPMN model of a process (404 when it has none) |
+| `POST /api/business-map/bpmn` | opens the pull request of the model of a process |
 
 Scaffolder actions: `refresquito:business-model:preview`, `:import`, `:adopt`. Config: `businessMap.criticality`,
 `businessMap.repo` / `businessMap.branch` (where the model files are read, default refresquito-services main), `businessMap.provider.enabled` / `.frequency` (the entity provider: on, every 10 minutes),

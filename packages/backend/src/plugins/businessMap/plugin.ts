@@ -6,6 +6,7 @@ import { biaWorkbook } from './biaModel';
 import { buildMap, engineLinks, impactOf } from './mapModel';
 import { writeXlsx } from './sheets';
 import { createExercisesRouter } from './exercisesRouter';
+import { createOrganisationRouter } from './organisationRouter';
 import { createPreviewRouter } from './previewRouter';
 
 /**
@@ -23,6 +24,8 @@ import { createPreviewRouter } from './previewRouter';
  *   GET /api/business-map/bia?namespace=<customer>[&domain=<level-1 domain name>][&level=3|all]   the .xlsx of the
  *       business impact analysis: one row per process (level=all adds the sub-processes) with its current values,
  *       and a Guide sheet; the business owners fill it and it comes back through the import (source bia)
+ *   GET/POST /api/business-map/organisation…, /bpmn   the organisations of the customer and the provider, the product
+ *       owners of each business application and the BPMN model of a process (organisationRouter.ts)
  *   GET /api/business-map/engine?key=<process key>   { baseUrl?, cockpitUrl?, tasklistUrl?, definitionUrl? }: the
  *       links into the process engine (Operaton) for the BPMN of a process
  *
@@ -218,7 +221,12 @@ export const businessMapPlugin = createBackendPlugin({
         });
 
         // POST /import/preview (previewRouter.ts) and POST /exercises (exercisesRouter.ts)
-        router.use(createPreviewRouter({ httpAuth, userInfo, config, logger, catalog }), createExercisesRouter({ httpAuth, userInfo, config, logger, catalog }));
+        // the organisations and the process models (organisationRouter.ts)
+        router.use(
+          createPreviewRouter({ httpAuth, userInfo, config, logger, catalog }),
+          createExercisesRouter({ httpAuth, userInfo, config, logger, catalog }),
+          createOrganisationRouter({ httpAuth, userInfo, config, logger, catalog }),
+        );
         httpRouter.use(router);
       },
     });

@@ -20,6 +20,7 @@ import { useRq } from '../../theme/consoleTheme';
 import { EntityDependenciesContent } from '../EntityDependencies';
 import { EmptyState, Id, Section, TitleRow } from '../ui';
 import { chainColumns, closeAdvice, consolePath, editProcessUrl, gapText, nameOf, originText, parentsOf, workaroundText, type ProcessNode, subprocessTree, treeSize, UNASSIGNED } from './businessMapModel';
+import { ProcessModel } from './ProcessModel';
 import { CritPill, pair, ResultPill } from './parts';
 
 /** The sub-processes of a process, nested, each a link to its page with its criticality and its check. */
@@ -311,6 +312,7 @@ export const BusinessProcessPage = ({ entity }: { entity: Entity }) => {
               <SubprocessList nodes={tree} />
             </Section>
           )}
+          <ProcessModel namespace={ns} process={entity.metadata.name} title={entity.metadata.title ?? entity.metadata.name} />
           <Section title={t('bmp.chain')} meta={t('bmp.onlyPro')}>
             {elements.length ? <Chain p={p} elements={elements} /> : <EmptyState title={noChain} />}
           </Section>
