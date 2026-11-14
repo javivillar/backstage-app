@@ -328,3 +328,25 @@ describe('segregation kinds, common and the exceptions of the interconnection', 
     expect(removeSegregation(landing, site('core', cat, { nato: [{ name: 'landing', kind: 'landing' }] }), [], 0, [], 'nato', 'landing')).toHaveProperty('text');
   });
 });
+
+describe('test programmes and the programme catalogue', () => {
+  it('writes test = true for a laboratory programme and says so', () => {
+    const lab = ok(addSegregation(TOML, view(), 'nato', 'lab1', 'programme', true));
+    expect(lab.test).toBe(true);
+    expect(lab.text).toMatch(/\[\[program\]\]\nzone = "nato"\nn = \d+\nname = "lab1"\ntest = true\n/);
+    expect(tomlPrograms(lab.text).find(x => x.name === 'lab1')).toBeTruthy();
+  });
+
+  it('a normal programme carries no flag', () => {
+    const plain = ok(addSegregation(TOML, view(), 'nato', 'eurofighter'));
+    expect(plain.test).toBeUndefined();
+    expect(plain.text).not.toMatch(/test = true/);
+  });
+
+  it('refuses a test programme named like one of the catalogue of its zone', () => {
+    const v = { ...view(), programmeCatalogue: { industries: ['Air'], programmes: [{ zone: 'nato', name: 'efa', title: 'Eurofighter', description: '', industry: 'Air', customer: 'Air Force', nations: [], spain: true, confidence: 'high' as const }] } };
+    expect(addSegregation(TOML, v, 'nato', 'efa', 'programme', true)).toMatch(/programme of the catalogue/);
+    expect(typeof addSegregation(TOML, v, 'nato', 'efa')).toBe('object');
+    expect(typeof addSegregation(TOML, v, 'occar', 'efa', 'programme', true)).toBe('object');
+  });
+});

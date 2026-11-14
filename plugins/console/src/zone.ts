@@ -137,7 +137,10 @@ export function vmStatus(v: VmRequest): { label: string; tone: 'ok' | 'warn' | '
 }
 
 /** Every zone of the catalog (reserved too) and its programmes: where a new segregation can go. */
-export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string }> };
+export type CatalogZone = { name: string; label?: string; status: string; enabled: boolean; block?: string; maxProgramN?: number; programs: Array<{ name: string; n?: number; kind?: string; declared: boolean; ok: boolean | null; cluster?: string; test?: boolean }> };
+/** A programme of the catalogue of the host (programmes.toml): what a classification zone can hold. Reference data only. */
+export type Programme = { zone: string; name: string; title: string; description: string; industry: string; customer: string; customerDetail?: string; nations: string[]; managingBody?: string; primeContractor?: string; spain: boolean; confidence: 'high' | 'verify' };
+export type ProgrammeCatalogue = { industries: string[]; programmes: Programme[] };
 export type RoleName = 'vnf' | 'master' | 'worker' | 'storage';
 /** A OneKE profile of the marketplace ([kubernetes.profiles] of network.toml). */
 export type ClusterProfile = {
@@ -161,6 +164,8 @@ export type ReconcileStatus = { started?: string; finished?: string; error?: str
 /** The parts of GET /zone the Infrastructure pages use (the host publishes them with topology.json). */
 export type InfraView = ZoneView & {
   catalog?: CatalogZone[];
+  /** missing when the host is older than the programme catalogue: the Marketplace then asks for a typed name */
+  programmeCatalogue?: ProgrammeCatalogue;
   kubernetes?: { profiles: ClusterProfile[]; defaultProfile?: string; template?: string; nodeImages?: NodeImage[] };
   capacity?: { freeMemoryMb?: number; reservedMemoryMb?: number; schedulableMemoryMb?: number };
   reconcile?: ReconcileStatus;

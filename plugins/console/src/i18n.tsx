@@ -11,6 +11,7 @@ import { BUSINESS_MAP } from './messages/businessMap';
 import { BUSINESS_MAP_DASHBOARDS } from './messages/businessMapDashboards';
 import { DEVELOPMENT } from './messages/development';
 import { INTERCONNECTION } from './messages/interconnection';
+import { PROGRAMMES } from './messages/programmes';
 import { ACCESS_ADMIN } from './messages/accessAdmin';
 
 /**
@@ -120,7 +121,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION, ...ACCESS_ADMIN };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION, ...ACCESS_ADMIN, ...PROGRAMMES };
 
 const KEY = 'rq-console-lang';
 

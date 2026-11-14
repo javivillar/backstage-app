@@ -73,7 +73,7 @@ export type TomlException = { from: string; to: string; protocol: 'TCP' | 'UDP';
 const CLAMAV = { protocol: 'TCP' as const, ports: '3310' };
 const HTTPS = { protocol: 'TCP' as const, ports: '443' };
 
-const programBlock = (zone: string, n: number, name: string, kind: SegregationKind) => `[[program]]\nzone = "${zone}"\nn = ${n}\nname = "${name}"\n${kind === 'programme' ? '' : `kind = "${kind}"\n`}`;
+const programBlock = (zone: string, n: number, name: string, kind: SegregationKind, test = false) => `[[program]]\nzone = "${zone}"\nn = ${n}\nname = "${name}"\n${kind === 'programme' ? '' : `kind = "${kind}"\n`}${test ? 'test = true\n' : ''}`;
 const exceptionBlock = (e: TomlException) => `[[exception]]\nfrom = "${e.from}"\nto = "${e.to}"\nprotocol = "${e.protocol}"\nports = "${e.ports}"\nreason = "${e.reason}"\n`;
 
 /**
@@ -105,6 +105,8 @@ export type AddedSegregation = {
   kind: SegregationKind;
   n: number;
   enabled: boolean;
+  /** a laboratory programme, outside the programme catalogue: written with test = true */
+  test?: boolean;
   /** n of the common segregation created with it (the first segregation of a zone) */
   common?: number;
   exceptions: TomlException[];
@@ -119,12 +121,14 @@ export type AddedSegregation = {
  * n: the highest used in network.toml or OpenNebula + 1, never reused (configuration.add_program). Returns the new
  * text and what it added, or the reason it cannot be done.
  */
-export function addSegregation(text: string, view: ZoneView, zone: string, program: string, kind: string = 'programme'): AddedSegregation | string {
+export function addSegregation(text: string, view: ZoneView, zone: string, program: string, kind: string = 'programme', test = false): AddedSegregation | string {
   if (!(ASKED_KINDS as readonly string[]).includes(kind)) return `The kind is one of ${ASKED_KINDS.join(', ')}.`;
   const k = kind as (typeof ASKED_KINDS)[number];
   const name = k === 'programme' ? program : k;
   if (k === 'programme') {
     if (!PROGRAM_NAME.test(name)) return 'The programme name: lowercase letters, digits and "-", up to 31, starting with a letter or digit.';
+    // a test programme is a laboratory one, outside the programme catalogue: never a name the catalogue has in this zone
+    if (test && view.programmeCatalogue?.programmes.some(p => p.zone === zone && p.name === name)) return `${zone}/${name} is a programme of the catalogue: it cannot be a test programme.`;
     if (RESERVED_NAMES.includes(name)) return `${name} is a reserved name: ${name === 'common' ? 'the common segregation comes by itself with the first segregation of a zone' : `ask it as the ${name} zone`}.`;
   }
   const z = (view.catalog ?? []).find(c => c.name === zone);
@@ -150,7 +154,8 @@ export function addSegregation(text: string, view: ZoneView, zone: string, progr
     blocks.push(programBlock(zone, next, 'common', 'common'));
     after.push({ zone, n: next, name: 'common', kind: 'common' });
   }
-  blocks.push(programBlock(zone, n, name, k));
+  const isTest = test && k === 'programme';
+  blocks.push(programBlock(zone, n, name, k, isTest));
   const exceptions = segregationExceptions(zone, name, k, after);
   blocks.push(...exceptions.map(exceptionBlock));
   out = `${out.replace(/\n+$/, '')}\n\n${blocks.join('\n')}`;
@@ -159,7 +164,7 @@ export function addSegregation(text: string, view: ZoneView, zone: string, progr
     ...(exceptions.some(e => e.to === `${zone}/common`) ? ['exception to ClamAV'] : []),
     ...(exceptions.some(e => e.ports === HTTPS.ports) ? [`${exceptions.filter(e => e.ports === HTTPS.ports).length} exception(s) to the edge proxy`] : []),
   ];
-  return { text: out, program: name, kind: k, n, enabled, ...(first ? { common: next } : {}), exceptions, also };
+  return { text: out, program: name, kind: k, n, enabled, ...(isTest ? { test: true } : {}), ...(first ? { common: next } : {}), exceptions, also };
 }
 
 /** The [[table]] blocks of a TOML text: head line, and the end of its keys (comments and blank lines after them stay). */

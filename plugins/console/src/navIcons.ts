@@ -6,6 +6,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import ApiIcon from '@mui/icons-material/Api';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import AppsIcon from '@mui/icons-material/Apps';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import CodeIcon from '@mui/icons-material/Code';
@@ -55,6 +56,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/infrastructure/platform': LanIcon,
   '/console/infrastructure/marketplace': StorefrontIcon,
+  '/console/infrastructure/programmes': AssignmentIcon,
   '/console/infrastructure/interconnection': SyncAltIcon,
   '/console/infrastructure': MapIcon,
   '/console/infrastructure/overview': DashboardIcon,
