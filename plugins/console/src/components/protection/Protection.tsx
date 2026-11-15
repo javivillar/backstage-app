@@ -25,6 +25,7 @@ import {
 import { useRq } from '../../theme/consoleTheme';
 import { Card } from '../NamespaceSections';
 import { Table } from '../NetworkPage';
+import { PendingChanges } from '../PendingChanges';
 import { EmptyState, Id, Kpis, Pill, TitleRow } from '../ui';
 import { Seg } from '../ui-portal';
 
@@ -419,6 +420,7 @@ export const ProtectionPlansPage = () => {
           <Link to={done.pull.url}>{t('dp.plans.see')}</Link>
         </Note>
       )}
+      <PendingChanges plugin="protection" path="/pulls" refresh={done?.pull.number} applies={t('dp.plans.applies')} />
       {failure && <EmptyState tone="neg" title={t('dp.error')}>{failure}</EmptyState>}
       <Card title={t('dp.plans.each')} sub={t('dp.plans.each.sub')}>
         {!data.may && (

@@ -9,6 +9,7 @@ import { changesOf, GROUPS, matches, monthlyExample, parsePrice, type PriceRow, 
 import { MONO, useRq } from '../theme/consoleTheme';
 import { Card } from './NamespaceSections';
 import { Table } from './NetworkPage';
+import { PendingChanges } from './PendingChanges';
 import { EmptyState, Id, Kpis, Pill, TitleRow, type Tone } from './ui';
 import { Seg } from './ui-portal';
 
@@ -223,6 +224,7 @@ export const PricesPage = () => {
           {t('price.pr.doneText', { version: done.version })}
         </EmptyState>
       )}
+      <PendingChanges plugin="costs" path="/prices/pulls" refresh={done?.pull.number} applies={t('price.pr.applies')} />
       <Kpis
         items={[
           { label: t('price.kpi.all'), value: rows.length, note: t('price.kpi.allNote') },

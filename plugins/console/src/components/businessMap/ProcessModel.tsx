@@ -8,6 +8,7 @@ import { type BpmnModel, modelOf, type PullAnswer, sameProcessName, teamNames, t
 import { useRq } from '../../theme/consoleTheme';
 import { TONES } from '../Flow';
 import { Table } from '../NetworkPage';
+import { PendingChanges } from '../PendingChanges';
 import { EmptyState, Id, Pill, Section, type Tone } from '../ui';
 import { BPMN_VIEWER_PATH, type BpmnViewer, loadBpmnViewer, nameInFile } from './bpmnViewer';
 
@@ -267,6 +268,8 @@ export const ProcessModel = ({ namespace, process, title }: { namespace: string;
   const may = !!org.data?.may;
   const path = bpmn.data?.path ?? `catalog/business-map/${namespace}/bpmn/${process}.bpmn`;
   const good = model && !('error' in model) ? model : undefined;
+  // the pull requests that bring or replace the model of this process (branch console/bpmn-<customer>-<process>-<time>)
+  const changes = <PendingChanges plugin="business-map" path="/pulls?kind=bpmn" match={`console/${`bpmn-${namespace}-${process}`.slice(0, 80)}-`} applies={t('org.pr.applies')} />;
   const download = () => {
     if (!bpmn.data) return;
     const url = URL.createObjectURL(new Blob([bpmn.data.xml], { type: 'application/xml' }));
@@ -288,6 +291,7 @@ export const ProcessModel = ({ namespace, process, title }: { namespace: string;
   if (!bpmn.data) {
     return (
       <Section title={t('bpmn.title')}>
+        {changes}
         {importing ? (
           <Import namespace={namespace} process={process} title={title} teams={teams} path={path} onCancel={() => setImporting(false)} />
         ) : (
@@ -309,6 +313,7 @@ export const ProcessModel = ({ namespace, process, title }: { namespace: string;
   }
   return (
     <>
+      {changes}
       <Section
         title={t('bpmn.title')}
         action={

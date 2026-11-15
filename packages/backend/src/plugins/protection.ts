@@ -5,6 +5,7 @@
  *   GET  /api/protection          {available, reason?, store, plans, apps[], usage, may, groups, repo, path, url}
  *   GET  /api/protection/usage    {available, namespaces: {ns: {snapshotBytes, backupBytes, plan}}}   (the cost pages)
  *   POST /api/protection/plans    {changes: {app: plan}} -> a pull request on the chart protection-oneke
+ *   GET  /api/protection/pulls    {pulls}: the pull requests of the plans and their state (consolePulls.ts)
  *
  * Reads, with the service account of Backstage: the ConfigMap protection-plans and the Velero objects (Backups,
  * DataUploads, BackupStorageLocations) of the namespace of protection-oneke, the PersistentVolumeClaims of the
@@ -21,6 +22,7 @@ import express from 'express';
 import Router from 'express-promise-router';
 import { mayAct } from './clusterActions';
 import { GitHubFiles } from './clusterVms';
+import { PullReader, pullsHandler } from './consolePulls';
 import { PriceError, PriceFiles, pricePaths } from './costPrices';
 import { backupOf, Declared, planChange, protectionView, pvcOf, readDeclared, readPlanChanges, Snapshot, snapshotOf, usageOf } from './protectionModel';
 
@@ -51,6 +53,7 @@ export default createBackendPlugin({
         const chart = config.getOptionalString('protection.chart') ?? 'protection-oneke';
         const groups = [...new Set(['backstage-admin', ...(config.getOptionalStringArray('console.actions.groups') ?? []), ...(config.getOptionalStringArray('protection.groups') ?? [])])];
         const repo = new GitHubFiles(repoName, branch, config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token'));
+        const pulls = new PullReader(repoName, branch, config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token'));
         const paths = pricePaths(chart);
 
         type Read = { available: boolean; reason?: string; declared?: Declared; store?: Record<string, unknown>; apps: ReturnType<typeof protectionView> };
@@ -155,12 +158,15 @@ export default createBackendPlugin({
             const texts = await Promise.all((Object.keys(paths) as Array<keyof PriceFiles>).map(async k => [k, (await repo.get(paths[k])).text] as const));
             const change = planChange(Object.fromEntries(texts) as PriceFiles, changes, { chart, by: w.user, date: new Date().toISOString().slice(0, 10) });
             const pull = await repo.pullRequestInOneCommit(`console/protection-${change.next}-${Date.now().toString(36)}`, change.title, change.body, change.files);
+            pulls.forget();
             logger.info(`protection: ${change.changed.length} plans changed by ${w.user}: pull request #${pull.number}`);
             res.json({ pull, version: change.next, changed: change.changed });
           } catch (e) {
             failed(res, e);
           }
         });
+        // the pull requests of the plans and where each one stands
+        router.get('/pulls', pullsHandler(pulls, () => ['console/protection-'], asks, m => logger.warn(`protection: ${m}`)));
         httpRouter.use(router);
       },
     });
