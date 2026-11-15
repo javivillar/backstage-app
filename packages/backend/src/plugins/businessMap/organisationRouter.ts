@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { GitHubFiles } from '../clusterVms';
-import { PullReader, pullsHandler } from '../consolePulls';
+import { cancelHandler, PullReader, pullsHandler } from '../consolePulls';
 import { BpmnError, bpmnPath, bpmnPull, readBpmn, readTarget } from './bpmnModel';
 import { ContinuityGraph, type MapEntity, readDefaults } from './continuityModel';
 import { buildMap } from './mapModel';
@@ -294,5 +294,6 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
 
   // the pull requests of a kind of change (organisation | bpmn | model) and where each one stands
   router.get('/pulls', pullsHandler(pulls, req => PULL_KINDS[String(req.query.kind)], who, m => logger.warn(`business-map: ${m}`)));
+  router.post('/pulls/:number/cancel', cancelHandler(pulls, req => PULL_KINDS[String(req.query.kind)], who, m => logger.info(`business-map: ${m}`)));
   return router;
 }

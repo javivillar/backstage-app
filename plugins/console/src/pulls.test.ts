@@ -1,4 +1,4 @@
-import { type ChangePull, freshPath, isPending, orderPulls } from './pulls';
+import { cancelPath, type ChangePull, freshPath, isPending, orderPulls } from './pulls';
 
 const pull = (number: number, state: ChangePull['state'], created: string, extra: Partial<ChangePull> = {}): ChangePull => ({
   number, title: `change ${number}`, url: `https://github.com/o/r/pull/${number}`, branch: `console/prices-${number}`, created, state, ...extra,
@@ -26,5 +26,7 @@ describe('pending changes', () => {
     expect(freshPath('/prices/pulls', false)).toBe('/prices/pulls');
     expect(freshPath('/prices/pulls', true)).toBe('/prices/pulls?fresh=1');
     expect(freshPath('/pulls?kind=organisation', true)).toBe('/pulls?kind=organisation&fresh=1');
+    expect(cancelPath('/prices/pulls', 12)).toBe('/prices/pulls/12/cancel');
+    expect(cancelPath('/pulls?kind=organisation', 7)).toBe('/pulls/7/cancel?kind=organisation');
   });
 });

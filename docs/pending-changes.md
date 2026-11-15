@@ -52,6 +52,21 @@ organisation or a model: the catalogue reading the repository again).
 Accepting is done in GitHub, by whoever may merge in that repository: the console links to the pull request and
 does not merge.
 
+## Cancelling a change
+
+A change that is still open has **Cancel** on its row, for who may cancel it: the person who asked for it, or anyone
+who may make that kind of change (the groups of that page: prices, protection plans, business architects, the
+console actions groups in Zone and Manage). It asks first; then the pull request is **closed**, a comment says who
+cancelled it from the console, and its branch is deleted. The row turns to *Closed without accepting*. An accepted
+change cannot be cancelled: ask for the opposite change.
+
+`POST <the list>/<number>/cancel` (for example `/api/costs/prices/pulls/12/cancel`,
+`/api/business-map/pulls/7/cancel?kind=organisation`, `/api/cluster/pulls/9/cancel?repo=infra`). The backend only
+closes a pull request of that kind (its branch prefix) that is open, and answers 403 to anyone else. Who asked for a
+change is read from its text, so a pull request that does not say it can only be cancelled by who may make the
+change. The token of Backstage needs *Pull requests: write* (it has it, to open them) and *Contents: write* to
+delete the branch.
+
 ## How it works
 
 - A change of the console is a branch `console/<kind>-…`. The backend lists the pull requests of the repository and

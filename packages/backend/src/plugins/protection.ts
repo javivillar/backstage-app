@@ -22,7 +22,7 @@ import express from 'express';
 import Router from 'express-promise-router';
 import { mayAct } from './clusterActions';
 import { GitHubFiles } from './clusterVms';
-import { PullReader, pullsHandler } from './consolePulls';
+import { cancelHandler, PullReader, pullsHandler } from './consolePulls';
 import { PriceError, PriceFiles, pricePaths } from './costPrices';
 import { backupOf, Declared, planChange, protectionView, pvcOf, readDeclared, readPlanChanges, Snapshot, snapshotOf, usageOf } from './protectionModel';
 
@@ -167,6 +167,7 @@ export default createBackendPlugin({
         });
         // the pull requests of the plans and where each one stands
         router.get('/pulls', pullsHandler(pulls, () => ['console/protection-'], asks, m => logger.warn(`protection: ${m}`)));
+        router.post('/pulls/:number/cancel', cancelHandler(pulls, () => ['console/protection-'], asks, m => logger.info(`protection: ${m}`)));
         httpRouter.use(router);
       },
     });

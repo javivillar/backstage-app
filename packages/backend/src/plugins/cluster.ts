@@ -7,7 +7,7 @@ import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
-import { PullReader, pullsHandler } from './consolePulls';
+import { cancelHandler, PullReader, pullsHandler } from './consolePulls';
 import { type ComponentRequest, componentName, type ConsolePull, GitHubFiles, refuse, refuseComponent, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
 import { actionRequest, addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
@@ -267,9 +267,18 @@ export default createBackendPlugin({
           infra: { reader: new PullReader(config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', config.getOptionalString('console.infra.branch') ?? 'main', ghToken), prefixes: ['console/'] },
           vms: { reader: new PullReader(config.getOptionalString('console.vms.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.vms.branch') ?? 'main', ghToken), prefixes: ['console/vm-'] },
         };
+        // who reads them: whoever may act from the console (console.actions.groups) may cancel any request, the rest their own
+        const requester = async (r: express.Request) => {
+          const info = await userInfo.getUserInfo(await httpAuth.credentials(r, { allow: ['user'] }));
+          return { user: info.userEntityRef, may: mayAct(info.ownershipEntityRefs, groups) };
+        };
         router.get('/pulls', (req, res) => {
           const of = requestPulls[String(req.query.repo)];
-          return pullsHandler(of?.reader ?? requestPulls.infra.reader, () => of?.prefixes, r => httpAuth.credentials(r, { allow: ['user'] }), m => logger.warn(`cluster: requests: ${m}`))(req, res);
+          return pullsHandler(of?.reader ?? requestPulls.infra.reader, () => of?.prefixes, requester, m => logger.warn(`cluster: requests: ${m}`))(req, res);
+        });
+        router.post('/pulls/:number/cancel', (req, res) => {
+          const of = requestPulls[String(req.query.repo)];
+          return cancelHandler(of?.reader ?? requestPulls.infra.reader, () => of?.prefixes, requester, m => logger.info(`cluster: requests: ${m}`))(req, res);
         });
         router.use(express.json({ limit: '16kb' }));
         router.get('/overview', async (req, res) => {

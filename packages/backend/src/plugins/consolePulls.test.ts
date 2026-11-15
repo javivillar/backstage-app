@@ -1,4 +1,4 @@
-import { askedBy, openState, PullReader } from './consolePulls';
+import { askedBy, askerOf, mayCancel, openState, PullError, PullReader } from './consolePulls';
 
 const NOW = Date.parse('2026-11-15T12:00:00Z');
 const pull = (number: number, ref: string, extra: Record<string, unknown> = {}) => ({
@@ -68,6 +68,52 @@ describe('pending changes of the console', () => {
     // the checks cannot be read (403): the pull request is still listed, as open
     answers['commits/sha7/check-runs?per_page=100'] = undefined;
     expect((await reader.list(['console/prices-']))[0].state).toBe('open');
+  });
+
+  it('lets who asked for a change, or who may make it, cancel it while it is open', () => {
+    const ana = askerOf({ user: 'user:default/ana', may: false });
+    expect(mayCancel({ state: 'checking', by: 'ana' }, ana)).toBe(true);
+    expect(mayCancel({ state: 'ready', by: 'Ana' }, ana)).toBe(true);
+    expect(mayCancel({ state: 'open', by: 'luis' }, ana)).toBe(false);
+    expect(mayCancel({ state: 'open', by: undefined }, ana)).toBe(false);
+    expect(mayCancel({ state: 'merged', by: 'ana' }, ana)).toBe(false);
+    expect(mayCancel({ state: 'closed', by: 'ana' }, ana)).toBe(false);
+    // who may make that kind of change cancels any of them; the plugins say it as may or as admin
+    expect(mayCancel({ state: 'open', by: 'luis' }, askerOf({ user: 'user:default/eva', admin: true }))).toBe(true);
+    expect(mayCancel({ state: 'failed', by: 'luis' }, askerOf({ user: 'user:default/eva', may: true }))).toBe(true);
+    expect(askerOf(undefined)).toEqual({ user: undefined, may: false });
+  });
+
+  it('cancels a change: closes its pull request, says who did it and deletes the branch', async () => {
+    const calls: Array<[string, string, unknown]> = [];
+    const pulls: Record<string, unknown> = {
+      'pulls/7': pull(7, 'console/prices-0.2.123-a'),
+      'pulls/6': pull(6, 'console/protection-0.1.2-b'),
+      'pulls/5': pull(5, 'console/prices-0.2.122-c', { state: 'closed', merged_at: '2026-11-13T09:00:00Z' }),
+    };
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      const path = String(url).replace('https://api.github.com/repos/o/r/', '');
+      const method = init?.method ?? 'GET';
+      calls.push([method, path, init?.body ? JSON.parse(String(init.body)) : undefined]);
+      if (method !== 'GET') return new Response('{}');
+      return pulls[path] !== undefined ? new Response(JSON.stringify(pulls[path])) : new Response('{}', { status: 404 });
+    }) as unknown as typeof fetch;
+    const reader = new PullReader('o/r', 'main', 't', fetchFn, () => NOW);
+    const yes = () => true;
+    const done = await reader.cancel(7, ['console/prices-'], 'user:default/ana', yes);
+    expect(done).toMatchObject({ number: 7, state: 'closed', by: 'ana', branch: 'console/prices-0.2.123-a' });
+    expect(calls.slice(1)).toEqual([
+      ['PATCH', 'pulls/7', { state: 'closed' }],
+      ['POST', 'issues/7/comments', { body: 'Cancelled from the console by user:default/ana.' }],
+      ['DELETE', 'git/refs/heads/console/prices-0.2.123-a', undefined],
+    ]);
+    // not of this kind, already accepted, not allowed, not there: nothing is closed
+    const before = calls.length;
+    await expect(reader.cancel(6, ['console/prices-'], 'x', yes)).rejects.toMatchObject({ status: 404 });
+    await expect(reader.cancel(5, ['console/prices-'], 'x', yes)).rejects.toMatchObject({ status: 409 });
+    await expect(reader.cancel(7, ['console/prices-'], 'x', () => false)).rejects.toMatchObject({ status: 403 });
+    await expect(reader.cancel(99, ['console/prices-'], 'x', yes)).rejects.toBeInstanceOf(PullError);
+    expect(calls.slice(before).every(c => c[0] === 'GET')).toBe(true);
   });
 
   it('fails when the repository cannot be listed', async () => {

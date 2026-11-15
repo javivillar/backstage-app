@@ -254,7 +254,8 @@ export const ProgrammesPage = () => {
                           </td>
                           <td>
                             <Box sx={{ display: 'grid', gap: 0.75, justifyItems: 'start' }}>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                              {/* a long state ("Segregation occar/a400m · no cluster") wraps inside its column */}
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, minWidth: 0, '& > span': { whiteSpace: 'normal', height: 'auto', lineHeight: '16px', py: '3px', borderRadius: '11px' } }}>
                                 <ProgrammeState row={r} />
                               </Box>
                               {!r.placed?.cluster && <Link to={to(r)}>{t(r.placed ? 'prog.createCluster' : 'prog.create')}</Link>}

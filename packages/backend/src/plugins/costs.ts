@@ -2,7 +2,7 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import express, { Router } from 'express';
 import { mayAct } from './clusterActions';
 import { GitHubFiles } from './clusterVms';
-import { PullReader, pullsHandler } from './consolePulls';
+import { cancelHandler, PullReader, pullsHandler } from './consolePulls';
 import { PriceError, priceChange, pricePaths, readChanges, readPrices, type PriceFiles } from './costPrices';
 import { currentMonth, DeploymentStore, ensureTables, lookback, parseSweep, sweepQuery } from './costDeployments';
 
@@ -162,6 +162,7 @@ export default createBackendPlugin({
         });
         // the pull requests of the prices and where each one stands
         router.get('/prices/pulls', pullsHandler(pulls, () => ['console/prices-'], asks, m => logger.warn(`costs: prices: ${m}`)));
+        router.post('/prices/pulls/:number/cancel', cancelHandler(pulls, () => ['console/prices-'], asks, m => logger.info(`costs: prices: ${m}`)));
         httpRouter.use(router);
       },
     });
