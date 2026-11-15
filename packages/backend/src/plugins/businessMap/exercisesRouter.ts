@@ -1,5 +1,6 @@
 import express, { Router } from 'express';
 import { GitHubFiles } from '../clusterVms';
+import { PullReader, pullsHandler } from '../consolePulls';
 import { ExerciseError, exercisePath, exercisePull, exerciseSlug, exerciseYaml, readExercise } from './exercisesModel';
 import { type BusinessMapRouteDeps, statusOf, whoAsks } from './previewRouter';
 
@@ -8,6 +9,9 @@ import { type BusinessMapRouteDeps, statusOf, whoAsks } from './previewRouter';
  *        → { pull: { number, url }, path }: "Save as exercise" of the matrix; opens a pull request in
  *        refresquito-specs with continuity/exercises/<namespace>/<yyyy-mm-dd>-<slug>.yaml (exercisesModel.ts says
  *        what an exercise is)
+ *
+ *   GET  /api/business-map/exercises/pulls   → { pulls }: those pull requests, open or closed in the last 14 days,
+ *        with their state (consolePulls.ts)
  *
  * Who may: business-architect, backstage-admin and console.actions.groups. Config: businessMap.exercises.repo
  * (default javivillar/refresquito-specs) and businessMap.exercises.branch (default main); the GitHub token of the
@@ -22,6 +26,11 @@ export function createExercisesRouter(deps: BusinessMapRouteDeps): Router {
   const who = whoAsks(deps);
   const token = config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token');
   const specs = new GitHubFiles(
+    config.getOptionalString('businessMap.exercises.repo') ?? 'javivillar/refresquito-specs',
+    config.getOptionalString('businessMap.exercises.branch') ?? 'main',
+    token,
+  );
+  const pulls = new PullReader(
     config.getOptionalString('businessMap.exercises.repo') ?? 'javivillar/refresquito-specs',
     config.getOptionalString('businessMap.exercises.branch') ?? 'main',
     token,
@@ -52,6 +61,7 @@ export function createExercisesRouter(deps: BusinessMapRouteDeps): Router {
         { path, text: exerciseYaml(e, { date, by: w.user }) },
       ]);
       logger.info(`business-map: exercise ${path} by ${w.user}: pull request #${pull.number}`);
+      pulls.forget();
       res.json({ pull, path });
     } catch (e) {
       if (e instanceof ExerciseError) {
@@ -63,5 +73,7 @@ export function createExercisesRouter(deps: BusinessMapRouteDeps): Router {
       res.status(status).json({ error: (e as Error).message });
     }
   });
+  // the pull requests of the exercises (refresquito-specs) and where each one stands
+  router.get('/exercises/pulls', pullsHandler(pulls, () => ['console/exercise-'], who, m => logger.warn(`business-map exercises: ${m}`)));
   return router;
 }

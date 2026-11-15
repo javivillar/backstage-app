@@ -37,6 +37,14 @@ export const PULLS: Messages = {
     en: 'An accepted plan applies when Argo CD syncs protection-oneke.',
     es: 'Un plan aceptado se aplica cuando Argo CD sincroniza protection-oneke.',
   },
+  'bmf.pr.applies': {
+    en: 'An accepted change of the model shows in Business continuity once the catalogue reads the repository again (a few minutes).',
+    es: 'Un cambio aceptado del modelo se ve en Continuidad del negocio cuando el catálogo vuelve a leer el repositorio (unos minutos).',
+  },
+  'bmd.mx.pr.applies': {
+    en: 'An accepted exercise is kept in the continuity plan of the customer (refresquito-specs).',
+    es: 'Un ejercicio aceptado queda en el plan de continuidad del cliente (refresquito-specs).',
+  },
   'org.pr.applies': {
     en: 'An accepted change shows here once the catalogue reads the repository again (a few minutes).',
     es: 'Un cambio aceptado se ve aquí cuando el catálogo vuelve a leer el repositorio (unos minutos).',

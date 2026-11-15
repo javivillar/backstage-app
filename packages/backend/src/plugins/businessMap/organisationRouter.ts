@@ -40,7 +40,7 @@ import { readUpload, writeXlsx } from './sheets';
  *   POST /api/business-map/organisation/owner     { side, namespace, application, user? } → { pull, path }
  *   GET  /api/business-map/bpmn?namespace=&process=   → { xml, path, url } (404 when the process has no model)
  *   POST /api/business-map/bpmn   { namespace, process, title?, fileName?, xml } → { pull, path }
- *   GET  /api/business-map/pulls?kind=organisation|bpmn   → { pulls }: the pull requests of that kind of change, open or
+ *   GET  /api/business-map/pulls?kind=organisation|bpmn|model   → { pulls }: the pull requests of that kind of change, open or
  *        closed in the last 14 days, with their state (consolePulls.ts)
  *
  * Every change is a pull request in businessMap.repo (refresquito-services). Who may: business-architect,
@@ -65,7 +65,12 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
   const repo = new GitHubFiles(src.repo, src.branch, src.token);
   const pulls = new PullReader(src.repo, src.branch, src.token);
   /** the branches of each kind of change of this router (GitHubFiles.pullRequest: console/<slug>-<time>) */
-  const PULL_KINDS: Record<string, string[]> = { organisation: ['console/org-'], bpmn: ['console/bpmn-'] };
+  const PULL_KINDS: Record<string, string[]> = {
+    organisation: ['console/org-'],
+    bpmn: ['console/bpmn-'],
+    // the templates of the business model (import, adopt, new and edit process): their branchName
+    model: ['business-map-import-', 'business-map-adopt-', 'business-process-'],
+  };
   const blob = (path: string) => `https://github.com/${src.repo}/blob/${src.branch}/${path}`;
   const defaults = readDefaults(config.getOptional('businessMap.criticality'));
 
@@ -287,7 +292,7 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
     }
   });
 
-  // the pull requests of a kind of change (organisation | bpmn) and where each one stands
+  // the pull requests of a kind of change (organisation | bpmn | model) and where each one stands
   router.get('/pulls', pullsHandler(pulls, req => PULL_KINDS[String(req.query.kind)], who, m => logger.warn(`business-map: ${m}`)));
   return router;
 }

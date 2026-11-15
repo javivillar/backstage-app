@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { type ApplicationOwnership, hasGap, type OrganisationData, type Owner, ownershipCounts, ownerState, peopleOf, type PullAnswer, type Side, useBusinessMapPost } from '../../organisation';
 import { Table } from '../NetworkPage';
+import { PendingChanges } from '../PendingChanges';
 import { EmptyState, Id, Kpis, Pill, Section } from '../ui';
 import { Choice, KeycloakPill, OrganisationFrame } from './OrgParts';
 import { CritPill } from './parts';
@@ -201,6 +202,8 @@ export const OwnershipPage = () => {
                 }}
               />
             )}
+            {/* the pull requests of the organisations: a product owner is a change of one of them */}
+            <PendingChanges plugin="business-map" path="/pulls?kind=organisation" refresh={note} applies={t('org.pr.applies')} always />
           </>
         );
       }}
