@@ -48,8 +48,8 @@ const instance = (name: string, system: string, stage?: string): Entity => ({
 });
 const INSTANCES = instancesOf([instance('techlog-oneke', 'techlog'), instance('techlog-dev-oneke', 'techlog', 'dev')]);
 const nav = () => navigator({ map: MAP, protection: PROTECTION, instances: INSTANCES });
-const P = (name: string) => `businessprocess:acme/${name}`;
-const A = (name: string) => `app:system:default/${name}`;
+const pid = (name: string) => `businessprocess:acme/${name}`;
+const aid = (name: string) => `app:system:default/${name}`;
 
 describe('continuity navigator model', () => {
   it('reads how far apart the copies of a plan are', () => {
@@ -74,14 +74,14 @@ describe('continuity navigator model', () => {
     const n = nav();
     expect(n.columns.map(c => c.length)).toEqual([2, 1, 3, 1, 2, 2, 2]);
     expect(n.nodes.get('domain:acme/line')?.kind).toBe('sub');
-    expect(n.nodes.get(P('raise-report'))?.kind).toBe('subp');
-    const techlog = n.nodes.get(A('techlog'))!;
+    expect(n.nodes.get(pid('raise-report'))?.kind).toBe('subp');
+    const techlog = n.nodes.get(aid('techlog'))!;
     expect(techlog.app?.namespace).toBe('acme-techlog-oneke');
     expect(techlog.line).toBe('3.3');
     expect(techlog.every).toBe(360);
     // the data of an application, then its digital continuity; an application without volumes goes straight to it
-    expect(techlog.down).toEqual([`data:${A('techlog')}/postgres-data`, `data:${A('techlog')}/uploads`]);
-    expect(n.nodes.get(A('planner'))!.down).toEqual([`dig:${A('planner')}`]);
+    expect(techlog.down).toEqual([`data:${aid('techlog')}/postgres-data`, `data:${aid('techlog')}/uploads`]);
+    expect(n.nodes.get(aid('planner'))!.down).toEqual([`dig:${aid('planner')}`]);
     expect(n.nodes.get('domain:acme/maintenance')).toMatchObject({ processes: 2, critical: 1 });
   });
 
@@ -93,37 +93,37 @@ describe('continuity navigator model', () => {
     expect(copiesLight(undefined, undefined, 15)).toBe('na');
     const n = nav();
     // 6 h between copies: a gap for the process that accepts 15 min, enough for the one that accepts 24 h
-    expect(n.nodes.get(P('fix-defects'))).toMatchObject({ check: 'ok', data: 'bad' });
-    expect(n.nodes.get(P('plan-checks'))).toMatchObject({ check: 'bad', data: 'ok' });
+    expect(n.nodes.get(pid('fix-defects'))).toMatchObject({ check: 'ok', data: 'bad' });
+    expect(n.nodes.get(pid('plan-checks'))).toMatchObject({ check: 'bad', data: 'ok' });
     // nothing is known of the copies of planner: not checked
-    expect(n.nodes.get(P('ship-parts'))).toMatchObject({ check: 'ok', data: 'na' });
+    expect(n.nodes.get(pid('ship-parts'))).toMatchObject({ check: 'ok', data: 'na' });
     // an application answers to the tightest process above it, a domain to its worst process
-    expect(n.nodes.get(A('techlog'))).toMatchObject({ data: 'bad', rpo: 15 });
+    expect(n.nodes.get(aid('techlog'))).toMatchObject({ data: 'bad', rpo: 15 });
     expect(n.nodes.get('domain:acme/maintenance')).toMatchObject({ check: 'bad', data: 'bad' });
     expect(n.nodes.get('domain:acme/stores')).toMatchObject({ check: 'ok', data: 'na' });
-    expect(lightOf(n.nodes.get(P('plan-checks'))!, 'data')).toBe('ok');
-    expect(lightOf(n.nodes.get(P('plan-checks'))!, 'both')).toBe('bad');
+    expect(lightOf(n.nodes.get(pid('plan-checks'))!, 'data')).toBe('ok');
+    expect(lightOf(n.nodes.get(pid('plan-checks'))!, 'both')).toBe('bad');
   });
 
   it('leaves the data continuity unchecked when the cluster does not give it', () => {
     const n = navigator({ map: MAP });
     expect(n.dataKnown).toBe(false);
     expect(n.columns[5]).toEqual([]);
-    expect(n.nodes.get(P('fix-defects'))?.data).toBe('na');
+    expect(n.nodes.get(pid('fix-defects'))?.data).toBe('na');
   });
 
   it('keeps the thread of what is selected and narrows it step by step', () => {
     const n = nav();
-    expect(threadOf(n, A('planner'))).toEqual(new Set([A('planner'), `dig:${A('planner')}`, P('plan-checks'), P('ship-parts'), 'domain:acme/maintenance', 'domain:acme/stores']));
+    expect(threadOf(n, aid('planner'))).toEqual(new Set([aid('planner'), `dig:${aid('planner')}`, pid('plan-checks'), pid('ship-parts'), 'domain:acme/maintenance', 'domain:acme/stores']));
     let trail = pick(n, [], 'domain:acme/maintenance');
-    trail = pick(n, trail, P('plan-checks'));
-    trail = pick(n, trail, A('planner'));
-    expect(trail).toEqual(['domain:acme/maintenance', P('plan-checks'), A('planner')]);
+    trail = pick(n, trail, pid('plan-checks'));
+    trail = pick(n, trail, aid('planner'));
+    expect(trail).toEqual(['domain:acme/maintenance', pid('plan-checks'), aid('planner')]);
     // only the way through that process, not everything the application serves
-    expect([...visibleOf(n, trail)].sort()).toEqual([A('planner'), `dig:${A('planner')}`, P('plan-checks'), 'domain:acme/maintenance'].sort());
+    expect([...visibleOf(n, trail)].sort()).toEqual([aid('planner'), `dig:${aid('planner')}`, pid('plan-checks'), 'domain:acme/maintenance'].sort());
     // one of the trail goes back to it, the last one again goes back a step, anything else starts again
-    expect(pick(n, trail, P('plan-checks'))).toEqual(['domain:acme/maintenance', P('plan-checks')]);
-    expect(pick(n, trail, A('planner'))).toEqual(['domain:acme/maintenance', P('plan-checks')]);
+    expect(pick(n, trail, pid('plan-checks'))).toEqual(['domain:acme/maintenance', pid('plan-checks')]);
+    expect(pick(n, trail, aid('planner'))).toEqual(['domain:acme/maintenance', pid('plan-checks')]);
     expect(pick(n, trail, 'domain:acme/stores')).toEqual(['domain:acme/stores']);
     expect(visibleOf(n, []).size).toBe(n.nodes.size);
   });
@@ -136,11 +136,11 @@ describe('continuity navigator model', () => {
     expect(all.columns.map(c => c.count)).toEqual([2, 1, 3, 1, 2, 2, 2]);
     const x = (id: string) => all.boxes.find(b => b.id === id)!.x;
     expect(x('domain:acme/line')).toBeGreaterThan(x('domain:acme/maintenance'));
-    expect(x(A('techlog'))).toBeGreaterThan(x(P('raise-report')));
+    expect(x(aid('techlog'))).toBeGreaterThan(x(pid('raise-report')));
     // from the process to the application, as that application is for that process
-    expect(all.links.find(l => l.from === P('plan-checks') && l.to === A('planner'))?.light).toBe('bad');
-    expect(all.links.find(l => l.from === P('plan-checks') && l.to === A('techlog'))?.light).toBe('ok');
-    expect(all.links.find(l => l.from === P('fix-defects') && l.to === A('techlog'))?.light).toBe('bad');
+    expect(all.links.find(l => l.from === pid('plan-checks') && l.to === aid('planner'))?.light).toBe('bad');
+    expect(all.links.find(l => l.from === pid('plan-checks') && l.to === aid('techlog'))?.light).toBe('ok');
+    expect(all.links.find(l => l.from === pid('fix-defects') && l.to === aid('techlog'))?.light).toBe('bad');
     expect(layout(n, visibleOf(n, []), 'both', 300).width).toBe(1120);
   });
 
@@ -150,24 +150,24 @@ describe('continuity navigator model', () => {
     const l = layout(n, visibleOf(n, []), 'both', 1400);
     expect(l.columns[2]).toMatchObject({ count: FOLD + 1, folded: true });
     expect(l.boxes.filter(b => b.col === 2)).toEqual([expect.objectContaining({ id: foldId(2), fold: { count: FOLD + 1, gaps: 0 } })]);
-    expect(l.links.map(k => k.key)).toEqual(expect.arrayContaining([`domain:acme/stores>${foldId(2)}`, `${foldId(2)}>${A('planner')}`]));
+    expect(l.links.map(k => k.key)).toEqual(expect.arrayContaining([`domain:acme/stores>${foldId(2)}`, `${foldId(2)}>${aid('planner')}`]));
     // selecting one of them opens the column
-    expect(layout(n, visibleOf(n, [P('p3')]), 'both', 1400).columns[2]).toMatchObject({ count: 1, folded: false });
+    expect(layout(n, visibleOf(n, [pid('p3')]), 'both', 1400).columns[2]).toMatchObject({ count: 1, folded: false });
   });
 
   it('says what a loss reaches', () => {
     const n = nav();
-    const loss = lossOf(n, `data:${A('techlog')}/postgres-data`);
+    const loss = lossOf(n, `data:${aid('techlog')}/postgres-data`);
     expect(loss).toMatchObject({ processes: 2, critical: 1, domains: 1, rpo: 15, every: 360 });
-    expect(loss.hit.has(P('raise-report'))).toBe(true);
+    expect(loss.hit.has(pid('raise-report'))).toBe(true);
     expect(loss.hit.has('domain:acme/stores')).toBe(false);
-    expect(lossOf(n, A('planner'))).toMatchObject({ processes: 2, domains: 2, app: undefined });
+    expect(lossOf(n, aid('planner'))).toMatchObject({ processes: 2, domains: 2, app: undefined });
   });
 
   it('lists the processes on screen worst first, and walks the tour down the first critical gap', () => {
     const n = nav();
     expect(processesOf(n, visibleOf(n, []), 'both').map(p => p.title)).toEqual(['fix-defects', 'raise-report', 'plan-checks', 'ship-parts']);
-    expect(tourOf(n)).toEqual(['domain:acme/maintenance', 'domain:acme/line', P('fix-defects'), A('techlog'), `data:${A('techlog')}/postgres-data`]);
+    expect(tourOf(n)).toEqual(['domain:acme/maintenance', 'domain:acme/line', pid('fix-defects'), aid('techlog'), `data:${aid('techlog')}/postgres-data`]);
     expect(tourOf(navigator({ map: { domains: [], processes: [] } }))).toEqual([]);
   });
 });
