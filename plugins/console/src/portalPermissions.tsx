@@ -18,7 +18,7 @@ const AREA_PATHS: Array<[string, string[]]> = [
   ['create', ['/console/create', '/console/development']],
   ['newframework', ['/console/new-framework']],
   ['frameworks', ['/console/frameworks', '/console/heatmap']],
-  ['business', ['/console/business-map', '/console/data-continuity']],
+  ['business', ['/console/business-map', '/console/data-continuity', '/console/continuity-navigator']],
   ['continuity', ['/console/continuity']],
   ['costs', ['/console/costs']],
   ['security', ['/console/sec-assistant']],

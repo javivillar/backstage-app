@@ -90,6 +90,7 @@ export const NAV_ICONS: Record<string, SvgIconComponent> = {
   '/console/monitoring': MonitorHeartIcon,
   '/console/business-map': SchemaIcon,
   '/console/data-continuity': BackupIcon,
+  '/console/continuity-navigator': AccountTreeIcon,
   '/console/frameworks': ViewTimelineIcon,
   '/console/heatmap': GridOnIcon,
   '/console/development/python-framework-app': TerminalIcon,
