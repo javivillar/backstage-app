@@ -537,7 +537,8 @@ export const ContinuityNavigatorPage = () => {
   let lossText = '';
   if (loss && lostNode) {
     if (!loss.app) lossText = t('cn.loss.unknown');
-    else if (loss.every === undefined) lossText = t('cn.loss.noCopies');
+    else if (loss.app.state === 'noplan') lossText = t('cn.loss.noCopies');
+    else if (loss.every === undefined) lossText = t('cn.loss.unknownEvery');
     else if (loss.rpo !== undefined) lossText = t(loss.every > loss.rpo ? 'cn.loss.gap' : 'cn.loss.meets', { every: span(loss.every), rpo: span(loss.rpo) });
     if (loss.app?.lastBackup) lossText += ` ${t('cn.loss.lastBackup', { when: when(loss.app.lastBackup, t, lang) })}`;
   }

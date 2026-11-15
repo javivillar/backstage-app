@@ -5,6 +5,10 @@ export const PULLS: Messages = {
   'pc.title': { en: 'Changes asked for', es: 'Cambios solicitados' },
   'pc.sub.pending': { en: '{n} waiting to be accepted. A change applies once its pull request is merged.', es: '{n} pendientes de aceptar. Un cambio se aplica cuando se fusiona su pull request.' },
   'pc.sub.none': { en: 'Nothing is waiting. These are the changes of the last 14 days.', es: 'No hay nada pendiente. Estos son los cambios de los últimos 14 días.' },
+  'pc.sub.empty': { en: 'No change asked for from here in the last 14 days.', es: 'No se ha solicitado ningún cambio desde aquí en los últimos 14 días.' },
+  'pc.refresh': { en: 'Refresh', es: 'Actualizar' },
+  'pc.refreshing': { en: 'Reading GitHub…', es: 'Leyendo GitHub…' },
+  'pc.readAt': { en: 'State read at {time}', es: 'Estado leído a las {time}' },
   'pc.col.change': { en: 'Change', es: 'Cambio' },
   'pc.col.by': { en: 'Asked by', es: 'Solicitado por' },
   'pc.col.when': { en: 'Opened', es: 'Abierto' },
@@ -32,6 +36,14 @@ export const PULLS: Messages = {
   'dp.plans.applies': {
     en: 'An accepted plan applies when Argo CD syncs protection-oneke.',
     es: 'Un plan aceptado se aplica cuando Argo CD sincroniza protection-oneke.',
+  },
+  'bmf.pr.applies': {
+    en: 'An accepted change of the model shows in Business continuity once the catalogue reads the repository again (a few minutes).',
+    es: 'Un cambio aceptado del modelo se ve en Continuidad del negocio cuando el catálogo vuelve a leer el repositorio (unos minutos).',
+  },
+  'bmd.mx.pr.applies': {
+    en: 'An accepted exercise is kept in the continuity plan of the customer (refresquito-specs).',
+    es: 'Un ejercicio aceptado queda en el plan de continuidad del cliente (refresquito-specs).',
   },
   'org.pr.applies': {
     en: 'An accepted change shows here once the catalogue reads the repository again (a few minutes).',

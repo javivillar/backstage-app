@@ -26,6 +26,8 @@ export const PROGRAMMES: Messages = {
   'prog.searchFor': { en: 'Search "{value}"', es: 'Buscar «{value}»' },
   'prog.count': { en: '{shown} of {all} programmes ({catalogue} in the catalogue, {test} test)', es: '{shown} de {all} programas ({catalogue} en el catálogo, {test} de test)' },
   'prog.empty': { en: 'No programme matches', es: 'Ningún programa coincide' },
+  'prog.page.size': { en: 'Programmes per page', es: 'Programas por página' },
+  'prog.page.shown': { en: '{from}–{to} of {count}', es: '{from}–{to} de {count}' },
   'prog.col.programme': { en: 'Programme', es: 'Programa' },
   'prog.col.industry': { en: 'Industry', es: 'Industria' },
   'prog.col.customer': { en: 'Customer', es: 'Cliente' },

@@ -8,6 +8,7 @@ import { Fragment, useMemo, useState } from 'react';
 import PowerSettingsNew from '@mui/icons-material/PowerSettingsNew';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
+import { PendingChanges } from '../PendingChanges';
 import { choose, EmptyState, Kpis, Pill, TitleRow, type Tone } from '../ui';
 import { BusinessMapTabs } from './BusinessMapTabs';
 import { type Dot, NamespacePicker, useDots } from './DashboardParts';
@@ -321,6 +322,7 @@ export const BusinessMatrixPage = () => {
               </Typography>
             )}
             {saved.state === 'error' && <WarningPanel severity="error" title={t('bmd.mx.notSaved')} message={saved.error} />}
+            <PendingChanges plugin="business-map" path="/exercises/pulls" refresh={saved.number} applies={t('bmd.mx.pr.applies')} />
           </Box>
         </Box>
       )}

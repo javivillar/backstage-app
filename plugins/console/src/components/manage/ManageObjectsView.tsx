@@ -20,6 +20,7 @@ import { Badge } from '../Badge';
 import { TONES } from '../Flow';
 import { type HostOf, type Row, useHostOf, useManagerList } from '../ManagePages';
 import { rq } from '../tokens';
+import { PendingChanges } from '../PendingChanges';
 import { DeleteConfirm } from './DeleteConfirm';
 import { ManageForm } from './ManageForm';
 import type { Field } from './manageFormModel';
@@ -264,6 +265,8 @@ export const ManageObjectsView = ({ kind }: { kind: Kind }) => {
           </Box>
         )}
       </Box>
+      {/* the Manage pull requests and where each one stands */}
+      <PendingChanges plugin="manage" path="/pulls" refresh={pending.data?.length} applies={tx('An accepted change is applied by the service that owns the object, within minutes.', 'Un cambio aceptado lo aplica el servicio dueño del objeto, en unos minutos.')} />
     </Box>
   );
 };

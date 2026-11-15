@@ -1,12 +1,15 @@
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useI18n } from '../i18n';
 import type { PostAnswer } from '../post';
+import { PULL_TONE, type PullState, usePulls } from '../pulls';
 import { type ConsolePull, lifecycle, pullKind, pullTarget, type ReconcileStatus } from '../zone';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
+import { Pill } from './ui';
 
 export type Note = { ok: boolean; text: string; url?: string };
 
@@ -61,31 +64,80 @@ export const ConfirmBar = ({ text, onYes, onNo }: { text: string; onYes: () => v
   </Box>
 );
 
-/** The pull requests of the console waiting for review: merged, the change happens. */
-export const PullList = ({ pulls }: { pulls: ConsolePull[] }) =>
-  pulls.length === 0 ? null : (
-    <Table
-      head={['Waiting for review', 'Change', 'Opened']}
-      rows={pulls.map(p => [
-        <a href={p.url} target="_blank" rel="noopener noreferrer">
-          #{p.number}
-        </a>,
-        <span>
-          <Badge label={pullKind(p)} {...TONES.info} /> {p.title.replace(/^console: /, '')}
-        </span>,
-        new Date(p.created).toLocaleString(),
-      ])}
-    />
+/**
+ * Where the requests of the console stand in GitHub (backend GET /api/cluster/pulls of both repositories: the
+ * infrastructure and the virtual machines), by the address of the pull request; reload() reads GitHub again.
+ */
+export function useRequestStates() {
+  const infra = usePulls('cluster', '/pulls?repo=infra');
+  const vms = usePulls('cluster', '/pulls?repo=vms');
+  const byUrl = useMemo(() => new Map<string, PullState>([...infra.pulls, ...vms.pulls].map(p => [p.url, p.state])), [infra.pulls, vms.pulls]);
+  const reload = () => {
+    infra.reload();
+    vms.reload();
+  };
+  return { byUrl, loading: infra.loading || vms.loading, readAt: infra.readAt ?? vms.readAt, reload };
+}
+type RequestStates = ReturnType<typeof useRequestStates>;
+
+/** The state of an open request in GitHub (its checks, or that it was accepted or closed meanwhile); nothing when unknown. */
+const CheckState = ({ state }: { state?: PullState }) => {
+  const { t } = useI18n();
+  return state && state !== 'open' ? <Pill tone={PULL_TONE[state]}>{t(`pc.state.${state}`)}</Pill> : null;
+};
+
+/** Refresh, and when the state of the requests was read. */
+const RefreshBar = ({ states }: { states: RequestStates }) => {
+  const { t, lang } = useI18n();
+  return (
+    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+      <Button variant="outlined" size="small" disabled={states.loading} onClick={states.reload} sx={{ textTransform: 'none' }}>
+        {t(states.loading ? 'pc.refreshing' : 'pc.refresh')}
+      </Button>
+      {states.readAt && (
+        <Typography variant="caption" color="text.secondary">
+          {t('pc.readAt', { time: states.readAt.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) })}
+        </Typography>
+      )}
+    </Box>
   );
+};
+
+/** The pull requests of the console waiting for review: merged, the change happens. */
+export const PullList = ({ pulls }: { pulls: ConsolePull[] }) => {
+  const states = useRequestStates();
+  if (pulls.length === 0) return null;
+  return (
+    <>
+      <RefreshBar states={states} />
+      <Table
+        head={['Waiting for review', 'Change', 'Opened', 'State']}
+        rows={pulls.map(p => [
+          <a key="n" href={p.url} target="_blank" rel="noopener noreferrer">
+            #{p.number}
+          </a>,
+          <span key="c">
+            <Badge label={pullKind(p)} {...TONES.info} /> {p.title.replace(/^console: /, '')}
+          </span>,
+          new Date(p.created).toLocaleString(),
+          <CheckState key="s" state={states.byUrl.get(p.url)} />,
+        ])}
+      />
+    </>
+  );
+};
 
 /**
  * Every request of the console of the last days, open or merged, with where it is now: waiting for review, merged and
  * waiting for the host, done or failed (from what the host reported).
  */
 export const RequestsTable = ({ open, merged, reconcile, only }: { open: ConsolePull[]; merged: ConsolePull[]; reconcile?: ReconcileStatus; only?: (p: ConsolePull) => boolean }) => {
+  const states = useRequestStates();
   const rows = [...open, ...merged].filter(p => !only || only(p));
   if (!rows.length) return <Typography color="text.secondary">No request in the last 7 days.</Typography>;
   return (
+    <>
+    <RefreshBar states={states} />
     <Table
       head={['Request', 'Change', 'Target', 'State']}
       rows={rows.map(p => {
@@ -99,6 +151,12 @@ export const RequestsTable = ({ open, merged, reconcile, only }: { open: Console
           t.zone ? `${t.zone}/${t.program ?? ''}${t.name ? ` · ${t.name}` : ''}` : p.title.replace(/^console: /, ''),
           <span>
             <Badge label={l.label} {...TONES[l.tone]} />
+            {/* an open request: its checks in GitHub; a merged one is followed by the host, above */}
+            {!p.merged && (
+              <Box component="span" sx={{ ml: 0.75 }}>
+                <CheckState state={states.byUrl.get(p.url)} />
+              </Box>
+            )}
             {l.detail && (
               <Typography variant="caption" color="text.secondary" component="div">
                 {l.detail}
@@ -108,5 +166,6 @@ export const RequestsTable = ({ open, merged, reconcile, only }: { open: Console
         ];
       })}
     />
+    </>
   );
 };

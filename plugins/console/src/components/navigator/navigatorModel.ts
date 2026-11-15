@@ -303,7 +303,7 @@ export function visibleOf(nav: Navigator, trail: string[]): Set<string> {
 export type Size = 'big' | 'med' | 'cmp';
 export const SIZES: Record<Size, { h: number; gap: number }> = { big: { h: 78, gap: 10 }, med: { h: 44, gap: 6 }, cmp: { h: 22, gap: 3 } };
 /** a column with more boxes than this is drawn as one box that says how many it holds */
-export const FOLD = 40;
+export const FOLD = 60;
 export const MIN_WIDTH = 1120;
 const WEIGHT = [1.15, 1.15, 1.6, 1.25, 1.1, 1.35, 1.1];
 const TOP = 54;

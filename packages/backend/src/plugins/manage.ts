@@ -4,6 +4,7 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import express, { Router } from 'express';
 import { mayAct, ownsEntity } from './clusterActions';
 import { GitHubFiles, PR_PREFIX } from './clusterVms';
+import { PullReader, pullsHandler } from './consolePulls';
 // the kinds of object of IAM, API management, Data management and Business intelligence (each file registers its own)
 import './manageHandlersIam';
 import './manageHandlersGravitee';
@@ -154,6 +155,10 @@ export default createBackendPlugin({
         };
 
         const router = Router();
+        // the Manage pull requests of refresquito-services and where each one stands (those of the repositories of
+        // the applications, their dashboards, are only in /pending)
+        const managePulls = new PullReader(config.getOptionalString('console.manage.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.manage.branch') ?? 'main', token);
+        router.get('/pulls', pullsHandler(managePulls, () => [`${PR_PREFIX}${SLUG}`], r => httpAuth.credentials(r, { allow: ['user'] }), m => logger.warn(`manage: ${m}`)));
         router.use(express.json({ limit: '1mb' })); // a dashboard exported from Grafana
         const fail = (res: express.Response, e: unknown) => {
           if (e instanceof ChangeError) res.status(e.status).json({ error: e.message, errors: e.errors });

@@ -7,6 +7,7 @@ import { readFileSync } from 'fs';
 import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { type ActionRecord, ArgoClient, type ArgoInstance, mayAct, NAME, ownsEntity, WORKLOAD_KINDS } from './clusterActions';
 import { summariseZone, type ZoneView } from './clusterZone';
+import { PullReader, pullsHandler } from './consolePulls';
 import { type ComponentRequest, componentName, type ConsolePull, GitHubFiles, refuse, refuseComponent, type VmPolicy, type VmRequest, vmFileName, workspaceState } from './clusterVms';
 import { actionRequest, addSegregation, type ClusterFile, clusterFileName, deleteCluster, refuseCluster, removeSegregation, scaleCluster } from './clusterInfra';
 import { type ClusterOverview, prometheusQuery, type Query, readOverview } from './clusterOverview';
@@ -260,6 +261,16 @@ export default createBackendPlugin({
         const zonePrograms = async (): Promise<string[]> => ((await readZone())?.zones ?? []).flatMap(z => z.programs.map(p => `${z.name}/${p.name}`));
 
         const router = Router();
+        // where the requests of the console stand (the checks of each open pull request), for the lists of requests:
+        // repo=infra (segregations, clusters, interconnection) | repo=vms (virtual machines and components)
+        const requestPulls: Record<string, { reader: PullReader; prefixes: string[] }> = {
+          infra: { reader: new PullReader(config.getOptionalString('console.infra.repo') ?? 'javivillar/opennebula', config.getOptionalString('console.infra.branch') ?? 'main', ghToken), prefixes: ['console/'] },
+          vms: { reader: new PullReader(config.getOptionalString('console.vms.repo') ?? 'javivillar/refresquito-services', config.getOptionalString('console.vms.branch') ?? 'main', ghToken), prefixes: ['console/vm-'] },
+        };
+        router.get('/pulls', (req, res) => {
+          const of = requestPulls[String(req.query.repo)];
+          return pullsHandler(of?.reader ?? requestPulls.infra.reader, () => of?.prefixes, r => httpAuth.credentials(r, { allow: ['user'] }), m => logger.warn(`cluster: requests: ${m}`))(req, res);
+        });
         router.use(express.json({ limit: '16kb' }));
         router.get('/overview', async (req, res) => {
           try {

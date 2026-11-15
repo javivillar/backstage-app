@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import CheckCircle from '@mui/icons-material/CheckCircle';
 import Cancel from '@mui/icons-material/Cancel';
 import { type ReactNode, useEffect, useState } from 'react';
+import { PendingChanges } from '../PendingChanges';
 import { Link } from 'react-router-dom';
 import { useI18n } from '../../i18n';
 import { useRq } from '../../theme/consoleTheme';
@@ -227,6 +228,7 @@ export const TaskPanel = ({ id, title, onAgain }: { id: string; title: string; o
   else if (failed) summary = t('bmf.task.failed');
   const pr = links.find(l => l.url && /^https?:/.test(l.url));
   return (
+    <>
     <FormCard
       foot={
         <>
@@ -300,5 +302,8 @@ export const TaskPanel = ({ id, title, onAgain }: { id: string; title: string; o
         </Box>
       )}
     </FormCard>
+    {/* the pull requests of the business model (imports, adoptions, processes) and where each one stands */}
+    <PendingChanges plugin="business-map" path="/pulls?kind=model" refresh={status} applies={t('bmf.pr.applies')} always />
+    </>
   );
 };

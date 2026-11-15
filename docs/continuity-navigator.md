@@ -134,7 +134,7 @@ checked.
 
 ## Large models
 
-A column with more than 40 boxes on screen is **folded** into one dashed box that says how many it holds (for example
+A column with more than 60 boxes on screen is **folded** into one dashed box that says how many it holds (for example
 *352 processes*); the links pass through it and keep the worst colour of what they stand for. Selecting a domain or
 subdomain on its left opens it. A model imported from APQC with thousands of sub-processes therefore opens folded and
 unfolds as the thread narrows. Only what is on screen is drawn.

@@ -1,5 +1,5 @@
 import { discoveryApiRef, fetchApiRef, useApi } from '@backstage/core-plugin-api';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Tone } from './components/ui';
 
 /**
@@ -19,27 +19,34 @@ export function orderPulls(pulls: ChangePull[], match?: string): ChangePull[] {
   return pulls.filter(p => !match || p.branch.startsWith(match)).sort((a, b) => Number(isPending(b)) - Number(isPending(a)) || when(b) - when(a));
 }
 
+/** The path that asks the backend to read GitHub again (?fresh=1). */
+export const freshPath = (path: string, fresh: boolean) => (fresh ? `${path}${path.includes('?') ? '&' : '?'}fresh=1` : path);
+
 /**
  * The pull requests of a kind; read again when `refresh` changes (after the page opens one). A page must work
- * without them: any failure is an empty list.
+ * without them: any failure is an empty list. reload() reads GitHub again (the Refresh button).
  */
-export function usePulls(plugin: string, path: string, refresh?: unknown): { loading: boolean; pulls: ChangePull[] } {
+export function usePulls(plugin: string, path: string, refresh?: unknown): { loading: boolean; pulls: ChangePull[]; readAt?: Date; reload: () => void } {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
-  const [state, setState] = useState<{ loading: boolean; pulls: ChangePull[] }>({ loading: true, pulls: [] });
+  const [state, setState] = useState<{ loading: boolean; pulls: ChangePull[]; readAt?: Date }>({ loading: true, pulls: [] });
+  // asked again by hand: GitHub is read again instead of what the backend kept
+  const [asked, setAsked] = useState(0);
   useEffect(() => {
     let alive = true;
+    setState(s => ({ ...s, loading: true }));
     (async () => {
-      const res = await fetch(`${await discovery.getBaseUrl(plugin)}${path}`);
+      const res = await fetch(`${await discovery.getBaseUrl(plugin)}${freshPath(path, asked > 0)}`);
       const body = res.ok ? ((await res.json().catch(() => ({}))) as { pulls?: ChangePull[] }) : {};
       return Array.isArray(body.pulls) ? body.pulls : [];
     })().then(
-      pulls => alive && setState({ loading: false, pulls }),
+      pulls => alive && setState({ loading: false, pulls, readAt: new Date() }),
       () => alive && setState({ loading: false, pulls: [] }),
     );
     return () => {
       alive = false;
     };
-  }, [discovery, fetch, plugin, path, refresh]);
-  return state;
+  }, [discovery, fetch, plugin, path, refresh, asked]);
+  const reload = useCallback(() => setAsked(n => n + 1), []);
+  return { ...state, reload };
 }
