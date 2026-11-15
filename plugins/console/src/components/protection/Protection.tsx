@@ -229,8 +229,25 @@ const Timeline = ({ app }: { app: App }) => {
 };
 
 /** What is kept of an application: its plan, its recovery points, its volumes and its last backups. */
-export const AppProtection = ({ app, data }: { app: App; data: Protection }) => {
+export const AppProtection = ({ app, data, copyNow }: { app: App; data: Protection; copyNow?: (app: string, what: 'snapshot' | 'backup') => Promise<{ names: string[] }> }) => {
   const { t, lang } = useI18n();
+  const [busy, setBusy] = useState<'snapshot' | 'backup'>();
+  const [asked, setAsked] = useState<{ ok: boolean; text: string }>();
+  const ask = async (what: 'snapshot' | 'backup') => {
+    if (!copyNow) return;
+    setBusy(what);
+    setAsked(undefined);
+    try {
+      const r = await copyNow(app.app, what);
+      setAsked({ ok: true, text: what === 'snapshot' ? t('dp.now.snapshot.done', { n: r.names.length }) : t('dp.now.backup.done', { name: r.names[0] }) });
+    } catch (e) {
+      setAsked({ ok: false, text: `${t('dp.now.failed')}: ${(e as Error).message}` });
+    } finally {
+      setBusy(undefined);
+    }
+  };
+  const canSnapshot = Boolean(copyNow && data.may && app.volumes.some(v => (v.storageClass ?? '').startsWith('longhorn')));
+  const canBackup = Boolean(copyNow && data.may && app.plan !== 'none' && !app.holdsStore);
   const prices = useProtectionPrices();
   const plan = data.plans[app.plan];
   const cost = monthlyCost(app, prices);
@@ -249,9 +266,26 @@ export const AppProtection = ({ app, data }: { app: App; data: Protection }) => 
   return (
     <>
       <Card title={t('dp.app.protection')} sub={<Id>{app.namespace}</Id>}>
-        <Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
           <Pill tone={STATE_TONE[app.state]}>{t(`dp.state.${app.state}`)}</Pill>
+          <Box sx={{ ml: 'auto', display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {canSnapshot && (
+              <Button variant="outlined" size="small" disabled={Boolean(busy)} onClick={() => ask('snapshot')}>
+                {busy === 'snapshot' ? t('dp.now.working') : t('dp.now.snapshot')}
+              </Button>
+            )}
+            {canBackup && (
+              <Button variant="outlined" size="small" disabled={Boolean(busy)} onClick={() => ask('backup')}>
+                {busy === 'backup' ? t('dp.now.working') : t('dp.now.backup')}
+              </Button>
+            )}
+          </Box>
         </Box>
+        {asked && (
+          <Note tone={asked.ok ? 'pos' : 'warn'}>
+            <Box role="status">{asked.text}</Box>
+          </Note>
+        )}
         {reason && <Note tone="warn">{reason}</Note>}
         <Facts rows={facts} />
       </Card>
@@ -290,14 +324,14 @@ export const AppProtection = ({ app, data }: { app: App; data: Protection }) => 
 export const ProtectionAppPage = () => {
   const { t } = useI18n();
   const { app: name = '' } = useParams();
-  const { data, pending } = useLoaded();
+  const { data, pending, copyNow } = useLoaded();
   const app = data?.apps.find(a => a.app === name);
   const head = <TitleRow crumbs={crumbs(t, [t('nav.dataContinuity'), BASE], [name])} title={name} sub={app ? t('dp.app.sub', { ns: app.namespace }) : undefined} />;
   if (pending || !data) return <>{head}{pending}</>;
   return (
     <Box sx={{ display: 'grid', gap: 2.5 }}>
       {head}
-      {app ? <AppProtection app={app} data={data} /> : <EmptyState title={t('dp.app.missing')} />}
+      {app ? <AppProtection app={app} data={data} copyNow={copyNow} /> : <EmptyState title={t('dp.app.missing')} />}
     </Box>
   );
 };
@@ -333,7 +367,7 @@ const SharedTable = ({ apps, data }: { apps: App[]; data: Protection }) => {
 export const EntityProtectionContent = () => {
   const { t } = useI18n();
   const { entity } = useEntity();
-  const { data, pending } = useLoaded();
+  const { data, pending, copyNow } = useLoaded();
   const namespace = entity.metadata.annotations?.['backstage.io/kubernetes-namespace'];
   const shared = useMemo(() => {
     const names = new Set((entity.relations ?? []).filter(r => r.type === 'dependsOn').map(r => r.targetRef.split('/').pop() ?? ''));
@@ -348,7 +382,7 @@ export const EntityProtectionContent = () => {
         <Link to={BASE}>{t('dp.all')}</Link>
       </Typography>
       {app && app.state === 'ok' && bad.length > 0 && <Note tone="warn">{t('dp.shared.bad', { n: bad.length, total: shared.length, names: bad.map(a => a.app).join(', ') })}</Note>}
-      {app ? <AppProtection app={app} data={data} /> : <EmptyState title={t('dp.app.missing')} />}
+      {app ? <AppProtection app={app} data={data} copyNow={copyNow} /> : <EmptyState title={t('dp.app.missing')} />}
       {shared.length > 0 && (
         <Card title={t('dp.shared')} sub={t('dp.shared.sub')}>
           <Box>
@@ -487,7 +521,23 @@ export const ProtectionPlansPage = () => {
 export const ProtectionStorePage = () => {
   const { t, lang } = useI18n();
   const rq = useRq();
-  const { data, pending } = useLoaded();
+  const { data, pending, moveStore } = useLoaded();
+  const [url, setUrl] = useState('');
+  const [bucket, setBucket] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [moved, setMoved] = useState<{ pull: { number: number; url: string }; version: string }>();
+  const [failure, setFailure] = useState<string>();
+  const step = async (s: Parameters<typeof moveStore>[0]) => {
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      setMoved(await moveStore(s));
+    } catch (e) {
+      setFailure((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const head = <TitleRow crumbs={crumbs(t, [t('nav.dataContinuity'), BASE], [t('dp.store')])} title={t('dp.store')} sub={t('dp.store.sub')} />;
   if (pending || !data || !data.store) return <>{head}{pending}</>;
   const s = data.store;
@@ -535,6 +585,40 @@ export const ProtectionStorePage = () => {
           <Typography variant="caption" color="text.secondary">
             <Link to={guide(data)}>{t('dp.move.guide')}</Link>
           </Typography>
+          {moved && (
+            <Note tone="pos">
+              <Box role="status" sx={{ flex: '1 1 320px' }}>
+                {t('dp.move.done', { n: moved.pull.number, version: moved.version })} {t('dp.plans.done.next')}
+              </Box>
+              <Link to={moved.pull.url}>{t('dp.plans.see')}</Link>
+            </Note>
+          )}
+          {failure && <Note tone="warn">{failure}</Note>}
+          {data.may && !moved && !s.next?.url && (
+            <Box component="form" onSubmit={(e: { preventDefault: () => void }) => { e.preventDefault(); step({ step: 'add', url, ...(bucket ? { bucket } : {}) }); }} sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+              <TextField size="small" required label={t('dp.move.url')} placeholder="https://backups.example:8333" value={url} onChange={e => setUrl(e.target.value)} sx={{ flex: '2 1 280px' }} />
+              <TextField size="small" label={t('dp.move.bucket')} value={bucket} onChange={e => setBucket(e.target.value)} sx={{ flex: '1 1 200px' }} />
+              <Button type="submit" variant="contained" disabled={busy || !url.trim()}>
+                {t('dp.move.add')}
+              </Button>
+            </Box>
+          )}
+          {data.may && !moved && s.next?.url && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center' }}>
+              <Typography sx={{ flex: '1 1 260px', minWidth: 0 }}>{t('dp.move.inProgress', { url: s.next.url })}</Typography>
+              <Button variant="contained" disabled={busy} onClick={() => step({ step: 'switch' })}>
+                {t('dp.move.switch')}
+              </Button>
+              <Button variant="outlined" disabled={busy} onClick={() => step({ step: 'cancel' })}>
+                {t('dp.move.cancel')}
+              </Button>
+            </Box>
+          )}
+          {!data.may && (
+            <Typography variant="caption" color="text.secondary">
+              {t('dp.plans.may', { groups: data.groups.join(', ') })}
+            </Typography>
+          )}
         </Card>
       ) : (
         <Note tone="pos">{t('dp.moved')}</Note>

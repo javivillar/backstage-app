@@ -36,6 +36,8 @@ const posts: unknown[] = [];
 const fetchFake = async (url: RequestInfo | URL, init?: RequestInit) => {
   if (init?.method === 'POST') {
     posts.push(JSON.parse(String(init.body)));
+    if (String(url).endsWith('/snapshot')) return new Response('{"names":["console-1-0"]}');
+    if (String(url).endsWith('/backup')) return new Response('{"names":["petstore-oneke-manual-1"]}');
     return new Response('{"pull":{"number":21,"url":"https://github.com/o/services/pull/21"},"version":"0.1.1","changed":[]}');
   }
   if (!String(url).endsWith('/api/protection')) return new Response('{}', { status: 404 });
@@ -103,6 +105,40 @@ describe('Data continuity', () => {
     expect(screen.getByRole('img', { name: 'Backups: 1 in 7 days' })).toBeInTheDocument();
     expect(within(section('Volumes')).getByText('db')).toBeInTheDocument();
     expect(within(section('Last backups')).getByText('Completed')).toBeInTheDocument();
+  });
+
+  it('asks for a snapshot and a backup now, only where they make sense', async () => {
+    await show(<ProtectionAppPage />, '/app/petstore-oneke');
+    fireEvent.click(await screen.findByRole('button', { name: 'Snapshot now' }));
+    expect(await screen.findByText('Snapshot asked of Longhorn for 1 volumes. It shows here in a minute.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back up now' }));
+    expect(await screen.findByText('Backup petstore-oneke-manual-1 asked of Velero. It shows here when it completes.')).toBeInTheDocument();
+  });
+
+  it('offers no backup to the application that holds the store, and nothing to who may not', async () => {
+    const first = await show(<ProtectionAppPage />, '/app/seaweedfs-oneke');
+    expect(await screen.findByRole('button', { name: 'Snapshot now' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back up now' })).not.toBeInTheDocument();
+    first.unmount();
+    answer = { status: 200, body: body({ may: false }) };
+    await show(<ProtectionAppPage />, '/app/petstore-oneke');
+    await waitFor(() => section('Protection'));
+    expect(screen.queryByRole('button', { name: 'Snapshot now' })).not.toBeInTheDocument();
+  });
+
+  it('moves the store with pull requests: add the new one, then make it the only one', async () => {
+    const first = await show(<ProtectionStorePage />);
+    fireEvent.change(await screen.findByLabelText(/Address of its S3 API/), { target: { value: 'https://backups.example:8333' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open the pull request that adds it' }));
+    await waitFor(() => expect(posts).toEqual([{ step: 'add', url: 'https://backups.example:8333' }]));
+    expect(await screen.findByText(/Pull request #21 opened/)).toBeInTheDocument();
+    first.unmount();
+    posts.length = 0;
+    answer = { status: 200, body: body({ store: { kind: 'seaweedfs', url: 'http://seaweedfs:8333', bucket: 'velero', inCluster: true, next: { url: 'https://backups.example:8333' } } }) };
+    await show(<ProtectionStorePage />);
+    expect(await screen.findByText('Both stores are written: https://backups.example:8333')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the pull request that makes it the only store' }));
+    await waitFor(() => expect(posts).toEqual([{ step: 'switch' }]));
   });
 
   it('changes the plan of an application with a pull request', async () => {

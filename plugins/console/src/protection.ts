@@ -131,5 +131,18 @@ export function useProtection() {
     },
     [discovery, fetch],
   );
-  return { ...state, post };
+  const send = useCallback(
+    async <A,>(path: string, body?: object): Promise<A> => {
+      const res = await fetch(`${await discovery.getBaseUrl('protection')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+      const answer = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((answer as { error?: string }).error ?? `${res.status} ${res.statusText}`);
+      return answer as A;
+    },
+    [discovery, fetch],
+  );
+  /** a snapshot or a backup of an application, now */
+  const copyNow = useCallback((app: string, what: 'snapshot' | 'backup') => send<{ names: string[] }>(`/apps/${encodeURIComponent(app)}/${what}`), [send]);
+  /** a step of the move of the store: a pull request */
+  const moveStore = useCallback((step: { step: 'add'; url: string; bucket?: string } | { step: 'switch' } | { step: 'cancel' }) => send<{ pull: { number: number; url: string }; version: string }>('/store', step), [send]);
+  return { ...state, post, copyNow, moveStore };
 }
