@@ -102,6 +102,8 @@ export type Pricing = {
   perDeployment?: number;
   /** what each incident opened on an element of the namespace costs, by its priority */
   perIncident?: ByPriority;
+  /** data continuity: what a GiB of Longhorn snapshots, and a GiB protected by the last backup, cost a month */
+  protection?: { snapshotPerGiBMonth?: number; backupPerGiBMonth?: number };
   /** what the assistants consume, by model or runner (assistantUsage.ts) */
   assistants?: AssistantPrice[];
 };
@@ -133,6 +135,9 @@ export function usePricing(): Pricing {
     storagePerGiBHour: c?.getOptionalNumber('pricing.storagePerGiBHour'),
     perDeployment: c?.getOptionalNumber('pricing.perDeployment'),
     perIncident: perIncidentOf(c?.getOptionalConfig('pricing.perIncident')),
+    protection: c?.has('pricing.protection')
+      ? { snapshotPerGiBMonth: c.getOptionalNumber('pricing.protection.snapshotPerGiBMonth'), backupPerGiBMonth: c.getOptionalNumber('pricing.protection.backupPerGiBMonth') }
+      : undefined,
     assistants: c?.getOptionalConfigArray('pricing.assistants')?.map(a => ({
       model: a.getOptionalString('model'),
       runner: a.getOptionalString('runner'),
@@ -237,6 +242,55 @@ export function useDeployments() {
       const res = await fetch(`${await discovery.getBaseUrl('costs')}/deployments`);
       if (!res.ok) throw new Error(`the deployments answered ${res.status} ${res.statusText}`);
       return parseDeployments(await res.json());
+    })().then(
+      value => !cancelled && setState({ loading: false, value }),
+      error => !cancelled && setState({ loading: false, error }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [discovery, fetch]);
+  return state;
+}
+
+/**
+ * Data continuity (backend plugin protection of packages/backend): the space the Longhorn snapshots of each namespace
+ * take, and the data its last Velero backup protects. Charged per GiB and month at pricing.protection, as a rent: what
+ * is kept now, not what was kept during the month.
+ */
+export type ProtectionUsage = { snapshotBytes: number; backupBytes: number };
+export function parseProtectionUsage(body: any): Map<string, ProtectionUsage> {
+  const out = new Map<string, ProtectionUsage>();
+  for (const [ns, u] of Object.entries((body?.namespaces ?? {}) as Record<string, any>)) out.set(ns, { snapshotBytes: num(u?.snapshotBytes), backupBytes: num(u?.backupBytes) });
+  return out;
+}
+
+/** what the snapshots and backups of a namespace cost a month; undefined without prices */
+export function protectionCost(u: ProtectionUsage | undefined, p: Pricing): number | undefined {
+  if (!p.protection) return undefined;
+  const gib = 2 ** 30;
+  return ((u?.snapshotBytes ?? 0) / gib) * (p.protection.snapshotPerGiBMonth ?? 0) + ((u?.backupBytes ?? 0) / gib) * (p.protection.backupPerGiBMonth ?? 0);
+}
+
+/** "1.6 GiB snapshots · 4.2 GiB protected" */
+export function describeProtection(u: ProtectionUsage | undefined): string {
+  const g = (b: number) => `${(b / 2 ** 30).toFixed(1)} GiB`;
+  return `${g(u?.snapshotBytes ?? 0)} of snapshots · ${g(u?.backupBytes ?? 0)} protected by backups`;
+}
+
+/** the snapshots and backups of every namespace; error when protection-oneke is not installed (the page shows the rest) */
+export function useProtectionUsage() {
+  const discovery = useApi(discoveryApiRef);
+  const { fetch } = useApi(fetchApiRef);
+  const [state, setState] = useState<{ loading: boolean; value?: Map<string, ProtectionUsage>; error?: Error }>({ loading: true });
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`${await discovery.getBaseUrl('protection')}/usage`);
+      if (!res.ok) throw new Error(`data continuity answered ${res.status} ${res.statusText}`);
+      const body = await res.json();
+      if (!body?.available) throw new Error('not installed in this cluster');
+      return parseProtectionUsage(body);
     })().then(
       value => !cancelled && setState({ loading: false, value }),
       error => !cancelled && setState({ loading: false, error }),

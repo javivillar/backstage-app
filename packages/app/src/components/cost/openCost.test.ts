@@ -1,4 +1,4 @@
-import { addCounts, deploymentsCost, describeCounts, efficiency, IDLE, incidentCount, incidentsCost, money, parseAllocations, parseDeployments, parseIncidentCounts, perMonth } from './openCost';
+import { addCounts, parseProtectionUsage, protectionCost, deploymentsCost, describeCounts, efficiency, IDLE, incidentCount, incidentsCost, money, parseAllocations, parseDeployments, parseIncidentCounts, perMonth } from './openCost';
 
 // the shape of GET /allocation/compute?aggregate=namespace&accumulate=true of OpenCost 1.121
 const body = {
@@ -99,5 +99,16 @@ describe('incidents', () => {
     expect(incidentsCost({ P4: 3 }, pricing)).toBe(0); // no price for P4
     expect(incidentsCost(all, { currency: 'EUR' })).toBeUndefined();
     expect(parseIncidentCounts(undefined).size).toBe(0);
+  });
+});
+
+describe('snapshots and backups', () => {
+  it('reads the usage of each namespace and charges it per GiB and month', () => {
+    const usage = parseProtectionUsage({ available: true, namespaces: { 'p-petstore': { snapshotBytes: 2 * 2 ** 30, backupBytes: 10 * 2 ** 30, plan: 'critical' }, broken: {} } });
+    expect(usage.get('p-petstore')).toEqual({ snapshotBytes: 2 * 2 ** 30, backupBytes: 10 * 2 ** 30 });
+    expect(usage.get('broken')).toEqual({ snapshotBytes: 0, backupBytes: 0 });
+    expect(protectionCost(usage.get('p-petstore'), { currency: 'EUR' })).toBeUndefined();
+    expect(protectionCost(usage.get('p-petstore'), { currency: 'EUR', protection: { snapshotPerGiBMonth: 0.05, backupPerGiBMonth: 0.02 } })).toBeCloseTo(0.3);
+    expect(protectionCost(undefined, { currency: 'EUR', protection: {} })).toBe(0);
   });
 });

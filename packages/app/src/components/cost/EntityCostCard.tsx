@@ -8,6 +8,9 @@ import {
   addCounts,
   ByPriority,
   deploymentsCost,
+  describeProtection,
+  protectionCost,
+  useProtectionUsage,
   describeCounts,
   describePrices,
   efficiency,
@@ -60,6 +63,7 @@ export const EntityCostCard = () => {
   const { loading, error, week, day } = useAllocations();
   const deployments = useDeployments();
   const incidents = useIncidentCounts();
+  const protection = useProtectionUsage();
   const refs = useRefsOfNamespace(ns);
   const usage = useAssistantUsage();
   // what the assistants consumed about this application (its development by the developer workflow, its questions)
@@ -92,10 +96,17 @@ export const EntityCostCard = () => {
       const resources = perMonth(d);
       const incidentCost = nsIncidents ? incidentsCost(nsIncidents, pricing) : undefined;
       const assistantCost = assistants?.cost;
+      // its Longhorn snapshots and Velero backups (data continuity), per month
+      const kept = protection.value?.get(ns);
+      const protectCost = protection.value ? protectionCost(kept, pricing) : undefined;
+      let protectNote: string;
+      if (protection.loading) protectNote = 'reading…';
+      else if (protection.error) protectNote = 'not counted in this installation';
+      else protectNote = describeProtection(kept);
       const month =
-        resources === undefined && deployCost === undefined && incidentCost === undefined && assistantCost === undefined
+        resources === undefined && deployCost === undefined && incidentCost === undefined && assistantCost === undefined && protectCost === undefined
           ? undefined
-          : (resources ?? 0) + (deployCost ?? 0) + (incidentCost ?? 0) + (assistantCost ?? 0);
+          : (resources ?? 0) + (deployCost ?? 0) + (incidentCost ?? 0) + (assistantCost ?? 0) + (protectCost ?? 0);
       let assistantNote: string;
       if (usage.loading) assistantNote = 'counting…';
       else if (usage.error) assistantNote = 'not recorded in this installation';
@@ -124,14 +135,15 @@ export const EntityCostCard = () => {
             label="Per month"
             value={money(month, pricing.currency)}
             note={
-              deployCost || incidentCost || assistantCost
-                ? 'resources at the pace of the last 24 hours + deployments, incidents and assistants of this month'
+              deployCost || incidentCost || assistantCost || protectCost
+                ? 'resources at the pace of the last 24 hours + deployments, incidents and assistants of this month + snapshots and backups'
                 : 'at the pace of the last 24 hours'
             }
           />
           <Figure label="Deployments this month" value={deployments.value ? String(deploys?.count ?? 0) : '—'} note={deployNote} />
           <Figure label="Incidents this month" value={nsIncidents ? String(incidentCount(nsIncidents)) : '—'} note={incidentNote} />
           <Figure label="Assistants this month" value={assistantValue} note={assistantNote} />
+          <Figure label="Snapshots and backups, per month" value={protectCost !== undefined ? money(protectCost, pricing.currency) : '—'} note={protectNote} />
           <Figure
             label="CPU used of reserved"
             value={pct(cpu)}

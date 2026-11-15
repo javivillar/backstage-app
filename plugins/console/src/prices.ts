@@ -55,6 +55,8 @@ const SPECS: Spec[] = [
   { path: 'loadBalancer.perHour', group: 'loadBalancer', opencost: 'firstFiveForwardingRulesCost' },
   { path: 'discount.sustainedUse', group: 'discount', kind: 'percent', opencost: 'discount' },
   { path: 'discount.negotiated', group: 'discount', kind: 'percent', opencost: 'negotiatedDiscount' },
+  { path: 'protection.snapshotPerGiBMonth', group: 'services', charged: true },
+  { path: 'protection.backupPerGiBMonth', group: 'services', charged: true },
   { path: 'perDeployment', group: 'services', charged: true },
   { path: 'perIncident.P1', group: 'services', charged: true },
   { path: 'perIncident.P2', group: 'services', charged: true },

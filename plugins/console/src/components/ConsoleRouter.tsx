@@ -51,7 +51,7 @@ import { BusinessMatrixPage } from './businessMap/MatrixPage';
 import { ImportModelPage } from './businessMap/ImportModelPage';
 import { AdoptModelPage } from './businessMap/AdoptModelPage';
 import { ProcessFormPage } from './businessMap/ProcessFormPage';
-import { DataContinuityPage } from './businessMap/DataContinuityPage';
+import { DataContinuityPage, ProtectionAppPage, ProtectionPlansPage, ProtectionStorePage } from './protection/Protection';
 import { FrameworksPage } from './frameworks/FrameworksPage';
 import { FrameworkLinePage } from './frameworks/FrameworkLinePage';
 import { HeatmapPage } from './frameworks/HeatmapPage';
@@ -134,6 +134,9 @@ export const ConsoleRouter = ({ entityContent, pages = [], apiDefinition }: { en
         <Route path="/business-map/process/new" element={<ProcessFormPage mode="new" />} />
         <Route path="/business-map/process/edit/:namespace/:name" element={<ProcessFormPage mode="edit" />} />
         <Route path="/data-continuity" element={<DataContinuityPage />} />
+        <Route path="/data-continuity/app/:app" element={<ProtectionAppPage />} />
+        <Route path="/data-continuity/plans" element={<ProtectionPlansPage />} />
+        <Route path="/data-continuity/store" element={<ProtectionStorePage />} />
         <Route path="/development/:template" element={<NewAppWizard />} />
         <Route path="/new-framework" element={<NewFrameworkPage />} />
         <Route path="/frameworks" element={<FrameworksPage />} />

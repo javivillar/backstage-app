@@ -57,6 +57,8 @@ backend.add(import('@backstage/plugin-user-settings-backend'));
 backend.add(import('./plugins/topology'));
 // the deployments of each namespace (new image versions), charged in its cost (page Costs)
 backend.add(import('./plugins/costs'));
+// data continuity of the applications: Longhorn snapshots and Velero backups (console: Data continuity)
+backend.add(import('./plugins/protection'));
 // the overview of this cluster (nodes, Argo CD applications, volumes) for the console (page /console/cluster)
 backend.add(import('./plugins/cluster'));
 // Manage through git: the Manage pages of the console change objects of the platform services by pull request

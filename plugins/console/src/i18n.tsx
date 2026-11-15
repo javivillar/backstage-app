@@ -14,6 +14,7 @@ import { INTERCONNECTION } from './messages/interconnection';
 import { PROGRAMMES } from './messages/programmes';
 import { ORGANISATION } from './messages/organisation';
 import { PRICES } from './messages/prices';
+import { PROTECTION } from './messages/protection';
 import { ACCESS_ADMIN } from './messages/accessAdmin';
 
 /**
@@ -123,7 +124,7 @@ const SHELL: Messages = {
   'page.activepieces': { en: 'Workflow integration', es: 'Integración de flujos' },
 };
 
-export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION, ...ACCESS_ADMIN, ...PROGRAMMES, ...ORGANISATION, ...PRICES };
+export const MESSAGES: Messages = { ...SHELL, ...ZONE, ...CLUSTER, ...PORTAL, ...ENTITY, ...CONTINUITY, ...MONITORING, ...MANAGE, ...BUSINESS_MAP, ...BUSINESS_MAP_DASHBOARDS, ...DEVELOPMENT, ...INTERCONNECTION, ...ACCESS_ADMIN, ...PROGRAMMES, ...ORGANISATION, ...PRICES, ...PROTECTION };
 
 const KEY = 'rq-console-lang';
 

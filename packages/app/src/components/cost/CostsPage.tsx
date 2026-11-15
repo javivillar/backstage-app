@@ -16,6 +16,9 @@ import {
   Allocation,
   ByPriority,
   deploymentsCost,
+  describeProtection,
+  protectionCost,
+  useProtectionUsage,
   describeCounts,
   incidentCount,
   incidentsCost,
@@ -44,6 +47,8 @@ type Row = {
   deployCost?: number;
   incidents?: ByPriority;
   incidentCost?: number;
+  /** its Longhorn snapshots and Velero backups, per month */
+  protectCost?: number;
 };
 
 /** a month: the resources at the pace of the last 24 hours, plus the deployments and the incidents of this month */
@@ -100,6 +105,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
   const { loading, weekLoading, error, week, day } = useAllocations();
   const deployments = useDeployments();
   const incidents = useIncidentCounts();
+  const protection = useProtectionUsage();
   const { byNs, nsOfRef } = useEntitiesByNamespace();
   const usage = useAssistantUsage();
   const systemsIndex = useSystemsIndex();
@@ -141,15 +147,16 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
         const deployCost = deployments.value ? deploymentsCost(d?.count, pricing) : undefined;
         const inc = incidentsByNs.m.get(ns);
         const incidentCost = incidents.value ? incidentsCost(inc, pricing) : undefined;
-        return { ns, entity, system, week: week?.get(ns), day: day?.get(ns), deploys: d, deployCost, incidents: inc, incidentCost };
+        const protectCost = protection.value ? protectionCost(protection.value.get(ns), pricing) : undefined;
+        return { ns, entity, system, week: week?.get(ns), day: day?.get(ns), deploys: d, deployCost, incidents: inc, incidentCost, protectCost };
       })
       .sort((a, b) => (b.week?.total ?? 0) - (a.week?.total ?? 0) || (b.day?.total ?? 0) - (a.day?.total ?? 0));
-  }, [week, day, byNs, deployments.value, incidents.value, incidentsByNs, pricing]);
+  }, [week, day, byNs, deployments.value, incidents.value, incidentsByNs, protection.value, pricing]);
 
   const systems = useMemo(() => {
-    type S = { week: number; day: number; deploy: number; incident: number; count: number; assistants?: number; questions?: number };
+    type S = { week: number; day: number; deploy: number; incident: number; protect: number; count: number; assistants?: number; questions?: number };
     const m = new Map<string, S>();
-    const none = (): S => ({ week: 0, day: 0, deploy: 0, incident: 0, count: 0 });
+    const none = (): S => ({ week: 0, day: 0, deploy: 0, incident: 0, protect: 0, count: 0 });
     for (const r of rows) {
       const k = r.system || '(no system)';
       const s = m.get(k) ?? none();
@@ -159,6 +166,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
         day: s.day + (r.day?.total ?? 0),
         deploy: s.deploy + (r.deployCost ?? 0),
         incident: s.incident + (r.incidentCost ?? 0),
+        protect: s.protect + (r.protectCost ?? 0),
         count: s.count + 1,
       });
     }
@@ -221,7 +229,14 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
     if (assistantTotal) assistantValue = assistantCost !== undefined ? money(assistantCost, c) : `${tokens(assistantTotal.tokens)} tokens`;
     const since = deployments.value?.trackedSince;
     const sinceThisMonth = since && since.slice(0, 7) === deployments.value?.month;
-    const perMonthTotal = monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost);
+    // snapshots and backups (data continuity): what every namespace keeps now, per month
+    const protectUsage = [...(protection.value?.values() ?? [])].reduce((s, u) => ({ snapshotBytes: s.snapshotBytes + u.snapshotBytes, backupBytes: s.backupBytes + u.backupBytes }), { snapshotBytes: 0, backupBytes: 0 });
+    const protectTotal = protection.value ? protectionCost(protectUsage, pricing) : undefined;
+    let protectNote: string;
+    if (protection.loading) protectNote = 'reading…';
+    else if (protection.error) protectNote = `not counted: ${protection.error.message}`;
+    else protectNote = `${describeProtection(protectUsage)}${pricing.protection ? '' : '; no price configured'}`;
+    const perMonthTotal = monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost, protectTotal);
     if (variant === 'console') {
       const maxSys = Math.max(1, ...systems.map(([, x]) => x.week || x.day * 7));
       const maxNs = Math.max(1, ...rows.map(r => r.week?.total ?? (r.day?.total ?? 0) * 7));
@@ -231,6 +246,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
         ['Deployments', deployments.value ? String(deployCount) : '—', sinceThisMonth ? `${deployNote}; since ${new Date(since!).toLocaleDateString('es-ES')}` : deployNote],
         ['Incidents', incidents.value ? String(incidentCount(allIncidents)) : '—', incidentNote],
         ['Assistants', assistantValue, assistantNote],
+        ['Snapshots and backups', protectTotal !== undefined ? money(protectTotal, c) : '—', protectNote],
         ['Capacity nobody reserved', wk(idleWeek), 'last 7 days: nodes paid, not requested'],
       ];
       const meter = (v?: number) => {
@@ -295,7 +311,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
                   <Box sx={{ textAlign: 'right', minWidth: 120 }}>
                     <b>{wk(x.week)}</b>
                     <Typography variant="caption" color="text.secondary" display="block">
-                      {money(monthly(x.day * 30.4, deployTotal === undefined ? undefined : x.deploy, incidentTotal === undefined ? undefined : x.incident, assistantCost === undefined ? undefined : x.assistants), c)} / month · {pct(totalWeek ? (x.week / totalWeek) * 100 : undefined)}
+                      {money(monthly(x.day * 30.4, deployTotal === undefined ? undefined : x.deploy, incidentTotal === undefined ? undefined : x.incident, assistantCost === undefined ? undefined : x.assistants, protectTotal === undefined ? undefined : x.protect), c)} / month · {pct(totalWeek ? (x.week / totalWeek) * 100 : undefined)}
                     </Typography>
                   </Box>
                 </Box>
@@ -363,7 +379,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
                             </Box>
                           </Box>
                         </Box>
-                        <Box component="td" sx={td}>{money(monthly(perMonth(r.day), r.deployCost, r.incidentCost), c)}</Box>
+                        <Box component="td" sx={td}>{money(monthly(perMonth(r.day), r.deployCost, r.incidentCost, r.protectCost), c)}</Box>
                         <Box component="td" sx={td} title={r.deploys?.versions.map(v => v.image).join('\n')}>
                           {deployments.value ? `${r.deploys?.count ?? 0}${r.deployCost ? ` · ${money(r.deployCost, c)}` : ''}` : '—'}
                         </Box>
@@ -389,7 +405,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
             <Figure label="Last 7 days" value={wk(totalWeek)} note={`${rows.length} namespaces`} />
             <Figure
               label="Per month"
-              value={money(monthly(totalDay * 30.4, deployTotal, incidentTotal, assistantCost), c)}
+              value={money(perMonthTotal, c)}
               note={
                 deployTotal || incidentTotal || assistantCost
                   ? 'resources at the pace of the last 24 hours + the deployments, incidents and assistants of this month'
@@ -446,6 +462,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
                         s.day * 30.4,
                         deployTotal === undefined ? undefined : s.deploy,
                         incidentTotal === undefined ? undefined : s.incident,
+                        protectTotal === undefined ? undefined : s.protect,
                         assistantCost === undefined ? undefined : s.assistants,
                       ),
                       c,
@@ -526,7 +543,7 @@ export const CostsPage = ({ variant = 'classic' }: { variant?: 'classic' | 'cons
                     <TableCell align="right" title={describeCounts(r.incidents)}>
                       {incidents.value ? `${incidentCount(r.incidents)}${r.incidentCost ? ` · ${money(r.incidentCost, c)}` : ''}` : '—'}
                     </TableCell>
-                    <TableCell align="right">{money(monthly(perMonth(r.day), r.deployCost, r.incidentCost), c)}</TableCell>
+                    <TableCell align="right">{money(monthly(perMonth(r.day), r.deployCost, r.incidentCost, r.protectCost), c)}</TableCell>
                     <TableCell align="right">{pct(a && efficiency(a.cpuUsed, a.cpuRequested))}</TableCell>
                     <TableCell align="right">{pct(a && efficiency(a.ramUsed, a.ramRequested))}</TableCell>
                   </TableRow>

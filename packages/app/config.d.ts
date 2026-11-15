@@ -64,6 +64,8 @@ export interface Config {
       network?: { zoneEgressPerGiB?: number; regionEgressPerGiB?: number; internetEgressPerGiB?: number; gatewayEgressPerGiB?: number; gatewayIngressPerGiB?: number };
       loadBalancer?: { perHour?: number };
       discount?: { sustainedUse?: number; negotiated?: number };
+      /** data continuity: a GiB of Longhorn snapshots, and a GiB protected by the last backup, per month (backend plugin protection) */
+      protection?: { snapshotPerGiBMonth?: number; backupPerGiBMonth?: number };
       /** charged once per deployment: a new version of an image running in a namespace (backend plugin costs) */
       perDeployment?: number;
       /** charged once per incident opened on an element of a namespace (application support), by its priority */
@@ -97,6 +99,12 @@ export interface Config {
      */
     prices?: { repo?: string; branch?: string; chart?: string; groups?: string[] };
   };
+  /**
+   * Data continuity (backend plugin protection of packages/backend): where protection-oneke is and who may change the
+   * plan of an application besides backstage-admin and console.actions.groups. Defaults: <prefix>protection-oneke,
+   * longhorn-system, console.manage.repo, main, protection-oneke.
+   */
+  protection?: { namespace?: string; longhornNamespace?: string; repo?: string; branch?: string; chart?: string; groups?: string[] };
   /**
    * Tech Radar shown at /tech-radar: technologies and where the organization stands on each.
    * @deepVisibility frontend

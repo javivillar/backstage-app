@@ -12,6 +12,7 @@ import {
   EntityPerformanceContent,
   hasGrafanaDashboard,
   EntityDataContent,
+  EntityProtectionContent,
   hasDataProduct,
   EntityNetworkContent,
   EntityUserJourneyContent,
@@ -29,6 +30,7 @@ import {
   ImpactTab,
   hasBusinessImpact,
 } from '@internal/plugin-console';
+import Backup from '@mui/icons-material/Backup';
 import GppMaybe from '@mui/icons-material/GppMaybe';
 import History from '@mui/icons-material/History';
 import Savings from '@mui/icons-material/Savings';
@@ -899,6 +901,10 @@ export const consoleEntityPage = entityPageWith(
     </EntityLayout.Route>
     <EntityLayout.Route path="/data" title={tabLabel(<Storage />, 'Data')} if={hasDataProduct}>
       <EntityDataContent />
+    </EntityLayout.Route>
+    {/* its volumes, their Longhorn snapshots and Velero backups, and the shared services that keep its data */}
+    <EntityLayout.Route path="/data-continuity" title={tabLabel(<Backup />, 'Data continuity')} if={hasNamespace}>
+      <EntityProtectionContent />
     </EntityLayout.Route>
     <EntityLayout.Route path="/costs" title={tabLabel(<Savings />, 'Costs')} if={hasNamespace}>
       <ConsoleCosts />

@@ -235,15 +235,6 @@ export const BUSINESS_MAP: Messages = {
   'nav.dataContinuity.hint': { en: 'The continuity of the data of each business service', es: 'La continuidad de los datos de cada servicio de negocio' },
   'nav.digitalContinuity': { en: 'Digital continuity', es: 'Continuidad digital' },
   'nav.digitalContinuity.hint': { en: 'Continuity profile of each Refresquito service: exit, escrow, evidence', es: 'Perfil de continuidad de cada servicio de Refresquito: salida, depósito, evidencias' },
-  'dc.sub': {
-    en: 'The continuity of the data of each business service: backups, retention and restore tests.',
-    es: 'La continuidad de los datos de cada servicio de negocio: copias de seguridad, retención y pruebas de restauración.',
-  },
-  'dc.soon': { en: 'Coming soon', es: 'Próximamente' },
-  'dc.soon.text': {
-    en: 'Data continuity: the continuity of the data of each business service (backups, retention, restore tests). Coming soon.',
-    es: 'Continuidad del dato: la continuidad de los datos de cada servicio de negocio (copias de seguridad, retención, pruebas de restauración). Próximamente.',
-  },
   // the forms of the templates (ImportModelPage, AdoptModelPage, ProcessFormPage)
   'bmf.steps': { en: 'Steps', es: 'Pasos' },
   'bmf.notAllowed': {

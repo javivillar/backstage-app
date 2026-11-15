@@ -7,6 +7,7 @@ export { EntityNetworkContent, EntityUserJourneyContent } from './components/Ent
 export { EntityLiveContent } from './components/EntityLive';
 export { EntityLoggingContent, EntityPerformanceContent, hasGrafanaDashboard } from './components/EntityGrafana';
 export { EntityDataContent, hasDataProduct } from './components/EntityData';
+export { EntityProtectionContent } from './components/protection/Protection';
 export { ServiceChanges, ServiceCosts, ServiceOverview, ServiceSecurity } from './components/ServiceViews';
 export type { CostsExtra } from './components/ServiceViews';
 export { ConsoleEntityLayout } from './components/ConsoleEntityLayout';
