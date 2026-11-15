@@ -2,6 +2,7 @@ import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api
 import express, { Router } from 'express';
 import { mayAct } from './clusterActions';
 import { GitHubFiles } from './clusterVms';
+import { PullReader, pullsHandler } from './consolePulls';
 import { PriceError, priceChange, pricePaths, readChanges, readPrices, type PriceFiles } from './costPrices';
 import { currentMonth, DeploymentStore, ensureTables, lookback, parseSweep, sweepQuery } from './costDeployments';
 
@@ -13,6 +14,8 @@ import { currentMonth, DeploymentStore, ensureTables, lookback, parseSweep, swee
  *
  *   GET  /api/costs/prices   {may, groups, repo, path, url, version, currency, description, prices}: the prices in the
  *                            repository (opencost.pricing of the chart, by path; see costPrices.ts). Signed-in users.
+ *   GET  /api/costs/prices/pulls  → {pulls}: the pull requests of the prices, open or closed in the last 14 days,
+ *                            with their state (consolePulls.ts)
  *   POST /api/costs/prices   {changes: {path: value}} → {pull, version}: a pull request with the prices changed, the
  *                            chart one patch version up and its release notes. Who may: backstage-admin,
  *                            console.actions.groups and costs.prices.groups (default finops).
@@ -100,6 +103,7 @@ export default createBackendPlugin({
         };
         const repo = new GitHubFiles(prices.repo, prices.branch, config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token'));
         const paths = pricePaths(prices.chart);
+        const pulls = new PullReader(prices.repo, prices.branch, config.getOptionalConfigArray('integrations.github')?.[0]?.getOptionalString('token'));
         const asks = async (req: express.Request) => {
           const credentials = await httpAuth.credentials(req, { allow: ['user'] });
           const info = await userInfo.getUserInfo(credentials);
@@ -149,12 +153,15 @@ export default createBackendPlugin({
             // one commit for the five files: the checks of the repository run once
             const pull = await repo.pullRequestInOneCommit(`console/prices-${change.next}-${Date.now().toString(36)}`, change.title, change.body, change.files);
             kept = undefined;
+            pulls.forget();
             logger.info(`costs: prices: ${change.changed.length} changed by ${w.user}: pull request #${pull.number}`);
             res.json({ pull, version: change.next, changed: change.changed });
           } catch (e) {
             failed(res, e);
           }
         });
+        // the pull requests of the prices and where each one stands
+        router.get('/prices/pulls', pullsHandler(pulls, () => ['console/prices-'], asks, m => logger.warn(`costs: prices: ${m}`)));
         httpRouter.use(router);
       },
     });

@@ -1,5 +1,6 @@
 import express, { Router } from 'express';
 import { GitHubFiles } from '../clusterVms';
+import { PullReader, pullsHandler } from '../consolePulls';
 import { BpmnError, bpmnPath, bpmnPull, readBpmn, readTarget } from './bpmnModel';
 import { ContinuityGraph, type MapEntity, readDefaults } from './continuityModel';
 import { buildMap } from './mapModel';
@@ -39,6 +40,8 @@ import { readUpload, writeXlsx } from './sheets';
  *   POST /api/business-map/organisation/owner     { side, namespace, application, user? } → { pull, path }
  *   GET  /api/business-map/bpmn?namespace=&process=   → { xml, path, url } (404 when the process has no model)
  *   POST /api/business-map/bpmn   { namespace, process, title?, fileName?, xml } → { pull, path }
+ *   GET  /api/business-map/pulls?kind=organisation|bpmn   → { pulls }: the pull requests of that kind of change, open or
+ *        closed in the last 14 days, with their state (consolePulls.ts)
  *
  * Every change is a pull request in businessMap.repo (refresquito-services). Who may: business-architect,
  * backstage-admin and console.actions.groups. "In Keycloak" is read from the catalog: the User entities the Keycloak
@@ -60,6 +63,9 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
   const who = whoAsks(deps);
   const src = providerConfig(config);
   const repo = new GitHubFiles(src.repo, src.branch, src.token);
+  const pulls = new PullReader(src.repo, src.branch, src.token);
+  /** the branches of each kind of change of this router (GitHubFiles.pullRequest: console/<slug>-<time>) */
+  const PULL_KINDS: Record<string, string[]> = { organisation: ['console/org-'], bpmn: ['console/bpmn-'] };
   const blob = (path: string) => `https://github.com/${src.repo}/blob/${src.branch}/${path}`;
   const defaults = readDefaults(config.getOptional('businessMap.criticality'));
 
@@ -203,6 +209,7 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
     const { title, body } = organisationPull(org, by, what, path);
     const pull = await repo.pullRequest(`org-${org.side}-${org.name}`.slice(0, 80), title, body, [{ path, text: organisationYaml(org) }]);
     logger.info(`business-map: ${path} by ${by}: pull request #${pull.number}`);
+    pulls.forget();
     return { pull, path };
   };
 
@@ -273,11 +280,14 @@ export function createOrganisationRouter(deps: BusinessMapRouteDeps): Router {
       const pullText = bpmnPull(target, title, summary, { by: w.user, fileName, replaces: (await fileOf(path)) !== null });
       const pull = await repo.pullRequest(`bpmn-${target.namespace}-${target.process}`.slice(0, 80), pullText.title, pullText.body, [{ path, text: xml }]);
       logger.info(`business-map: ${path} by ${w.user}: pull request #${pull.number}`);
+      pulls.forget();
       res.json({ pull, path });
     } catch (e) {
       fail(res, e);
     }
   });
 
+  // the pull requests of a kind of change (organisation | bpmn) and where each one stands
+  router.get('/pulls', pullsHandler(pulls, req => PULL_KINDS[String(req.query.kind)], who, m => logger.warn(`business-map: ${m}`)));
   return router;
 }

@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n';
 import { applicationsOfTeam, countsOf, type Organisation, type OrganisationData, type Side } from '../../organisation';
 import { useRq } from '../../theme/consoleTheme';
 import { Table } from '../NetworkPage';
+import { PendingChanges } from '../PendingChanges';
 import { EmptyState, Facts, Id, Kpis, Pill, Section } from '../ui';
 import { Choice, KeycloakPill, OrganisationFrame, PersonCell, useSide } from './OrgParts';
 import { CritPill } from './parts';
@@ -261,7 +262,12 @@ export const OrganisationPage = () => {
   };
   return (
     <OrganisationFrame view={t('bm.view.organisation')} title={t('bm.view.organisation')} sub={t('org.sub')}>
-      {data => <Body data={data} side={side} setSide={setSide} picked={params.get('team') ?? undefined} onPick={pick} />}
+      {data => (
+        <>
+          <PendingChanges plugin="business-map" path="/pulls?kind=organisation" applies={t('org.pr.applies')} />
+          <Body data={data} side={side} setSide={setSide} picked={params.get('team') ?? undefined} onPick={pick} />
+        </>
+      )}
     </OrganisationFrame>
   );
 };
