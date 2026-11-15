@@ -268,3 +268,18 @@ kubectl -n $NS exec deploy/cnoe-oneke-backstage-postgres -- psql -U backstage -d
   image = '…';`
 - A sweep that failed (Prometheus down) logs the error and the next one covers the gap: nothing is lost while the gap
   is under 14 days.
+
+## Snapshots and backups (data continuity)
+
+The cost of an application includes what it keeps in the data continuity of the platform (chart `protection-oneke`,
+backend plugin `protection`, console pages **Data continuity**):
+
+- **Snapshots**: the space its Longhorn snapshots take on the disk, at `opencost.pricing.protection.snapshotPerGiBMonth`.
+- **Backups**: the data its last Velero backup protects, at `opencost.pricing.protection.backupPerGiBMonth`. It is the
+  data the backup read, not the space in the store: Velero does not report the space of each application there.
+
+Both are a rent: what is kept now, per month, not what was kept during the month. `GET /api/protection/usage` gives
+the bytes of each namespace; the page Costs, the Cost card and the tab Data continuity multiply them by the price.
+Without `protection-oneke` in the cluster the figure is "—" and the rest of the cost is unchanged. The two prices are
+in FinOps › Prices (group Platform services) and change by pull request like the others.
+

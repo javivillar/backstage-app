@@ -35,6 +35,8 @@ const FIXED: Record<string, Kind> = {
   'loadBalancer.perHour': 'money',
   'discount.sustainedUse': 'percent',
   'discount.negotiated': 'percent',
+  'protection.snapshotPerGiBMonth': 'money',
+  'protection.backupPerGiBMonth': 'money',
   perDeployment: 'money',
   'perIncident.P1': 'money',
   'perIncident.P2': 'money',

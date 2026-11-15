@@ -17,7 +17,7 @@ it('reads the prices of the configuration by path', () => {
 it('lists every price with its state: charged today, set, or without a price', () => {
   const rows = priceRows(flatPrices(pricing));
   const of = (p: string) => rows.find(r => r.path === p)!;
-  expect(rows.filter(r => r.group !== 'assistants')).toHaveLength(21);
+  expect(rows.filter(r => r.group !== 'assistants')).toHaveLength(23);
   expect(of('cpuPerCoreHour')).toMatchObject({ state: 'use', by: 'opencost', opencost: 'CPU', value: 0.0205 });
   expect(of('gpuPerHour').state).toBe('off');
   expect(of('network.internetEgressPerGiB').state).toBe('set');
