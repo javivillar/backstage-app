@@ -10,6 +10,9 @@ Explorer · Heat map · Glass · Matrix, the page of each process, and the tab *
 and framework lines. The same group has **Data continuity** (`/console/data-continuity`, still empty) and **Digital continuity**
 (`/console/continuity`, the continuity profiles of each service).
 
+The three of them meet in one map, from the domain down to the data: the [Continuity navigator](continuity-navigator.md)
+(`/console/continuity-navigator`).
+
 ## The model
 
 ```

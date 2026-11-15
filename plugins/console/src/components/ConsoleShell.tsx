@@ -220,6 +220,8 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         { label: tr('nav.businessMap'), to: '/console/business-map', hint: tr('nav.businessMap.hint') },
         { label: tr('nav.dataContinuity'), to: '/console/data-continuity', hint: tr('nav.dataContinuity.hint') },
         { label: tr('nav.digitalContinuity'), to: '/console/continuity', hint: tr('nav.digitalContinuity.hint') },
+        // the three of them in one map, from the domain down to the data
+        { label: tr('nav.continuityNavigator'), to: '/console/continuity-navigator', hint: tr('nav.continuityNavigator.hint') },
       ],
     });
     // what the services cost and how good they are (classic pages), and what each thing is charged at

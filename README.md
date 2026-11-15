@@ -10,6 +10,8 @@ This repository contains code for the [Backstage](https://backstage.io) images u
 
 - [Business continuity (business map)](docs/business-map.md): business processes, their continuity requirement
   checked down to the platform, the importer of business models and the dashboards.
+- [Continuity navigator](docs/continuity-navigator.md): one map from the business domain down to the data of the
+  applications, with the continuity check and the copies of the data against what the business accepts losing.
 
 ## Container Images
 
