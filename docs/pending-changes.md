@@ -24,9 +24,12 @@ right after asking for it.
 **Refresh** reads GitHub again at once (the backend drops what it kept) and the card says at what time the state was
 read. A page that has just opened a pull request refreshes the card by itself.
 
-Zone (virtual machines, segregations, clusters, interconnection, Marketplace) and Manage keep their own lists of
-requests, which also follow the change after it is merged (waiting for the host, done, failed); they do not show the
-state of the checks or the Refresh button yet (see below).
+**Zone** (virtual machines, components, segregations, clusters, interconnection, Marketplace, the platform
+overview) keeps its own list of requests, which also follows a change after it is merged (waiting for the host, done,
+failed). That list now has **Refresh** and, on each open request, the same state of its checks
+(`GET /api/cluster/pulls?repo=infra|vms`). **Manage** keeps "pending change #n" on each object and adds the card
+under the list of objects (`GET /api/manage/pulls`; the pull requests in the repositories of the applications, their
+dashboards, are not in it).
 
 ## What each row says
 
@@ -76,8 +79,9 @@ the branches of one thing.
 
 ## Still open
 
-- **Zone and Manage**: their request lists do not use this card yet; bringing the state of the checks and Refresh
-  there means joining it with what they already show after the merge.
+- **Zone**: Refresh reads the state of the checks again, not the list itself; a request accepted meanwhile shows as
+  *Accepted* on its row until the page is loaded again.
+- **Manage**: the pull requests in the repositories of the applications (dashboards) are not in the card.
 - A page does not yet mark **which row** has a change waiting (a price, the plan of an application); the card lists
   the pull requests, their titles say what changes.
 - **Accepting from the console** is left out on purpose: it needs deciding who may, and merge permission for the
