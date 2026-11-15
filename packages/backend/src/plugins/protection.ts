@@ -5,10 +5,15 @@
  *   GET  /api/protection          {available, reason?, store, plans, apps[], usage, may, groups, repo, path, url}
  *   GET  /api/protection/usage    {available, namespaces: {ns: {snapshotBytes, backupBytes, plan}}}   (the cost pages)
  *   POST /api/protection/plans    {changes: {app: plan}} -> a pull request on the chart protection-oneke
+ *   POST /api/protection/store    {step: add|switch|cancel, url?, bucket?, region?} -> a pull request: a step of the
+ *                                 move of the backup store outside the cluster
+ *   POST /api/protection/apps/:app/snapshot   a Longhorn snapshot of each of its volumes, now
+ *   POST /api/protection/apps/:app/backup     a Velero backup of the application, now, as its plan takes them
  *
  * Reads, with the service account of Backstage: the ConfigMap protection-plans and the Velero objects (Backups,
  * DataUploads, BackupStorageLocations) of the namespace of protection-oneke, the PersistentVolumeClaims of the
- * cluster and the Snapshots of Longhorn. Read only: taking a snapshot or a backup now, and restoring, are not here.
+ * cluster and the Snapshots of Longhorn. It creates only Longhorn Snapshots and Velero Backups (the two POST of an
+ * application); restoring is not here.
  *
  * app-config: protection.namespace (default: <prefix>protection-oneke, from the namespace of this Backstage),
  * protection.longhornNamespace (longhorn-system), protection.repo / branch / chart (the repository of the chart),
@@ -22,7 +27,7 @@ import Router from 'express-promise-router';
 import { mayAct } from './clusterActions';
 import { GitHubFiles } from './clusterVms';
 import { PriceError, PriceFiles, pricePaths } from './costPrices';
-import { backupOf, Declared, planChange, protectionView, pvcOf, readDeclared, readPlanChanges, Snapshot, snapshotOf, usageOf } from './protectionModel';
+import { backupManifest, backupOf, Declared, planChange, protectionView, pvcOf, readDeclared, readPlanChanges, readStoreStep, Snapshot, snapshotManifests, snapshotOf, storeChange, usageOf } from './protectionModel';
 
 const items = (r: unknown): any[] => (r as any)?.body?.items ?? (r as any)?.items ?? [];
 
@@ -157,6 +162,57 @@ export default createBackendPlugin({
             const pull = await repo.pullRequestInOneCommit(`console/protection-${change.next}-${Date.now().toString(36)}`, change.title, change.body, change.files);
             logger.info(`protection: ${change.changed.length} plans changed by ${w.user}: pull request #${pull.number}`);
             res.json({ pull, version: change.next, changed: change.changed });
+          } catch (e) {
+            failed(res, e);
+          }
+        });
+        router.post('/store', express.json({ limit: '16kb' }), async (req, res) => {
+          try {
+            const w = await asks(req);
+            if (!w.may) {
+              res.status(403).json({ error: `Only ${groups.join(', ')} may move the backup store.` });
+              return;
+            }
+            const step = readStoreStep(req.body);
+            const texts = await Promise.all((Object.keys(paths) as Array<keyof PriceFiles>).map(async k => [k, (await repo.get(paths[k])).text] as const));
+            const change = storeChange(Object.fromEntries(texts) as PriceFiles, step, { chart, by: w.user, date: new Date().toISOString().slice(0, 10) });
+            const pull = await repo.pullRequestInOneCommit(`console/protection-store-${change.next}-${Date.now().toString(36)}`, change.title, change.body, change.files);
+            logger.info(`protection: store step ${step.step} by ${w.user}: pull request #${pull.number}`);
+            res.json({ pull, version: change.next });
+          } catch (e) {
+            failed(res, e);
+          }
+        });
+        // a snapshot or a backup of one application, now
+        router.post('/apps/:app/:what(snapshot|backup)', async (req, res) => {
+          try {
+            const w = await asks(req);
+            if (!w.may) {
+              res.status(403).json({ error: `Only ${groups.join(', ')} may take a snapshot or a backup.` });
+              return;
+            }
+            kept = undefined;
+            const r = await read();
+            const app = r.apps.find(a => a.app === req.params.app);
+            if (!kc || !r.declared || !app) {
+              res.status(404).json({ error: r.reason ?? `${req.params.app} has no persistent data in this cluster.` });
+              return;
+            }
+            const custom = kc.makeApiClient(CustomObjectsApi);
+            const create = custom.createNamespacedCustomObject as unknown as (g: string, v: string, ns: string, plural: string, body: object) => Promise<unknown>;
+            let names: string[];
+            if (req.params.what === 'snapshot') {
+              const made = snapshotManifests(app, longhorn, w.user);
+              await Promise.all(made.map(m => create.call(custom, 'longhorn.io', 'v1beta2', longhorn, 'snapshots', m)));
+              names = made.map(m => m.metadata.name);
+            } else {
+              const made = backupManifest(app, r.declared.plans, namespace, w.user);
+              await create.call(custom, 'velero.io', 'v1', namespace, 'backups', made);
+              names = [made.metadata.name];
+            }
+            kept = undefined;
+            logger.info(`protection: ${req.params.what} of ${app.app} by ${w.user}: ${names.join(', ')}`);
+            res.json({ what: req.params.what, app: app.app, names });
           } catch (e) {
             failed(res, e);
           }

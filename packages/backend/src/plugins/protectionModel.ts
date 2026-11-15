@@ -289,3 +289,115 @@ export function planChange(files: PriceFiles, changes: Record<string, string>, o
     ],
   };
 }
+
+// ---- Copying now: the objects the console creates ----------------------------------------------------------------
+
+const stamp = (now: Date) => now.toISOString().replace(/[-:]/g, '').slice(0, 15).toLowerCase();
+
+/** One Longhorn Snapshot per Longhorn volume of the application (longhorn.io/v1beta2, in the namespace of Longhorn). */
+export function snapshotManifests(app: AppView, longhornNamespace: string, by: string, now = new Date()) {
+  const volumes = app.volumes.filter(v => v.volume && (v.storageClass ?? '').startsWith('longhorn'));
+  if (!volumes.length) throw new ProtectionError(`${app.app} has no Longhorn volume to snapshot.`);
+  return volumes.map((v, i) => ({
+    apiVersion: 'longhorn.io/v1beta2',
+    kind: 'Snapshot',
+    metadata: { name: `console-${stamp(now)}-${i}`, namespace: longhornNamespace, labels: { 'refresquito.io/protection-app': app.app } },
+    spec: { volume: v.volume, createSnapshot: true, labels: { 'refresquito.io/protection-app': app.app, 'refresquito.io/taken-by': by.replace(/[^A-Za-z0-9_.-]/g, '_').slice(-63) } },
+  }));
+}
+
+/** A Velero Backup of the application now, as its plan takes them (velero.io/v1, in the namespace of protection-oneke). */
+export function backupManifest(app: AppView, plans: Record<string, Plan>, namespace: string, by: string, now = new Date()) {
+  const plan = plans[app.plan];
+  if (!plan) throw new ProtectionError(`${app.app} has no protection plan: choose one first.`);
+  if (app.holdsStore) throw new ProtectionError(`${app.app} holds the backup store: it cannot be backed up into itself.`);
+  const volumes = plan.volumes !== false;
+  return {
+    apiVersion: 'velero.io/v1',
+    kind: 'Backup',
+    metadata: {
+      name: `${app.app}-manual-${stamp(now)}`.slice(0, 63),
+      namespace,
+      labels: { 'refresquito.io/protection-app': app.app, 'refresquito.io/protection-plan': app.plan },
+      annotations: { 'refresquito.io/taken-by': by },
+    },
+    spec: { includedNamespaces: [app.namespace], storageLocation: 'default', ttl: plan.backup?.ttl ?? '168h', snapshotVolumes: volumes, ...(volumes ? { snapshotMoveData: true } : {}) },
+  };
+}
+
+// ---- Moving the backup store: pull requests on the chart ---------------------------------------------------------
+
+export type StoreStep = { step: 'add'; url: string; bucket?: string; region?: string } | { step: 'switch' } | { step: 'cancel' };
+
+export function readStoreStep(body: any): StoreStep {
+  if (body?.step === 'switch' || body?.step === 'cancel') return { step: body.step };
+  if (body?.step !== 'add') throw new ProtectionError('Unknown step.');
+  const url = String(body.url ?? '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?(\/[A-Za-z0-9._\/-]*)?$/.test(url)) throw new ProtectionError('The address of the store must be http(s)://host[:port].');
+  const bucket = String(body.bucket ?? '').trim();
+  if (bucket && !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new ProtectionError('The name of the bucket is not valid.');
+  const region = String(body.region ?? '').trim();
+  if (region && !/^[a-z0-9-]{1,40}$/.test(region)) throw new ProtectionError('The region is not valid.');
+  return { step: 'add', url, ...(bucket ? { bucket } : {}), ...(region ? { region } : {}) };
+}
+
+/** values.yaml with the step applied: add the second store, make it the only one, or give the move up. */
+export function withStoreStep(valuesText: string, step: StoreStep): { text: string; line: string } {
+  const doc = parseDocument(valuesText);
+  const store = doc.toJS()?.store;
+  if (!store) throw new ProtectionError('values.yaml of the chart has no `store`.');
+  const next = store.next ?? {};
+  const empty = () => {
+    const node = doc.createNode({});
+    (node as any).flow = true;
+    return node;
+  };
+  let line: string;
+  if (step.step === 'add') {
+    if (next.url) throw new ProtectionError(`A second store is already declared (${next.url}): finish or cancel that move first.`);
+    if (step.url === store.url) throw new ProtectionError('That is the store in use.');
+    const node = doc.createNode({ url: step.url, ...(step.bucket ? { bucket: step.bucket } : {}), ...(step.region ? { region: step.region } : {}) });
+    (node as any).flow = true;
+    doc.setIn(['store', 'next'], node);
+    line = `second store \`${step.url}\` added (\`store.next\`): every application is also backed up there`;
+  } else if (step.step === 'switch') {
+    if (!next.url) throw new ProtectionError('No second store is declared: add it first.');
+    doc.setIn(['store', 'kind'], 's3');
+    doc.setIn(['store', 'url'], next.url);
+    if (next.bucket) doc.setIn(['store', 'bucket'], next.bucket);
+    if (next.region) doc.setIn(['store', 'region'], next.region);
+    doc.setIn(['store', 'next'], empty());
+    line = `the backup store is now \`${next.url}\` (\`store.kind: s3\`); the store ${store.kind === 'seaweedfs' ? 'inside the cluster' : `\`${store.url}\``} is no longer written`;
+  } else {
+    if (!next.url) throw new ProtectionError('No second store is declared.');
+    doc.setIn(['store', 'next'], empty());
+    line = `second store \`${next.url}\` removed (\`store.next\`): the move is given up`;
+  }
+  return { text: doc.toString({ lineWidth: 0 }), line };
+}
+
+/** The five files of a step of the move, and the title and text of its pull request. */
+export function storeChange(files: PriceFiles, step: StoreStep, opts: { chart: string; by: string; date: string }) {
+  const { text: values, line } = withStoreStep(files.values, step);
+  const { version, next, text: chart } = nextVersion(files.chart);
+  const entry = `- **Backup store** changed from the console (Data continuity › Backup store) by ${opts.by}: ${line}.`;
+  const paths = pricePaths(opts.chart);
+  const after = {
+    add: 'Before merging: the bucket must exist in the new store and its access key must be in the secret store (key `velero`, properties `storeAccessKey` and `storeSecretKey`). Then copy the backups already taken to the new store and check them before the next step.',
+    switch: 'Before merging: the backups already taken must be in the new store. After deploying, run a restore from it before emptying the old bucket.',
+    cancel: 'The backups written to the second store stay there.',
+  }[step.step];
+  return {
+    version,
+    next,
+    title: `${opts.chart} ${next}: backup store, ${{ add: 'second store added', switch: 'moved outside', cancel: 'move given up' }[step.step]}`,
+    body: [`Backup store changed from the console (Data continuity › Backup store) by ${opts.by}: ${line}.`, '', after, '', `Chart \`${opts.chart}\` ${version} → ${next}. Nothing changes until this is merged and the chart is deployed.`].join('\n'),
+    files: [
+      { path: paths.values, text: values },
+      { path: paths.chart, text: chart },
+      { path: paths.changelog, text: withChangelog(files.changelog, next, opts.date, entry) },
+      { path: paths.overview, text: withOverview(files.overview, opts.chart, next, opts.date, entry) },
+      { path: paths.versions, text: withChartVersion(files.versions, opts.chart, next) },
+    ],
+  };
+}

@@ -1,4 +1,4 @@
-import { appView, backupOf, bytesOf, graceHours, planChange, ProtectionError, protectionView, pvcOf, readDeclared, readPlanChanges, snapshotOf, usageOf, withPlans } from './protectionModel';
+import { appView, backupManifest, backupOf, bytesOf, graceHours, planChange, ProtectionError, protectionView, pvcOf, readDeclared, readPlanChanges, readStoreStep, snapshotManifests, snapshotOf, storeChange, usageOf, withPlans, withStoreStep } from './protectionModel';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const PLANS = {
@@ -121,5 +121,71 @@ describe('changing plans', () => {
     expect(c.files[2].text).toContain('## 0.1.1 - 2026-11-16\n\n- **Protection plans** changed from the console');
     expect(c.files[2].text).toContain('  - `observability-oneke`: none → standard');
     expect(c.files[4].text).toBe('"protection-oneke": "0.1.1"\n');
+  });
+});
+
+describe('copying now', () => {
+  const view = appView('iam-oneke', { plan: 'critical', namespace: 'p-iam-oneke' }, 'p-iam-oneke', PLANS, [pvc('p-iam-oneke', 'db'), { ...pvc('p-iam-oneke', 'cache'), storageClass: 'local-path' }], [], [], NOW);
+  it('makes one Longhorn snapshot per Longhorn volume', () => {
+    const made = snapshotManifests(view, 'longhorn-system', 'user:default/ana', NOW);
+    expect(made).toHaveLength(1);
+    expect(made[0]).toMatchObject({ kind: 'Snapshot', metadata: { name: 'console-20261115t120000-0', namespace: 'longhorn-system' }, spec: { volume: 'pvc-db', createSnapshot: true } });
+    expect(made[0].spec.labels['refresquito.io/taken-by']).toBe('user_default_ana');
+    expect(() => snapshotManifests({ ...view, volumes: [] }, 'longhorn-system', 'x', NOW)).toThrow(/no Longhorn volume/);
+  });
+  it('makes a backup as the plan takes them, and refuses without a plan or for the application that holds the store', () => {
+    const b = backupManifest(view, PLANS, 'p-protection-oneke', 'user:default/ana', NOW);
+    expect(b).toMatchObject({ kind: 'Backup', metadata: { name: 'iam-oneke-manual-20261115t120000', namespace: 'p-protection-oneke' }, spec: { includedNamespaces: ['p-iam-oneke'], ttl: '336h', snapshotVolumes: true, snapshotMoveData: true } });
+    expect(backupManifest({ ...view, plan: 'rebuild' }, PLANS, 'n', 'x', NOW).spec).toEqual({ includedNamespaces: ['p-iam-oneke'], storageLocation: 'default', ttl: '672h', snapshotVolumes: false });
+    expect(() => backupManifest({ ...view, plan: 'none' }, PLANS, 'n', 'x', NOW)).toThrow(/no protection plan/);
+    expect(() => backupManifest({ ...view, holdsStore: true }, PLANS, 'n', 'x', NOW)).toThrow(/into itself/);
+  });
+});
+
+describe('moving the store', () => {
+  const STORE = `store:
+  # where the backups go
+  kind: seaweedfs
+  bucket: "" # the default
+  region: us-east-1
+  url: ""
+  next: {}
+apps: {}
+`;
+  it('reads a step and refuses a bad address', () => {
+    expect(readStoreStep({ step: 'add', url: 'https://backups.example:8333/', bucket: 'velero-nato' })).toEqual({ step: 'add', url: 'https://backups.example:8333', bucket: 'velero-nato' });
+    expect(readStoreStep({ step: 'switch' })).toEqual({ step: 'switch' });
+    expect(() => readStoreStep({ step: 'add', url: 'backups' })).toThrow(/address/);
+    expect(() => readStoreStep({ step: 'add', url: 'https://b.example', bucket: 'Bad_Name' })).toThrow(/bucket/);
+    expect(() => readStoreStep({ step: 'other' })).toThrow(/Unknown/);
+  });
+  it('adds the second store, then makes it the only one', () => {
+    const added = withStoreStep(STORE, { step: 'add', url: 'https://backups.example:8333', bucket: 'velero-nato' });
+    expect(added.text).toContain('next: { url: https://backups.example:8333, bucket: velero-nato }');
+    expect(added.text).toContain('# where the backups go');
+    expect(() => withStoreStep(added.text, { step: 'add', url: 'https://other.example' })).toThrow(/already declared/);
+    const moved = withStoreStep(added.text, { step: 'switch' });
+    expect(moved.text).toContain('kind: s3');
+    expect(moved.text).toMatch(/^ {2}url: "?https:\/\/backups\.example:8333"?$/m);
+    expect(moved.text).toMatch(/^ {2}bucket: "?velero-nato"?/m);
+    expect(moved.text).toContain('next: {}');
+    expect(moved.line).toContain('inside the cluster');
+  });
+  it('gives the move up, and refuses a step that does not apply', () => {
+    const added = withStoreStep(STORE, { step: 'add', url: 'https://backups.example:8333' }).text;
+    expect(withStoreStep(added, { step: 'cancel' }).text).toContain('next: {}');
+    expect(() => withStoreStep(STORE, { step: 'switch' })).toThrow(/add it first/);
+    expect(() => withStoreStep(STORE, { step: 'cancel' })).toThrow(/No second store/);
+  });
+  it('writes the pull request of a step', () => {
+    const files = {
+      values: STORE, chart: 'version: 0.1.0\n', changelog: '# Release notes\n\n## 0.1.0 - 2026-11-15\n\n- First version.\n',
+      overview: '| Chart | `charts/protection-oneke`, version 0.1.0 |\n\n## Latest release\n\n**0.1.0 - 2026-11-15**\n\n- First version.\n\nEvery version: [Release notes](changelog.md)\n',
+      versions: '"protection-oneke": "0.1.0"\n',
+    };
+    const c = storeChange(files, { step: 'add', url: 'https://backups.example:8333' }, { chart: 'protection-oneke', by: 'user:default/ana', date: '2026-11-16' });
+    expect(c.title).toBe('protection-oneke 0.1.1: backup store, second store added');
+    expect(c.body).toContain('storeAccessKey');
+    expect(c.files[2].text).toContain('## 0.1.1 - 2026-11-16\n\n- **Backup store** changed from the console');
   });
 });
