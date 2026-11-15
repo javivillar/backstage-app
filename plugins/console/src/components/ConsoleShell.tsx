@@ -58,18 +58,70 @@ export function classicPathFor(consolePath: string, pages: ConsoleClassicPage[] 
 
 type NavItem = { label: string; to: string; hint?: string; external?: boolean; icon?: string };
 
-const NavGroup = ({ title, items, current }: { title: string; items: NavItem[]; current: string }) => {
+/** Whether a menu entry is the page shown (or holds it). */
+const isCurrent = (i: NavItem, current: string) =>
+  current === i.to ||
+  (!['/console', '/console/infrastructure', '/console/infrastructure/overview', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
+  (i.to === '/console' && current.startsWith('/console/entity/'));
+
+/** The groups of the menu the person opened or closed, by the path of their first entry; kept in the browser. */
+const NAV_KEY = 'refresquito.console.nav';
+function navChoices(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(NAV_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * A group of the menu. In a long menu (foldable) a group folds: it starts open when it is the first one or holds the
+ * page shown, closed otherwise; what the person opens or closes is remembered. A closed group still shows the entry
+ * of the page shown, so the place is never lost.
+ */
+/** a menu with more groups than this folds them (the portal; the zone and the cluster menus are short) */
+const FOLD_FROM = 4;
+
+const NavGroup = ({ title, items, current, foldable, first }: { title: string; items: NavItem[]; current: string; foldable?: boolean; first?: boolean }) => {
   const t = useRq();
+  const id = items[0]?.to ?? title;
+  const holds = items.some(i => isCurrent(i, current));
+  const [choice, setChoice] = useState<boolean | undefined>(() => navChoices()[id]);
+  const open = !foldable || (choice ?? (holds || !!first));
+  const toggle = () => {
+    setChoice(!open);
+    try {
+      localStorage.setItem(NAV_KEY, JSON.stringify({ ...navChoices(), [id]: !open }));
+    } catch {
+      /* kept for this visit only */
+    }
+  };
+  const heading = { px: 1.25, pb: 0.5, fontSize: 12, lineHeight: '16px', fontWeight: 500, color: 'text.secondary' };
   return (
-    <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: '2px', mb: 2 }}>
-      <Typography component="h2" sx={{ px: 1.25, pb: 0.5, fontSize: 12, lineHeight: '16px', fontWeight: 500, color: 'text.secondary' }}>
-        {title}
-      </Typography>
-      {items.map(i => {
-        const on =
-          current === i.to ||
-          (!['/console', '/console/infrastructure', '/console/infrastructure/overview', '/console/cluster', '/console/manage'].includes(i.to) && current.startsWith(`${i.to}/`)) ||
-          (i.to === '/console' && current.startsWith('/console/entity/'));
+    <Box component="nav" aria-label={title} sx={{ display: 'grid', gap: '2px', mb: open ? 2 : 1 }}>
+      {foldable ? (
+        <Typography component="h2" sx={{ m: 0, fontSize: 12, lineHeight: '16px' }}>
+          <Box
+            component="button"
+            type="button"
+            aria-expanded={open}
+            onClick={toggle}
+            sx={{
+              all: 'unset', boxSizing: 'border-box', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', ...heading, pt: 0.5, borderRadius: '6px',
+              '&:hover': { color: t.ink }, '&:focus-visible': { outline: `2px solid ${t.data}`, outlineOffset: 2 },
+            }}
+          >
+            {title}
+            <ExpandMore aria-hidden sx={{ fontSize: 16, transition: 'transform .15s', transform: open ? 'none' : 'rotate(-90deg)', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }} />
+          </Box>
+        </Typography>
+      ) : (
+        <Typography component="h2" sx={heading}>
+          {title}
+        </Typography>
+      )}
+      {items.filter(i => open || isCurrent(i, current)).map(i => {
+        const on = isCurrent(i, current);
         const Icon = (i.icon && APP_ICONS[i.icon]) || (i.external ? LaunchIcon : NAV_ICONS[i.to] ?? NAV_ICONS[i.to.replace('/console/manage/', '/console/')]);
         const link = (
           <Link
@@ -364,7 +416,7 @@ export const ConsoleShell = ({ embedded, children }: PropsWithChildren<{ embedde
         sx={{ display: { xs: navOpen ? 'block' : 'none', md: 'block' }, px: 1.5, pt: 1, pb: 3, gridColumn: '1', gridRow: { md: '2' } }}
       >
         {shownGroups.map(g => (
-          <NavGroup key={g.title} title={g.title} items={g.items} current={current} />
+          <NavGroup key={g.title} title={g.title} items={g.items} current={current} foldable={shownGroups.length > FOLD_FROM} first={shownGroups[0] === g} />
         ))}
       </Box>
       <Box

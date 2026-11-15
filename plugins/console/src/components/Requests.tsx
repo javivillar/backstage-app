@@ -4,11 +4,12 @@ import Typography from '@mui/material/Typography';
 import { useMemo, useState } from 'react';
 import { useI18n } from '../i18n';
 import type { PostAnswer } from '../post';
-import { PULL_TONE, type PullState, usePulls } from '../pulls';
+import { type ChangePull, PULL_TONE, type PullState, usePulls } from '../pulls';
 import { type ConsolePull, lifecycle, pullKind, pullTarget, type ReconcileStatus } from '../zone';
 import { Badge } from './Badge';
 import { TONES } from './Flow';
 import { Table } from './NetworkPage';
+import { CancelChange } from './PendingChanges';
 import { Pill } from './ui';
 
 export type Note = { ok: boolean; text: string; url?: string };
@@ -72,11 +73,19 @@ export function useRequestStates() {
   const infra = usePulls('cluster', '/pulls?repo=infra');
   const vms = usePulls('cluster', '/pulls?repo=vms');
   const byUrl = useMemo(() => new Map<string, PullState>([...infra.pulls, ...vms.pulls].map(p => [p.url, p.state])), [infra.pulls, vms.pulls]);
+  // the request as GitHub has it and how to cancel it (in the repository it belongs to)
+  const requestOf = (url: string): { pull: ChangePull; cancel: (n: number) => Promise<void> } | undefined => {
+    for (const repo of [infra, vms]) {
+      const pull = repo.pulls.find(p => p.url === url);
+      if (pull) return { pull, cancel: repo.cancel };
+    }
+    return undefined;
+  };
   const reload = () => {
     infra.reload();
     vms.reload();
   };
-  return { byUrl, loading: infra.loading || vms.loading, readAt: infra.readAt ?? vms.readAt, reload };
+  return { byUrl, requestOf, loading: infra.loading || vms.loading, readAt: infra.readAt ?? vms.readAt, reload };
 }
 type RequestStates = ReturnType<typeof useRequestStates>;
 
@@ -84,6 +93,12 @@ type RequestStates = ReturnType<typeof useRequestStates>;
 const CheckState = ({ state }: { state?: PullState }) => {
   const { t } = useI18n();
   return state && state !== 'open' ? <Pill tone={PULL_TONE[state]}>{t(`pc.state.${state}`)}</Pill> : null;
+};
+
+/** Cancel on an open request the reader may cancel; nothing otherwise. */
+const CancelRequest = ({ states, url }: { states: RequestStates; url: string }) => {
+  const r = states.requestOf(url);
+  return r ? <CancelChange pull={r.pull} onCancel={r.cancel} /> : null;
 };
 
 /** Refresh, and when the state of the requests was read. */
@@ -120,7 +135,10 @@ export const PullList = ({ pulls }: { pulls: ConsolePull[] }) => {
             <Badge label={pullKind(p)} {...TONES.info} /> {p.title.replace(/^console: /, '')}
           </span>,
           new Date(p.created).toLocaleString(),
-          <CheckState key="s" state={states.byUrl.get(p.url)} />,
+          <span key="s">
+            <CheckState state={states.byUrl.get(p.url)} />
+            <CancelRequest states={states} url={p.url} />
+          </span>,
         ])}
       />
     </>
@@ -157,6 +175,7 @@ export const RequestsTable = ({ open, merged, reconcile, only }: { open: Console
                 <CheckState state={states.byUrl.get(p.url)} />
               </Box>
             )}
+            {!p.merged && <CancelRequest states={states} url={p.url} />}
             {l.detail && (
               <Typography variant="caption" color="text.secondary" component="div">
                 {l.detail}

@@ -7,7 +7,8 @@ import type { Tone } from './components/ui';
  * GET /api/<plugin><path> → { pulls }. The pages that change something by pull request show them until applied.
  */
 export type PullState = 'checking' | 'failed' | 'conflict' | 'ready' | 'open' | 'merged' | 'closed';
-export type ChangePull = { number: number; title: string; url: string; branch: string; created: string; by?: string; state: PullState; closed?: string };
+/** cancel: who reads the list may cancel this one (still open, and theirs or of a kind of change they may make) */
+export type ChangePull = { number: number; title: string; url: string; branch: string; created: string; by?: string; state: PullState; closed?: string; cancel?: boolean };
 
 export const PULL_TONE: Record<PullState, Tone> = { checking: 'info', failed: 'neg', conflict: 'neg', ready: 'pos', open: 'neu', merged: 'pos', closed: 'neu' };
 /** still waiting for someone: not merged, not closed */
@@ -19,14 +20,20 @@ export function orderPulls(pulls: ChangePull[], match?: string): ChangePull[] {
   return pulls.filter(p => !match || p.branch.startsWith(match)).sort((a, b) => Number(isPending(b)) - Number(isPending(a)) || when(b) - when(a));
 }
 
+/** The path that cancels a pull request of a list: /pulls?kind=x → /pulls/12/cancel?kind=x. */
+export function cancelPath(path: string, number: number): string {
+  const [base, query] = path.split('?');
+  return `${base}/${number}/cancel${query ? `?${query}` : ''}`;
+}
+
 /** The path that asks the backend to read GitHub again (?fresh=1). */
 export const freshPath = (path: string, fresh: boolean) => (fresh ? `${path}${path.includes('?') ? '&' : '?'}fresh=1` : path);
 
 /**
  * The pull requests of a kind; read again when `refresh` changes (after the page opens one). A page must work
- * without them: any failure is an empty list. reload() reads GitHub again (the Refresh button).
+ * without them: any failure is an empty list. reload() reads GitHub again (the Refresh button); cancel(n) closes one.
  */
-export function usePulls(plugin: string, path: string, refresh?: unknown): { loading: boolean; pulls: ChangePull[]; readAt?: Date; reload: () => void } {
+export function usePulls(plugin: string, path: string, refresh?: unknown): { loading: boolean; pulls: ChangePull[]; readAt?: Date; reload: () => void; cancel: (number: number) => Promise<void> } {
   const discovery = useApi(discoveryApiRef);
   const { fetch } = useApi(fetchApiRef);
   const [state, setState] = useState<{ loading: boolean; pulls: ChangePull[]; readAt?: Date }>({ loading: true, pulls: [] });
@@ -48,5 +55,17 @@ export function usePulls(plugin: string, path: string, refresh?: unknown): { loa
     };
   }, [discovery, fetch, plugin, path, refresh, asked]);
   const reload = useCallback(() => setAsked(n => n + 1), []);
-  return { ...state, reload };
+  // closes the pull request and deletes its branch; throws the reason of the backend
+  const cancel = useCallback(
+    async (number: number) => {
+      const res = await fetch(`${await discovery.getBaseUrl(plugin)}${cancelPath(path, number)}`, { method: 'POST' });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+      }
+      setAsked(n => n + 1);
+    },
+    [discovery, fetch, plugin, path],
+  );
+  return { ...state, reload, cancel };
 }

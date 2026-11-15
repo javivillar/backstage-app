@@ -2,7 +2,7 @@ import { Link } from '@backstage/core-components';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useI18n } from '../i18n';
 import { type ChangePull, isPending, orderPulls, PULL_TONE, usePulls } from '../pulls';
 import { Card } from './NamespaceSections';
@@ -15,11 +15,61 @@ function subOf(shown: number, pending: number, t: (k: string, v?: Record<string,
   return pending ? t('pc.sub.pending', { n: pending }) : t('pc.sub.none');
 }
 
+/**
+ * Cancel on a change that is still open: asks first, then closes its pull request (onCancel) and says why when it
+ * cannot. Drawn only for a pull request the reader may cancel.
+ */
+export const CancelChange = ({ pull, onCancel }: { pull: Pick<ChangePull, 'number' | 'cancel'>; onCancel: (number: number) => Promise<void> }) => {
+  const { t } = useI18n();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  if (!pull.cancel) return null;
+  const go = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await onCancel(pull.number);
+      setAsking(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!asking) {
+    return (
+      <Button size="small" color="inherit" onClick={() => setAsking(true)} sx={{ textTransform: 'none', minWidth: 0, px: 1 }}>
+        {t('pc.cancel')}
+      </Button>
+    );
+  }
+  return (
+    <Box role="alertdialog" aria-label={t('pc.cancel')} sx={{ display: 'grid', gap: 0.5, justifyItems: 'start', maxWidth: 260 }}>
+      <Typography variant="caption">{t('pc.cancel.ask')}</Typography>
+      <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+        <Button size="small" variant="contained" color="error" disableElevation disabled={busy} onClick={go} sx={{ textTransform: 'none' }}>
+          {t(busy ? 'pc.cancel.busy' : 'pc.cancel.yes')}
+        </Button>
+        <Button size="small" disabled={busy} onClick={() => setAsking(false)} sx={{ textTransform: 'none' }}>
+          {t('pc.cancel.no')}
+        </Button>
+      </Box>
+      {error && (
+        <Typography variant="caption" color="error" role="alert">
+          {t('pc.cancel.failed', { why: error })}
+        </Typography>
+      )}
+    </Box>
+  );
+};
+
 const LINK: Record<ChangePull['state'], string> = { ready: 'pc.link.accept', checking: 'pc.link.review', failed: 'pc.link.review', conflict: 'pc.link.review', open: 'pc.link.review', merged: 'pc.link.see', closed: 'pc.link.see' };
 
 /**
  * The changes a page asked for by pull request and where each one stands: checks running or failed, ready to
- * accept, accepted, closed; with the link to review and accept it in GitHub. Read when the page opens and when
+ * accept, accepted, closed; with the link to review and accept it in GitHub, and Cancel on the ones the reader may
+ * cancel (their own, or of a kind of change they may make). Read when the page opens and when
  * `refresh` changes (the page has just opened one). Nothing is drawn when there is none, or it cannot be read.
  *
  * - plugin, path: GET /api/<plugin><path> → { pulls } (backend consolePulls.ts)
@@ -30,7 +80,7 @@ const LINK: Record<ChangePull['state'], string> = { ready: 'pc.link.accept', che
  */
 export const PendingChanges = ({ plugin, path, refresh, match, applies, always }: { plugin: string; path: string; refresh?: unknown; match?: string; applies?: ReactNode; always?: boolean }) => {
   const { t, lang } = useI18n();
-  const { pulls, loading, readAt, reload } = usePulls(plugin, path, refresh);
+  const { pulls, loading, readAt, reload, cancel } = usePulls(plugin, path, refresh);
   const shown = orderPulls(pulls, match);
   if (!shown.length && !always) return null;
   const pending = shown.filter(isPending).length;
@@ -68,9 +118,10 @@ export const PendingChanges = ({ plugin, path, refresh, match, applies, always }
               </Typography>
             )}
           </Box>,
-          <Link key="l" to={p.url}>
-            {t(LINK[p.state])}
-          </Link>,
+          <Box key="l" sx={{ display: 'grid', gap: 0.5, justifyItems: 'start' }}>
+            <Link to={p.url}>{t(LINK[p.state])}</Link>
+            <CancelChange pull={p} onCancel={cancel} />
+          </Box>,
         ])}
       />
       )}

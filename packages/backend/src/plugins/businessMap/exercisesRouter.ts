@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { GitHubFiles } from '../clusterVms';
-import { PullReader, pullsHandler } from '../consolePulls';
+import { cancelHandler, PullReader, pullsHandler } from '../consolePulls';
 import { ExerciseError, exercisePath, exercisePull, exerciseSlug, exerciseYaml, readExercise } from './exercisesModel';
 import { type BusinessMapRouteDeps, statusOf, whoAsks } from './previewRouter';
 
@@ -75,5 +75,6 @@ export function createExercisesRouter(deps: BusinessMapRouteDeps): Router {
   });
   // the pull requests of the exercises (refresquito-specs) and where each one stands
   router.get('/exercises/pulls', pullsHandler(pulls, () => ['console/exercise-'], who, m => logger.warn(`business-map exercises: ${m}`)));
+  router.post('/exercises/pulls/:number/cancel', cancelHandler(pulls, () => ['console/exercise-'], who, m => logger.info(`business-map exercises: ${m}`)));
   return router;
 }
