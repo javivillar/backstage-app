@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n';
 import { type Organisation, type OrganisationData, type OrganisationPreview, peopleOf, type PullAnswer, type Side, useBusinessMapPost } from '../../organisation';
 import { TONES } from '../Flow';
 import { Table } from '../NetworkPage';
+import { PendingChanges } from '../PendingChanges';
 import { EmptyState, Id, Section } from '../ui';
 import { useTemplateDownload } from './OrganisationPage';
 import { Choice, KeycloakPill, OrganisationFrame, PersonCell, useSide } from './OrgParts';
@@ -181,6 +182,8 @@ const Form = ({ data, side, setSide }: { data: OrganisationData; side: Side; set
           </Box>
         </Section>
       )}
+      {/* the pull requests of the organisations (customer and provider), with Refresh: where each load stands */}
+      <PendingChanges plugin="business-map" path="/pulls?kind=organisation" refresh={opened} applies={t('org.pr.applies')} always />
     </>
   );
 };

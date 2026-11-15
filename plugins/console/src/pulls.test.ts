@@ -1,4 +1,4 @@
-import { type ChangePull, isPending, orderPulls } from './pulls';
+import { type ChangePull, freshPath, isPending, orderPulls } from './pulls';
 
 const pull = (number: number, state: ChangePull['state'], created: string, extra: Partial<ChangePull> = {}): ChangePull => ({
   number, title: `change ${number}`, url: `https://github.com/o/r/pull/${number}`, branch: `console/prices-${number}`, created, state, ...extra,
@@ -20,5 +20,11 @@ describe('pending changes', () => {
     const pulls = [pull(1, 'open', '2026-11-01T10:00:00Z', { branch: 'console/bpmn-acme-fix-defects-x1' }), pull(2, 'open', '2026-11-02T10:00:00Z', { branch: 'console/bpmn-acme-ship-parts-x2' })];
     expect(orderPulls(pulls, 'console/bpmn-acme-fix-defects-').map(p => p.number)).toEqual([1]);
     expect(orderPulls(pulls, 'console/bpmn-other-')).toEqual([]);
+  });
+
+  it('asks for a fresh read only when refreshed by hand', () => {
+    expect(freshPath('/prices/pulls', false)).toBe('/prices/pulls');
+    expect(freshPath('/prices/pulls', true)).toBe('/prices/pulls?fresh=1');
+    expect(freshPath('/pulls?kind=organisation', true)).toBe('/pulls?kind=organisation&fresh=1');
   });
 });

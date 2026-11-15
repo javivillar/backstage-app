@@ -101,7 +101,7 @@ export class PullReader {
 }
 
 /**
- * GET handler: { pulls } of the prefixes `prefixesOf(req)` gives (undefined: 400). `signedIn` throws for a request
+ * GET handler: { pulls } of the prefixes `prefixesOf(req)` gives (undefined: 400); with ?fresh=1 nothing kept is used. `signedIn` throws for a request
  * without a user.
  */
 export function pullsHandler(reader: PullReader, prefixesOf: (req: express.Request) => string[] | undefined, signedIn: (req: express.Request) => Promise<unknown>, warn: (message: string) => void) {
@@ -118,6 +118,8 @@ export function pullsHandler(reader: PullReader, prefixesOf: (req: express.Reque
       return;
     }
     try {
+      // ?fresh=1 (the Refresh button of the card): read GitHub again, not what was kept
+      if (req.query.fresh) reader.forget();
       res.json({ pulls: await reader.list(prefixes) });
     } catch (e) {
       warn((e as Error).message);

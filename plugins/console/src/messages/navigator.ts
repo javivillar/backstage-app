@@ -86,6 +86,7 @@ export const NAVIGATOR: Messages = {
   'cn.loss.gap': { en: 'The copies are {every} apart and the business accepts losing {rpo}: work is lost for good.', es: 'Las copias distan {every} y el negocio acepta perder {rpo}: se pierde trabajo sin remedio.' },
   'cn.loss.meets': { en: 'The copies are {every} apart and the business accepts losing {rpo}: what comes back is within what it accepts.', es: 'Las copias distan {every} y el negocio acepta perder {rpo}: lo que vuelve está dentro de lo aceptado.' },
   'cn.loss.noCopies': { en: 'There is no copy of its data: it is gone.', es: 'No hay copia de sus datos: se pierden.' },
+  'cn.loss.unknownEvery': { en: 'How often its data is copied could not be worked out from its plan.', es: 'No se pudo deducir de su plan cada cuánto se copian sus datos.' },
   'cn.loss.unknown': { en: 'Nothing is known of its copies in this cluster.', es: 'No se sabe nada de sus copias en este clúster.' },
   'cn.loss.lastBackup': { en: 'Last backup: {when}.', es: 'Último backup: {when}.' },
   'cn.loss.end': { en: 'End the simulation', es: 'Terminar la simulación' },

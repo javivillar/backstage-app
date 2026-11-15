@@ -11,9 +11,15 @@ change is not lost from sight after the page that asked for it is closed.
 | FinOps › Prices | price changes | `GET /api/costs/prices/pulls` |
 | Business management › Data continuity › Protection plans | plan changes | `GET /api/protection/pulls` |
 | Business continuity › Organisation | organisations and product owners | `GET /api/business-map/pulls?kind=organisation` |
+| Business continuity › Organisation › Import organisation | the same (customer and provider loads), always drawn | `GET /api/business-map/pulls?kind=organisation` |
 | A business process › Process model | the BPMN model of that process | `GET /api/business-map/pulls?kind=bpmn` |
 
-The card is not drawn when there is nothing to show, or when GitHub cannot be read: the page works the same without it.
+The card is not drawn when there is nothing to show, or when GitHub cannot be read: the page works the same without
+it. The exception is **Import organisation**: there the card is always drawn, so the state of a load can be followed
+right after asking for it.
+
+**Refresh** reads GitHub again at once (the backend drops what it kept) and the card says at what time the state was
+read. A page that has just opened a pull request refreshes the card by itself.
 
 Zone (virtual machines, segregations, clusters) and Manage already list their own requests and are not changed.
 The imports of a business model go through the scaffolder and are **not** listed yet (see below).
@@ -48,7 +54,7 @@ does not merge.
   either cannot be read (the token of Backstage lacks *Checks: read*), the pull request is still listed, as *Open*.
 - "Asked by" is read from the text of the pull request (`by user:<namespace>/<name>`, as the console writes it).
 - The answer is kept **one minute** per kind, and forgotten when the console opens a new pull request of that kind.
-  The state is read when the page opens, not live: reload the page to see it again. The GitHub limit is shared by
+  The state is read when the page opens, not live: **Refresh** reads it again (`?fresh=1` skips what was kept). The GitHub limit is shared by
   the whole portal.
 - Any signed-in user of the page may read the list; it shows nothing the page does not already allow.
 
